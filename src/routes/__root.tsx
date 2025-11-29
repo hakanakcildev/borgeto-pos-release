@@ -1,4 +1,4 @@
-import { createRootRoute, Outlet, useLocation } from "@tanstack/react-router";
+import { createRootRoute, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { NetworkStatus } from "@/components/NetworkStatus";
 import TouchKeyboard from "@/components/ui/TouchKeyboard";
@@ -6,6 +6,7 @@ import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 
 function RootComponent() {
   const location = useLocation();
+  const router = useRouter();
   const {
     isOpen,
     closeKeyboard,
@@ -20,6 +21,16 @@ function RootComponent() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // Başlangıçta "/" route'una yönlendir
+  useEffect(() => {
+    if (location.pathname === "" || location.pathname === "/") {
+      // Router'ın route'u bulup bulmadığını kontrol et
+      if (router.state.matches.length === 0) {
+        router.navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+      }
+    }
+  }, []);
 
   return (
     <>
