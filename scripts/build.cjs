@@ -19,8 +19,11 @@ if (fs.existsSync(envPath)) {
         // Remove quotes if present
         const cleanValue = value.replace(/^["']|["']$/g, "");
         process.env[key.trim()] = cleanValue;
-        // If it's GITHUB_TOKEN, also set GH_TOKEN for electron-builder
-        if (key.trim() === "GITHUB_TOKEN") {
+        // If it's VITE_GITHUB_TOKEN or GITHUB_TOKEN, also set GH_TOKEN for electron-builder
+        if (
+          key.trim() === "VITE_GITHUB_TOKEN" ||
+          key.trim() === "GITHUB_TOKEN"
+        ) {
           process.env.GH_TOKEN = cleanValue;
         }
       }
