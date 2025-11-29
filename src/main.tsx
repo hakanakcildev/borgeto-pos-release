@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-import { RouterProvider, createRouter } from "@tanstack/react-router";
+import { RouterProvider, createRouter, Link } from "@tanstack/react-router";
 import "./index.css";
 
 // Import the generated route tree
@@ -20,12 +20,13 @@ function NotFound() {
         <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
           Sayfa bulunamadı
         </p>
-        <a
-          href="/"
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        <Link
+          to="/"
+          search={{ area: undefined, activeOnly: false }}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-block"
         >
           Ana Sayfaya Dön
-        </a>
+        </Link>
       </div>
     </div>
   );
