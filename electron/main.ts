@@ -33,6 +33,8 @@ const createWindow = (): void => {
     height: 800,
     minWidth: 1024,
     minHeight: 768,
+    fullscreen: true, // Her zaman tam ekran
+    kiosk: !isDev, // Production'da kiosk modu (tam ekran + çıkış engellendi)
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: false,
@@ -42,6 +44,8 @@ const createWindow = (): void => {
     icon: iconPath,
     titleBarStyle: "default",
     show: false, // Don't show until ready
+    frame: isDev, // Production'da frame'i kaldır (tam ekran için)
+    autoHideMenuBar: !isDev, // Production'da menü çubuğunu gizle
   });
 
   // Load the app
@@ -58,11 +62,33 @@ const createWindow = (): void => {
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
     
+    // Her zaman tam ekran modunu aktif et
+    mainWindow?.setFullScreen(true);
+    
     // Open DevTools in development
     if (isDev) {
       mainWindow?.webContents.openDevTools();
     }
   });
+
+  // Kiosk modunda F11 ve ESC tuşlarını engelle (production'da)
+  if (!isDev) {
+    mainWindow?.webContents.on("before-input-event", (event, input) => {
+      // F11 (fullscreen toggle) ve ESC (exit fullscreen) tuşlarını engelle
+      if (input.key === "F11" || input.key === "Escape") {
+        event.preventDefault();
+      }
+    });
+  } else {
+    // Development'ta F11 ile tam ekran açıp kapatabilirsiniz
+    mainWindow?.webContents.on("before-input-event", (event, input) => {
+      // Development'ta sadece ESC'yi engelle (F11'e izin ver)
+      if (input.key === "Escape" && input.control) {
+        // Ctrl+ESC ile çıkış yapabilirsiniz
+        event.preventDefault();
+      }
+    });
+  }
 
   // Handle window closed
   mainWindow.on("closed", () => {
@@ -123,91 +149,96 @@ app.on("ready", () => {
     }, 5000); // 5 seconds after app start
   }
 
-  // Set application menu
-  if (process.platform === "darwin") {
-    // macOS menu
-    const template: Electron.MenuItemConstructorOptions[] = [
-      {
-        label: app.getName(),
-        submenu: [
-          { role: "about" },
-          { type: "separator" },
-          { role: "services" },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      {
-        label: "Edit",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [
-          { role: "reload" },
-          { role: "forceReload" },
-          { role: "toggleDevTools" },
-          { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
-          { type: "separator" },
-          { role: "togglefullscreen" },
-        ],
-      },
-      {
-        role: "window",
-        submenu: [{ role: "minimize" }, { role: "close" }],
-      },
-    ];
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  // Set application menu (sadece development'ta)
+  if (isDev) {
+    if (process.platform === "darwin") {
+      // macOS menu
+      const template: Electron.MenuItemConstructorOptions[] = [
+        {
+          label: app.getName(),
+          submenu: [
+            { role: "about" },
+            { type: "separator" },
+            { role: "services" },
+            { type: "separator" },
+            { role: "hide" },
+            { role: "hideOthers" },
+            { role: "unhide" },
+            { type: "separator" },
+            { role: "quit" },
+          ],
+        },
+        {
+          label: "Edit",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" },
+          ],
+        },
+        {
+          label: "View",
+          submenu: [
+            { role: "reload" },
+            { role: "forceReload" },
+            { role: "toggleDevTools" },
+            { type: "separator" },
+            { role: "resetZoom" },
+            { role: "zoomIn" },
+            { role: "zoomOut" },
+            { type: "separator" },
+            { role: "togglefullscreen" },
+          ],
+        },
+        {
+          role: "window",
+          submenu: [{ role: "minimize" }, { role: "close" }],
+        },
+      ];
+      Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    } else {
+      // Windows/Linux menu
+      const template: Electron.MenuItemConstructorOptions[] = [
+        {
+          label: "File",
+          submenu: [{ role: "quit" }],
+        },
+        {
+          label: "Edit",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" },
+          ],
+        },
+        {
+          label: "View",
+          submenu: [
+            { role: "reload" },
+            { role: "forceReload" },
+            { role: "toggleDevTools" },
+            { type: "separator" },
+            { role: "resetZoom" },
+            { role: "zoomIn" },
+            { role: "zoomOut" },
+            { type: "separator" },
+            { role: "togglefullscreen" },
+          ],
+        },
+      ];
+      Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    }
   } else {
-    // Windows/Linux menu
-    const template: Electron.MenuItemConstructorOptions[] = [
-      {
-        label: "File",
-        submenu: [{ role: "quit" }],
-      },
-      {
-        label: "Edit",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [
-          { role: "reload" },
-          { role: "forceReload" },
-          { role: "toggleDevTools" },
-          { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
-          { type: "separator" },
-          { role: "togglefullscreen" },
-        ],
-      },
-    ];
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    // Production'da menüyü kaldır (kiosk modu için)
+    Menu.setApplicationMenu(null);
   }
 });
 

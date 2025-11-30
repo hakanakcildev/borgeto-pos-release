@@ -106,7 +106,7 @@
       {
         "provider": "github",
         "owner": "hakanakcildev",
-        "repo": "borgeto-pos-win"
+        "repo": "borgeto-pos-release"
       }
     ],
     "nsis": {
