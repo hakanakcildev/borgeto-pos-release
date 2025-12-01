@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useCallback, useRef } from "react";
+import * as React from "react";
 import { signInWithCredentials } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,16 +120,65 @@ function Login() {
 
   const handleCheckUpdates = useCallback(async () => {
     setCheckingUpdate(true);
+    setError("");
     try {
-      // Güncelleme kontrolü - şimdilik basit bir kontrol
-      // İleride API'den versiyon kontrolü yapılabilir
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert("Güncelleme kontrolü tamamlandı. En son sürümü kullanıyorsunuz.");
+      // Electron API'den güncelleme kontrolü yap
+      if (window.electronAPI?.checkForUpdates) {
+        await window.electronAPI.checkForUpdates();
+      } else {
+        alert("Güncelleme kontrolü şu anda kullanılamıyor.");
+      }
     } catch (error) {
-      alert("Güncelleme kontrolü sırasında bir hata oluştu");
+      const errorMessage = error instanceof Error ? error.message : "Güncelleme kontrolü sırasında bir hata oluştu";
+      setError(errorMessage);
+      alert(errorMessage);
     } finally {
       setCheckingUpdate(false);
     }
+  }, []);
+
+  // Auto-updater event listeners
+  React.useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const handleUpdateAvailable = (version: string) => {
+      setError("");
+      alert(`Yeni güncelleme mevcut: ${version}. Güncelleme indiriliyor...`);
+    };
+
+    const handleUpdateNotAvailable = () => {
+      setError("");
+      alert("En son sürümü kullanıyorsunuz.");
+      setCheckingUpdate(false);
+    };
+
+    const handleUpdateDownloaded = (version: string) => {
+      setError("");
+      alert(`Güncelleme indirildi: ${version}. Program kapatıldığında otomatik olarak kurulacak.`);
+      setCheckingUpdate(false);
+    };
+
+    const handleDownloadProgress = (progress: { percent: number }) => {
+      // İndirme ilerlemesini göster (isteğe bağlı)
+      console.log("Download progress:", progress.percent);
+    };
+
+    const handleUpdateError = (error: string) => {
+      setError(`Güncelleme hatası: ${error}`);
+      setCheckingUpdate(false);
+    };
+
+    if (window.electronAPI.onUpdateAvailable) {
+      window.electronAPI.onUpdateAvailable(handleUpdateAvailable);
+      window.electronAPI.onUpdateNotAvailable(handleUpdateNotAvailable);
+      window.electronAPI.onUpdateDownloaded(handleUpdateDownloaded);
+      window.electronAPI.onDownloadProgress(handleDownloadProgress);
+      window.electronAPI.onUpdateError(handleUpdateError);
+    }
+
+    return () => {
+      // Cleanup listeners if needed
+    };
   }, []);
 
   return (
@@ -313,7 +363,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.6
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.14
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 

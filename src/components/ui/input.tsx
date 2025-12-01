@@ -55,14 +55,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         if (inputRef.current) {
           // Dokunmatik cihazlarda ve showTouchKeyboard true ise klavyeyi aç
           if (isTouchDevice && showTouchKeyboard) {
-            // Varsayılan klavyeyi engelle
-            inputRef.current.setAttribute("readonly", "readonly");
-            setTimeout(() => {
-              if (inputRef.current) {
-                inputRef.current.removeAttribute("readonly");
-              }
-            }, 100);
-
+            // Varsayılan klavyeyi engelle (sadece gerçekten dokunmatik cihazlarda)
+            // readonly attribute'unu eklemeyi kaldırdık çünkü bu yazmayı engelliyor
             handleOpenKeyboard();
           } else if (isOpen) {
             // Klavye zaten açıksa (örneğin klavye butonu ile açıldıysa), klavyeyi güncelle

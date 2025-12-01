@@ -27,7 +27,22 @@ function registerIpcHandlers() {
     app.quit();
   });
   
-  console.log("IPC handlers registered: quit-app at", new Date().toISOString());
+  // Register check-for-updates handler
+  ipcMain.handle("check-for-updates", async () => {
+    console.log("check-for-updates IPC handler called - checking for updates");
+    if (!isDev) {
+      try {
+        await autoUpdater.checkForUpdates();
+      } catch (error) {
+        console.error("Error checking for updates:", error);
+        if (mainWindow) {
+          mainWindow.webContents.send("update-error", error instanceof Error ? error.message : String(error));
+        }
+      }
+    }
+  });
+  
+  console.log("IPC handlers registered: quit-app, check-for-updates at", new Date().toISOString());
 }
 
 // Register handlers immediately (before app is ready)
@@ -41,7 +56,13 @@ autoUpdater.autoInstallOnAppQuit = true;
 // Check for updates every 4 hours
 if (!isDev) {
   setInterval(() => {
-    autoUpdater.checkForUpdates();
+    try {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error("Error checking for updates (interval):", err);
+      });
+    } catch (err) {
+      console.error("Error checking for updates (interval):", err);
+    }
   }, 4 * 60 * 60 * 1000); // 4 hours
 }
 
@@ -159,10 +180,16 @@ autoUpdater.on("update-available", (info: { version: string }) => {
 
 autoUpdater.on("update-not-available", () => {
   console.log("Update not available");
+  if (mainWindow) {
+    mainWindow.webContents.send("update-not-available");
+  }
 });
 
 autoUpdater.on("error", (err: Error) => {
   console.error("Error in auto-updater:", err);
+  if (mainWindow) {
+    mainWindow.webContents.send("update-error", err.message || String(err));
+  }
 });
 
 autoUpdater.on("download-progress", (progressObj: { percent: number }) => {

@@ -286,37 +286,37 @@ function TableHistoryContent() {
     <div className="h-full bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 overflow-y-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <History className="h-8 w-8" />
-          Masa Geçmişi
-        </h1>
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <History className="h-8 w-8" />
+            Masa Geçmişi
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
           Tüm adisyon geçmişini görüntüleyin
-        </p>
+          </p>
       </div>
 
       {/* Adisyon Listesi */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
-          </div>
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
+              </div>
         ) : bills.length === 0 ? (
-          <div className="text-center py-12">
-            <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-            <p className="text-gray-500 dark:text-gray-400">
+              <div className="text-center py-12">
+                <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                <p className="text-gray-500 dark:text-gray-400">
               Henüz adisyon kaydı bulunmuyor
-            </p>
-          </div>
-        ) : (
+                </p>
+              </div>
+            ) : (
           <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
             {bills.map((bill) => (
-              <div
+                  <div
                 key={bill.id}
                 onClick={() => setSelectedBill(bill)}
                 className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-              >
+                  >
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2 flex-1">
                     <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
@@ -446,7 +446,7 @@ function TableHistoryContent() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Masa</p>
                   <p className="font-semibold text-gray-900 dark:text-white">
                     {selectedBill.tableNumber}
-                  </p>
+                              </p>
                 </div>
                 {selectedBill.customerName && (
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
@@ -457,11 +457,11 @@ function TableHistoryContent() {
                     {selectedBill.customerPhone && (
                       <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                         {selectedBill.customerPhone}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                              </p>
+                            )}
+                              </div>
+                            )}
+                          </div>
 
               {/* Ürünler */}
               <div>
@@ -512,16 +512,16 @@ function TableHistoryContent() {
                       <span className="text-red-600 dark:text-red-400">
                         -₺{selectedBill.discount.toFixed(2)}
                       </span>
-                    </div>
-                  )}
+              </div>
+            )}
                   <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
                     <span className="text-lg font-bold text-gray-900 dark:text-white">TOPLAM</span>
                     <span className="text-lg font-bold text-gray-900 dark:text-white">
                       ₺{selectedBill.total.toFixed(2)}
                     </span>
-                  </div>
-                </div>
-              </div>
+          </div>
+        </div>
+      </div>
 
               {/* Ödemeler */}
               <div>

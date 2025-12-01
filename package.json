@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.6",
+  "version": "1.0.14",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -74,7 +74,7 @@
   },
   "build": {
     "appId": "com.borgeto.pos",
-    "productName": "BorgetoPOS",
+    "productName": "Borgeto POS",
     "directories": {
       "output": "release"
     },
@@ -84,6 +84,7 @@
       "package.json",
       "public/**/*"
     ],
+    "asar": true,
     "extraMetadata": {
       "main": "dist-electron/main.js",
       "type": "commonjs"
@@ -115,14 +116,17 @@
       }
     ],
     "nsis": {
-      "oneClick": true,
-      "allowToChangeInstallationDirectory": false,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "artifactName": "${productName} Setup ${version}.${ext}",
       "shortcutName": "${productName}",
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "public/borgeto-logo.ico",
+      "uninstallerIcon": "public/borgeto-logo.ico",
+      "warningsAsErrors": false
     },
     "linux": {
       "target": [
