@@ -309,11 +309,11 @@ function PaymentMethodsManagementContent() {
                     <p>Henüz ödeme yöntemi eklenmemiş</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                     {paymentMethods.map((method) => (
                       <div
                         key={method.id}
-                        className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
+                        className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
                       >
                     {editingPaymentMethod?.id === method.id && editingPaymentMethod ? (
                       <div className="space-y-3">
@@ -392,44 +392,44 @@ function PaymentMethodsManagementContent() {
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-3 mb-3">
+                        <div className="flex items-center gap-2 mb-2">
                           <div
-                            className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold"
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
                             style={{
                               backgroundColor: method.color || "#16a34a",
                             }}
                           >
                             {method.name.charAt(0).toUpperCase()}
                           </div>
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-gray-900 dark:text-white">
-                                  {method.name}
-                                </h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {method.code}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                {method.isDefault && (
-                                  <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded">
-                                    Standart
-                                  </span>
-                                )}
-                                {!method.isActive && (
-                                  <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
-                                    Pasif
-                                  </span>
-                                )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 dark:text-white text-xs truncate">
+                              {method.name}
+                            </h3>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                              {method.code}
+                            </p>
                           </div>
-                          <div className="flex gap-1">
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {method.isDefault && (
+                              <span className="text-[10px] px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded">
+                                Standart
+                              </span>
+                            )}
+                            {!method.isActive && (
+                              <span className="text-[10px] px-1 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                                Pasif
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-0.5 flex-shrink-0">
                             <button
                               onClick={() => setEditingPaymentMethod(method)}
-                              className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                              className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded h-7 w-7 flex items-center justify-center"
                               title="Düzenle"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3 w-3" />
                             </button>
                             {!method.isDefault && (
                               <button
@@ -439,10 +439,10 @@ function PaymentMethodsManagementContent() {
                                     method.isDefault
                                   )
                                 }
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                                className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded h-7 w-7 flex items-center justify-center"
                                 title="Sil"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3 w-3" />
                               </button>
                             )}
                           </div>

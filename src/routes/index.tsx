@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { getTablesByCompany, updateTableStatus, getTable } from "@/lib/firebase/tables";
+import { getTablesByCompany, updateTableStatus, getTable, createDefaultTables } from "@/lib/firebase/tables";
 import { getOrdersByCompany, updateOrder, addOrder, updateOrderStatus } from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
@@ -336,6 +336,7 @@ function TablesView() {
   const [availableTablesForMove, setAvailableTablesForMove] = useState<Table[]>([]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMovingTable, setIsMovingTable] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const loadData = async () => {
@@ -348,6 +349,11 @@ function TablesView() {
       }
 
       try {
+        // Standart masaları oluştur (yoksa)
+        await createDefaultTables(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
+          // Hata olsa bile devam et
+        });
+
         const [tablesData, ordersData] = await Promise.all([
           getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
             return [];
@@ -663,10 +669,18 @@ function TablesView() {
     }
   };
 
+  // Otomatik güncelleme için timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Her 1 dakikada bir güncelle
+
+    return () => clearInterval(interval);
+  }, []);
+
   const getTimeAgo = (date: Date | undefined): string => {
     if (!date) return "";
-    const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
+    const diff = currentTime.getTime() - new Date(date).getTime();
     const minutes = Math.floor(diff / 60000);
     
     if (minutes < 1) return "Az önce";
@@ -675,6 +689,22 @@ function TablesView() {
     if (hours < 24) return `${hours} saat önce`;
     const days = Math.floor(hours / 24);
     return `${days} gün önce`;
+  };
+
+  // İlk eklenen ürünü bul (en eski addedAt değerine sahip)
+  const getFirstAddedItem = (order: Order | undefined) => {
+    if (!order || !order.items || order.items.length === 0) return null;
+    
+    // Tüm ürünler arasından en eski addedAt değerine sahip olanı bul
+    return order.items.reduce((oldest, current) => {
+      if (!oldest?.addedAt) return current;
+      if (!current?.addedAt) return oldest;
+      
+      const oldestTime = new Date(oldest.addedAt).getTime();
+      const currentTime = new Date(current.addedAt).getTime();
+      
+      return currentTime < oldestTime ? current : oldest;
+    });
   };
 
   const areas = Array.from(
@@ -704,6 +734,36 @@ function TablesView() {
     );
   }).length;
 
+  // Ekran boyutunu algıla ve optimal grid yapısını hesapla
+  // Hook'lar her zaman return'den önce çağrılmalı!
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (gridContainerRef.current) {
+        const rect = gridContainerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    // İlk yüklemede hesapla
+    const timeoutId = setTimeout(updateSize, 100);
+    
+    window.addEventListener('resize', updateSize);
+    // ResizeObserver kullanarak daha hassas takip
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (gridContainerRef.current) {
+      resizeObserver.observe(gridContainerRef.current);
+    }
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateSize);
+      resizeObserver.disconnect();
+    };
+  }, [filteredTables.length, showActiveOnly, selectedArea]);
+
   if (loading) {
   return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -715,9 +775,74 @@ function TablesView() {
   );
   }
 
+  // Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
+  const calculateOptimalGrid = (tableCount: number, width: number, height: number) => {
+    if (tableCount === 0 || width === 0 || height === 0) return { cols: 2, gap: 12 };
+
+    // Padding için alan hesapla
+    const paddingX = 32; // px-4 lg:px-6 için (16px * 2)
+    const paddingY = 16; // pb-4 için
+    const availableWidth = width - paddingX;
+    const availableHeight = height - paddingY;
+
+    // Gap değeri (12px)
+    const gap = 12;
+    
+    // Farklı kolon sayılarını dene ve en iyisini bul
+    let bestCols = 2;
+    let bestFit = Infinity;
+
+    for (let cols = 2; cols <= 12; cols++) {
+      const rows = Math.ceil(tableCount / cols);
+      
+      // Her kartın boyutunu hesapla
+      const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+      const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+      
+      // Minimum kart boyutu (çok küçük olmasın)
+      const minCardSize = 100;
+      
+      // Kare olması için en küçük boyutu kullan, ama minimum boyuttan küçük olmasın
+      const cardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
+      
+      // Tüm kartların sığması için gerekli alan
+      const requiredWidth = cols * cardSize + (cols - 1) * gap;
+      const requiredHeight = rows * cardSize + (rows - 1) * gap;
+      
+      // Eğer sığıyorsa ve daha iyi bir fit ise
+      if (requiredWidth <= availableWidth && requiredHeight <= availableHeight && cardSize >= minCardSize) {
+        const unusedSpace = (availableWidth - requiredWidth) + (availableHeight - requiredHeight);
+        if (unusedSpace < bestFit) {
+          bestFit = unusedSpace;
+          bestCols = cols;
+        }
+      }
+    }
+
+    // Eğer hiçbir kolon sayısı sığmıyorsa, en az satır sayısına sahip olanı seç
+    if (bestFit === Infinity) {
+      let minRows = Infinity;
+      for (let cols = 2; cols <= 12; cols++) {
+        const rows = Math.ceil(tableCount / cols);
+        if (rows < minRows) {
+          minRows = rows;
+          bestCols = cols;
+        }
+      }
+    }
+
+    return { cols: bestCols, gap };
+  };
+
+  const { cols: optimalColumns, gap } = calculateOptimalGrid(
+    filteredTables.length,
+    containerSize.width,
+    containerSize.height
+  );
+
   return (
-    <div className="h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-      <div className="mb-6 px-4 lg:px-6 pt-3 lg:pt-4">
+    <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
+      <div className="mb-4 px-4 lg:px-6 pt-3 lg:pt-4 flex-shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
@@ -729,8 +854,27 @@ function TablesView() {
           </div>
           
           <div className="flex gap-2 overflow-x-auto pb-2">
+            <button
+              onClick={() => {
+                setSelectedArea("");
+                setShowActiveOnly(false);
+                navigate({
+                  to: "/",
+                  search: { area: undefined, activeOnly: false },
+                  replace: true,
+                });
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                !selectedArea && !showActiveOnly
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+              }`}
+            >
+              Tüm Masalar ({tables.length})
+            </button>
+            
             {areas.length > 0 && areas
-              .filter((area) => area !== "Paket")
+              .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
               .map((area) => {
                 const areaTables = tables.filter((t) => t.area === area);
                 return (
@@ -774,6 +918,30 @@ function TablesView() {
             >
               Aktif Masalar ({activeTableCount})
             </button>
+            
+            {areas.includes("Hızlı Satış") && (() => {
+              const hizliSatisTables = tables.filter((t) => t.area === "Hızlı Satış");
+              return (
+                <button
+                  onClick={() => {
+                    setSelectedArea("Hızlı Satış");
+                    setShowActiveOnly(false);
+                    navigate({
+                      to: "/",
+                      search: { area: "Hızlı Satış", activeOnly: false },
+                      replace: true,
+                    });
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    selectedArea === "Hızlı Satış" && !showActiveOnly
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                  }`}
+                >
+                  Hızlı Satış ({hizliSatisTables.length})
+                </button>
+              );
+            })()}
             
             {areas.includes("Paket") && (() => {
               const paketTables = tables.filter((t) => t.area === "Paket");
@@ -821,7 +989,16 @@ function TablesView() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 px-4 lg:px-6">
+        <div 
+          ref={gridContainerRef}
+          className="flex-1 px-4 lg:px-6 pb-4 min-h-0 overflow-y-auto"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${optimalColumns}, minmax(0, 1fr))`,
+            gap: `${gap}px`,
+            alignContent: 'start',
+          }}
+        >
           {filteredTables.map((table) => {
             const order = getTableOrder(table.id!);
 
@@ -833,27 +1010,30 @@ function TablesView() {
                 onMouseLeave={handleLongPressEnd}
                 onTouchStart={() => order && order.items.length > 0 && handleLongPressStart(table, order)}
                 onTouchEnd={handleLongPressEnd}
-                className="relative"
+                className="relative w-full"
+                style={{ 
+                  aspectRatio: '1',
+                  minHeight: '100px',
+                  maxHeight: '100%'
+                }}
               >
                 <Link
                   to="/table/$tableId"
                   params={{ tableId: table.id! }}
                   search={(prev) => ({ area: prev?.area || undefined, activeOnly: prev?.activeOnly || false })}
-                  className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} rounded-xl p-4 sm:p-5 shadow-sm border-2 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all duration-200 cursor-pointer block min-h-[140px] sm:min-h-[160px] flex flex-col justify-between`}
+                  className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} rounded-lg p-3 shadow-sm border-2 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center`}
                   style={{
                     borderColor: getBorderColor(table.status, resolvedTheme === "dark"),
                   }}
                 >
-                  <div className="text-center mb-3">
-                    <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">
+                  <div className="text-center space-y-2">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                       {table.tableNumber}
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Toplam:</span>
-                      <span className={`text-base sm:text-lg font-bold ${
+                    
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Toplam</span>
+                      <span className={`text-sm sm:text-base font-bold ${
                         order && order.total > 0
                           ? "text-blue-600 dark:text-blue-400"
                           : "text-gray-400 dark:text-gray-500"
@@ -864,12 +1044,15 @@ function TablesView() {
                       </span>
                     </div>
                     
-                    {order && order.items.length > 0 && order.items[0]?.addedAt && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                        <Clock className="h-3 w-3" />
-                        {getTimeAgo(order.items[0].addedAt)}
-                      </div>
-                    )}
+                    {(() => {
+                      const firstItem = getFirstAddedItem(order);
+                      return firstItem?.addedAt ? (
+                        <div className="flex items-center justify-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          <Clock className="h-3 w-3" />
+                          <span className="truncate">{getTimeAgo(firstItem.addedAt)}</span>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 </Link>
               </div>

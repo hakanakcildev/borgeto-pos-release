@@ -217,24 +217,30 @@ function CouriersManagementContent() {
         (sum, a) => sum + a.packageCount,
         0
       );
-      const totalChangeAmount = courierAssignments.reduce(
-        (sum, a) => sum + a.changeAmount,
-        0
-      );
+      
+      // Sadece nakit ödemeler için para üstü hesapla
+      const totalChangeAmount = courierAssignments
+        .filter((a) => a.paymentMethod === "cash")
+        .reduce((sum, a) => sum + a.changeAmount, 0);
+      
       const totalEarnings = courierAssignments.reduce(
         (sum, a) => sum + a.packageCount * (couriers.find((c) => c.id === courierId)?.pricePerPackage || 0),
         0
       );
-      const totalPaid = courierAssignments.reduce(
-        (sum, a) => sum + a.totalAmount,
-        0
-      );
-      // Kurye kasaya ödemesi gereken = Müşteriden alınan + Para üstü
-      // Örnek: Müşteriden 190₺ alındı, Para üstü 10₺ verildi
+      
+      // Sadece nakit ödemeler için toplam tutar hesapla
+      // ÖNEMLİ: Sadece nakit ödemeler için kurye kasaya ödeme yapar
+      const totalPaid = courierAssignments
+        .filter((a) => a.paymentMethod === "cash")
+        .reduce((sum, a) => sum + a.totalAmount, 0);
+      
+      // Kurye kasaya ödemesi gereken = Sadece nakit ödemelerden alınan + Para üstü
+      // Örnek: Müşteriden 190₺ nakit alındı, Para üstü 10₺ verildi
       // Kurye kasaya ödemeli = 190₺ + 10₺ = 200₺
       // Kurye kazancı = 80₺
       // Kuryeye ödenecek/alınacak = 80₺ - 200₺ = -120₺ (kurye 120₺ ödeyecek)
-      const totalToPay = totalPaid + totalChangeAmount; // Kuryenin kasaya ödemesi gereken
+      // NOT: Kart, yemek kartı vb. ödemeler için kurye kasaya ödeme yapmaz
+      const totalToPay = totalPaid + totalChangeAmount; // Sadece nakit ödemeler için kuryenin kasaya ödemesi gereken
       const amountToReceive = totalEarnings - totalToPay; // Pozitifse kuryeye ödenecek, negatifse kurye ödeyecek
 
       return {
@@ -366,7 +372,7 @@ function CouriersManagementContent() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {couriers.map((courier) => {
               const stats = calculateCourierStats(courier.id!);
               const isEditing = editingCourier?.id === courier.id;
@@ -374,7 +380,7 @@ function CouriersManagementContent() {
               return (
                 <div
                   key={courier.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4"
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-2"
                 >
                   {isEditing ? (
                     <div className="space-y-4">
@@ -452,105 +458,105 @@ function CouriersManagementContent() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                             {courier.name}
                           </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Paket Başı: ₺{courier.pricePerPackage.toFixed(2)}
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            ₺{courier.pricePerPackage.toFixed(2)}/paket
                           </p>
                           {!courier.isActive && (
-                            <span className="text-xs text-red-600 dark:text-red-400 mt-1 inline-block">
+                            <span className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 inline-block">
                               (Pasif)
                             </span>
                           )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1 flex-shrink-0">
                           <Button
                             onClick={() => setEditingCourier(courier)}
                             variant="outline"
                             size="sm"
+                            className="h-7 w-7 p-0"
                           >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Düzenle
+                            <Edit className="h-3 w-3" />
                           </Button>
                           <Button
                             onClick={() => handleDeleteCourier(courier.id!)}
                             variant="outline"
                             size="sm"
-                            className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7 p-0"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>
 
                       {/* Günlük İstatistikler */}
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <Package className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            <span className="text-[10px] text-gray-600 dark:text-gray-400">
                               Paket
                             </span>
                           </div>
-                          <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                          <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                             {stats.totalPackages}
                           </p>
                         </div>
-                        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <DollarSign className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                              Verilen Para Üstü
+                        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <DollarSign className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+                              Para Üstü
                             </span>
                           </div>
-                          <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                          <p className="text-sm font-bold text-orange-600 dark:text-orange-400">
                             ₺{stats.totalChangeAmount.toFixed(2)}
                           </p>
                         </div>
-                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <DollarSign className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                              Paket Ücreti
+                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <DollarSign className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+                              Ücret
                             </span>
                           </div>
-                          <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                          <p className="text-sm font-bold text-purple-600 dark:text-purple-400">
                             ₺{stats.totalPaid.toFixed(2)}
                           </p>
                         </div>
-                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                              Kurye Kazancı
+                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-1.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <TrendingUp className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+                              Kazanç
                             </span>
                           </div>
-                          <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                          <p className="text-sm font-bold text-green-600 dark:text-green-400">
                             ₺{stats.totalEarnings.toFixed(2)}
                           </p>
                         </div>
                         <div
-                          className={`rounded-lg p-3 ${
+                          className={`rounded-lg p-1.5 ${
                             stats.amountToReceive >= 0
                               ? "bg-green-50 dark:bg-green-900/20"
                               : "bg-red-50 dark:bg-red-900/20"
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-1 mb-0.5">
                             {stats.amountToReceive >= 0 ? (
-                              <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              <TrendingUp className="h-3 w-3 text-green-600 dark:text-green-400" />
                             ) : (
-                              <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                              <TrendingDown className="h-3 w-3 text-red-600 dark:text-red-400" />
                             )}
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                            <span className="text-[10px] text-gray-600 dark:text-gray-400">
                               {stats.amountToReceive >= 0 ? "Kasa Ödeyecek" : "Kurye Ödeyecek"}
                             </span>
                           </div>
                           <p
-                            className={`text-lg font-bold ${
+                            className={`text-sm font-bold ${
                               stats.amountToReceive >= 0
                                 ? "text-green-600 dark:text-green-400"
                                 : "text-red-600 dark:text-red-400"
@@ -562,7 +568,7 @@ function CouriersManagementContent() {
                       </div>
 
                       {/* Ödemeler Alındı Butonu */}
-                      <div className="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
                         <Button
                           onClick={async () => {
                             if (!confirm(`${courier.name} için seçili tarihe ait ödemeleri sıfırlamak istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
@@ -605,10 +611,10 @@ function CouriersManagementContent() {
                               alert("Ödemeler sıfırlanırken bir hata oluştu");
                             }
                           }}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          className="w-full bg-green-600 hover:bg-green-700 text-white h-9 text-xs"
                           disabled={stats.totalPackages === 0}
                         >
-                          <CheckCircle className="h-4 w-4 mr-2" />
+                          <CheckCircle className="h-3 w-3 mr-1" />
                           Ödemeler Alındı
                         </Button>
                       </div>

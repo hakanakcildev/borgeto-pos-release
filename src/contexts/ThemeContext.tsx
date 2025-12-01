@@ -14,7 +14,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // LocalStorage'dan tema tercihini yükle
     const savedTheme = localStorage.getItem("theme") as Theme;
-    return savedTheme || "system";
+    return savedTheme || "dark";
   });
 
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() => {

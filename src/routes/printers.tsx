@@ -162,6 +162,134 @@ function PrintersContent() {
     return detected;
   }, []);
 
+  // Ağ yazıcılarını otomatik algıla (IP tarama)
+  const detectNetworkPrinters = useCallback(async (): Promise<PrinterDevice[]> => {
+    const detected: PrinterDevice[] = [];
+    
+    // Yerel ağ IP aralığını tespit et
+    try {
+      // WebRTC kullanarak yerel IP'yi al (sadece Chrome/Edge)
+      const localIP = await new Promise<string | null>((resolve) => {
+        const RTCPeerConnection = (window as any).RTCPeerConnection || 
+                                 (window as any).webkitRTCPeerConnection || 
+                                 (window as any).mozRTCPeerConnection;
+        
+        if (!RTCPeerConnection) {
+          resolve(null);
+          return;
+        }
+
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel("");
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .catch(() => resolve(null));
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const candidate = event.candidate.candidate;
+            const match = candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);
+            if (match) {
+              const ip = match[0];
+              // Yerel IP aralığını kontrol et (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+              if (ip.startsWith("192.168.") || 
+                  ip.startsWith("10.") || 
+                  /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) {
+                pc.close();
+                resolve(ip);
+              }
+            }
+          }
+        };
+
+        setTimeout(() => {
+          pc.close();
+          resolve(null);
+        }, 3000);
+      });
+
+      if (!localIP) {
+        return detected; // Yerel IP bulunamadı
+      }
+
+      // IP aralığını belirle (örnek: 192.168.1.1 -> 192.168.1.0/24)
+      const ipParts = localIP.split(".");
+      const baseIP = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+      
+      // Yaygın yazıcı portları
+      const printerPorts = [9100, 515, 631, 9101, 9102];
+      
+      // İlk 50 IP'yi tara (performans için sınırlı)
+      const scanPromises: Promise<void>[] = [];
+      for (let i = 1; i <= 50; i++) {
+        const testIP = `${baseIP}.${i}`;
+        
+        // Her port için kontrol et
+        printerPorts.forEach(port => {
+          const promise = new Promise<void>((resolve) => {
+            const img = new Image();
+            const timeout = setTimeout(() => {
+              resolve();
+            }, 500); // 500ms timeout
+            
+            img.onload = () => {
+              clearTimeout(timeout);
+              // Port açık, yazıcı olabilir
+              detected.push({
+                id: `network_${testIP}_${port}_${Date.now()}`,
+                name: `Ağ Yazıcısı (${testIP}:${port})`,
+                type: "network",
+                port: `${testIP}:${port}`,
+                isConnected: true,
+              });
+              resolve();
+            };
+            
+            img.onerror = () => {
+              clearTimeout(timeout);
+              resolve();
+            };
+            
+            // Port kontrolü için HTTP isteği (sadece 631 portu için çalışır)
+            if (port === 631) {
+              fetch(`http://${testIP}:${port}`, { 
+                method: 'HEAD', 
+                mode: 'no-cors',
+                signal: AbortSignal.timeout(500)
+              })
+                .then(() => {
+                  detected.push({
+                    id: `network_${testIP}_${port}_${Date.now()}`,
+                    name: `Ağ Yazıcısı (${testIP}:${port})`,
+                    type: "network",
+                    port: `${testIP}:${port}`,
+                    isConnected: true,
+                  });
+                })
+                .catch(() => {})
+                .finally(() => resolve());
+            } else {
+              resolve();
+            }
+          });
+          
+          scanPromises.push(promise);
+        });
+      }
+      
+      // Tüm taramaları bekle (maksimum 5 saniye)
+      await Promise.race([
+        Promise.all(scanPromises),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+      
+    } catch (error) {
+      // Ağ tarama hatası - sessizce devam et
+    }
+
+    return detected;
+  }, []);
+
 
   // Ağ yazıcısı ekle
   const addNetworkPrinter = useCallback((ip: string, name: string) => {
@@ -218,6 +346,14 @@ function PrintersContent() {
       // Sistem yazıcılarını ekle (izin gerektirmez)
       const systemPrinters = await detectSystemPrinters();
       allPrinters.push(...systemPrinters);
+
+      // Ağ yazıcılarını otomatik tara (kablosuz yazıcılar için)
+      try {
+        const networkPrinters = await detectNetworkPrinters();
+        allPrinters.push(...networkPrinters);
+      } catch (error: any) {
+        // Ağ tarama hatası - sessizce devam et
+      }
 
       // Web Serial API ile seri port yazıcıları
       // Kullanıcıdan bir kez izin istenir, sonra tüm portlar gösterilir
@@ -360,7 +496,7 @@ function PrintersContent() {
     } finally {
       setIsScanning(false);
     }
-  }, [detectSerialPrinters, detectUSBPrinters, detectSystemPrinters, companyId, userData?.companyId]);
+  }, [detectSerialPrinters, detectUSBPrinters, detectSystemPrinters, detectNetworkPrinters, companyId, userData?.companyId]);
 
   // Yazıcı seç
   const selectPrinter = useCallback((printerId: string) => {
@@ -528,27 +664,27 @@ function PrintersContent() {
 
       {/* Yazıcı Listesi */}
       {printers.length > 0 ? (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {printers.map((printer) => (
             <div
               key={printer.id}
-              className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 p-4 ${
+              className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 p-2 ${
                 selectedPrinter === printer.id
                   ? "border-blue-500 dark:border-blue-400"
                   : "border-gray-200 dark:border-gray-700"
               }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div
-                    className={`p-2 rounded-lg ${
+                    className={`p-1.5 rounded-lg flex-shrink-0 ${
                       printer.isConnected
                         ? "bg-green-100 dark:bg-green-900/20"
                         : "bg-gray-100 dark:bg-gray-700"
                     }`}
                   >
                     <Printer
-                      className={`h-5 w-5 ${
+                      className={`h-4 w-4 ${
                         printer.isConnected
                           ? "text-green-600 dark:text-green-400"
                           : "text-gray-400"
@@ -556,12 +692,12 @@ function PrintersContent() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                       {printer.name}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       <span
-                        className={`text-xs px-2 py-1 rounded ${
+                        className={`text-[10px] px-1 py-0.5 rounded ${
                           printer.type === "serial"
                             ? "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                             : printer.type === "usb"
@@ -572,7 +708,7 @@ function PrintersContent() {
                         }`}
                       >
                         {printer.type === "serial"
-                          ? "Seri Port"
+                          ? "Seri"
                           : printer.type === "usb"
                           ? "USB"
                           : printer.type === "network"
@@ -580,28 +716,28 @@ function PrintersContent() {
                           : "Sistem"}
                       </span>
                       {printer.isConnected ? (
-                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
+                        <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-0.5">
+                          <div className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full"></div>
                           Bağlı
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
                           Bağlı Değil
                         </span>
                       )}
                     </div>
                     {printer.port && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Port: {printer.port}
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {printer.port}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {selectedPrinter === printer.id && (
-                    <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
-                      <Check className="h-4 w-4" />
-                      Seçili
+                    <div className="flex items-center gap-0.5 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                      <Check className="h-3 w-3" />
+                      <span className="hidden sm:inline">Seçili</span>
                     </div>
                   )}
                   {selectedPrinter !== printer.id && (
@@ -609,7 +745,7 @@ function PrintersContent() {
                       onClick={() => selectPrinter(printer.id)}
                       variant="outline"
                       size="sm"
-                      className="text-sm"
+                      className="text-xs h-7 px-2"
                     >
                       Seç
                     </Button>
@@ -618,9 +754,9 @@ function PrintersContent() {
                     onClick={() => removePrinter(printer.id)}
                     variant="outline"
                     size="sm"
-                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7 p-0"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </Button>
                 </div>
               </div>

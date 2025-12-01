@@ -109,7 +109,7 @@ function ActiveTablesContent() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
           {activeTables.map((table) => {
             const order = getTableOrder(table.id!);
             if (!order) return null;
@@ -120,54 +120,54 @@ function ActiveTablesContent() {
                 to="/table/$tableId"
                 params={{ tableId: table.id! }}
                 search={{ area: undefined, activeOnly: false }}
-                className="bg-white rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                className="bg-white rounded-lg p-2 shadow-sm border border-gray-200 hover:shadow-md transition-shadow min-h-[44px]"
               >
                 {/* Table Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">
+                <div className="flex items-start justify-between mb-1.5">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-gray-900 truncate">
                       Masa {table.tableNumber}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">{order.orderNumber}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.orderNumber}</p>
                   </div>
                 </div>
 
                 {/* Order Items Summary */}
-                <div className="space-y-2 mb-4">
-                  {order.items.slice(0, 3).map((item, index) => (
+                <div className="space-y-1 mb-1.5">
+                  {order.items.slice(0, 2).map((item, index) => (
                     <div
                       key={index}
-                      className="flex items-center justify-between text-sm py-1"
+                      className="flex items-center justify-between text-xs"
                     >
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <span className="font-medium text-gray-900">
                           {item.quantity}x
                         </span>{" "}
-                        <span className="text-gray-700">{item.menuName}</span>
+                        <span className="text-gray-700 truncate">{item.menuName}</span>
                       </div>
-                      <span className="text-gray-600">
+                      <span className="text-gray-600 flex-shrink-0 ml-1">
                         ₺{item.subtotal.toFixed(2)}
                       </span>
                     </div>
                   ))}
-                  {order.items.length > 3 && (
-                    <div className="text-xs text-gray-500 text-center pt-2">
-                      +{order.items.length - 3} ürün daha
+                  {order.items.length > 2 && (
+                    <div className="text-[10px] text-gray-500 text-center pt-0.5">
+                      +{order.items.length - 2} ürün
                     </div>
                   )}
                 </div>
 
                 {/* Total */}
-                <div className="mb-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center justify-between font-bold text-lg">
+                <div className="mb-1 pt-1.5 border-t border-gray-200">
+                  <div className="flex items-center justify-between font-bold text-sm">
                     <span>Toplam</span>
                     <span className="text-blue-600">₺{order.total.toFixed(2)}</span>
                   </div>
                 </div>
 
                 {/* Time */}
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <Clock className="h-3 w-3" />
+                <div className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                  <Clock className="h-2.5 w-2.5" />
                   <span>
                     {new Date(order.createdAt).toLocaleTimeString("tr-TR", {
                       hour: "2-digit",

@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -106,7 +106,8 @@
       {
         "provider": "github",
         "owner": "hakanakcildev",
-        "repo": "borgeto-pos-release"
+        "repo": "borgeto-pos-release",
+        "releaseType": "release"
       }
     ],
     "nsis": {

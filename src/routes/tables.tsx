@@ -52,8 +52,33 @@ function TablesManagementContent() {
       try {
         const tablesData = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
         
+        // Duplicate masaları temizle
+        const removeDuplicateTables = (tables: Table[]): Table[] => {
+          const tableMap = new Map<string, Table>();
+          
+          tables.forEach((table) => {
+            const key = `${table.area}-${table.tableNumber}`;
+            const existing = tableMap.get(key);
+            
+            if (!existing) {
+              tableMap.set(key, table);
+            } else {
+              const existingDate = existing.updatedAt || existing.createdAt;
+              const currentDate = table.updatedAt || table.createdAt;
+              
+              if (currentDate > existingDate) {
+                tableMap.set(key, table);
+              }
+            }
+          });
+          
+          return Array.from(tableMap.values());
+        };
+        
+        const uniqueTables = removeDuplicateTables(tablesData);
+        
         // Eski masaların area alanını düzelt (eğer yoksa, boşsa veya sadece sayı ise "Diğer" olarak ata)
-        const tablesWithoutArea = tablesData.filter(
+        const tablesWithoutArea = uniqueTables.filter(
           (t) => {
             if (!t.area || t.area.trim() === "") return true;
             // Sadece sayı olan area değerlerini de düzelt (örn: "3", "15")
@@ -70,7 +95,8 @@ function TablesManagementContent() {
           );
           // Masaları yeniden yükle
           const updatedTables = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
-          setTables(updatedTables);
+          const uniqueUpdatedTables = removeDuplicateTables(updatedTables);
+          setTables(uniqueUpdatedTables);
           
           // İlk alanı otomatik seç
           if (updatedTables.length > 0 && !selectedArea) {
@@ -86,12 +112,12 @@ function TablesManagementContent() {
             }
           }
         } else {
-          setTables(tablesData);
+          setTables(uniqueTables);
           // İlk alanı otomatik seç (undefined veya boş string'leri filtrele)
-          if (tablesData.length > 0 && !selectedArea) {
+          if (uniqueTables.length > 0 && !selectedArea) {
             const areas = Array.from(
               new Set(
-                tablesData
+                uniqueTables
                   .map((t) => t.area)
                   .filter((area) => area && area.trim() !== "")
               )
@@ -178,7 +204,30 @@ function TablesManagementContent() {
 
       // Masaları yeniden yükle
       const tablesData = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
-      setTables(tablesData);
+      // Duplicate masaları temizle
+      const removeDuplicateTables = (tables: Table[]): Table[] => {
+        const tableMap = new Map<string, Table>();
+        
+        tables.forEach((table) => {
+          const key = `${table.area}-${table.tableNumber}`;
+          const existing = tableMap.get(key);
+          
+          if (!existing) {
+            tableMap.set(key, table);
+          } else {
+            const existingDate = existing.updatedAt || existing.createdAt;
+            const currentDate = table.updatedAt || table.createdAt;
+            
+            if (currentDate > existingDate) {
+              tableMap.set(key, table);
+            }
+          }
+        });
+        
+        return Array.from(tableMap.values());
+      };
+      const uniqueTables = removeDuplicateTables(tablesData);
+      setTables(uniqueTables);
       setSelectedArea(areaName);
       setNewAreaName("");
       setIsAddingArea(false);
@@ -213,7 +262,30 @@ function TablesManagementContent() {
 
       // Masaları yeniden yükle
       const tablesData = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
-      setTables(tablesData);
+      // Duplicate masaları temizle
+      const removeDuplicateTables = (tables: Table[]): Table[] => {
+        const tableMap = new Map<string, Table>();
+        
+        tables.forEach((table) => {
+          const key = `${table.area}-${table.tableNumber}`;
+          const existing = tableMap.get(key);
+          
+          if (!existing) {
+            tableMap.set(key, table);
+          } else {
+            const existingDate = existing.updatedAt || existing.createdAt;
+            const currentDate = table.updatedAt || table.createdAt;
+            
+            if (currentDate > existingDate) {
+              tableMap.set(key, table);
+            }
+          }
+        });
+        
+        return Array.from(tableMap.values());
+      };
+      const uniqueTables = removeDuplicateTables(tablesData);
+      setTables(uniqueTables);
     } catch (error) {
       alert("Masa eklenirken bir hata oluştu");
     }
@@ -396,21 +468,21 @@ function TablesManagementContent() {
               <p className="text-sm mt-2">Yukarıdaki "Masa Ekle" butonuna tıklayın</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
               {tablesInArea.map((table) => (
                 <div
                   key={table.id}
-                  className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
+                  className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
                 >
                   <div className="text-center">
-                    <div className="w-16 h-16 bg-blue-600 dark:bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-lg mx-auto mb-2">
+                    <div className="w-10 h-10 bg-blue-600 dark:bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-sm mx-auto mb-1.5">
                       {table.tableNumber.split(" ")[1] || table.tableNumber}
                     </div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
+                    <h3 className="font-medium text-gray-900 dark:text-white text-xs mb-1">
                       {table.tableNumber}
                     </h3>
                     <span
-                      className={`inline-block mt-2 px-2 py-1 rounded text-xs font-medium ${
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         table.status === "available"
                           ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
                           : table.status === "occupied"
@@ -431,10 +503,10 @@ function TablesManagementContent() {
                   </div>
                   <button
                     onClick={() => handleDeleteTable(table.id!)}
-                    className="absolute top-2 right-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1"
+                    className="absolute top-1 right-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-0.5"
                     title="Masayı Sil"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               ))}

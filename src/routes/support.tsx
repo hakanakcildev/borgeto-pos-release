@@ -45,28 +45,28 @@ function SupportContent() {
         </p>
       </div>
       {/* Contact Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {/* Telefon */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
-              <Phone className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-2">
+              <Phone className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
               Telefon
             </h3>
             <a
               href={`tel:${phoneNumber}`}
               onClick={handlePhoneClick}
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium text-lg mb-4 transition-colors"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium text-sm mb-2 transition-colors"
             >
               {phoneNumber}
             </a>
             <div className="w-full flex flex-col items-center">
-              <div className="bg-white dark:bg-white p-3 rounded-lg">
+              <div className="bg-white dark:bg-white p-2 rounded-lg">
                 <QRCodeSVG
                   value={`tel:${phoneNumber}`}
-                  size={150}
+                  size={120}
                   level="H"
                   includeMargin={true}
                 />
@@ -76,12 +76,12 @@ function SupportContent() {
         </div>
 
         {/* WhatsApp */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
-              <MessageCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-2">
+              <MessageCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
               WhatsApp
             </h3>
             <a
@@ -89,15 +89,15 @@ function SupportContent() {
               onClick={handleWhatsAppClick}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-medium text-lg mb-4 transition-colors"
+              className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-medium text-sm mb-2 transition-colors"
             >
               {whatsappNumber}
             </a>
             <div className="w-full flex flex-col items-center">
-              <div className="bg-white dark:bg-white p-3 rounded-lg">
+              <div className="bg-white dark:bg-white p-2 rounded-lg">
                 <QRCodeSVG
                   value={`https://wa.me/${whatsappNumber.replace(/^0/, "90")}`}
-                  size={150}
+                  size={120}
                   level="H"
                   includeMargin={true}
                 />
@@ -107,26 +107,26 @@ function SupportContent() {
         </div>
 
         {/* E-posta */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mb-4">
-              <Mail className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mb-2">
+              <Mail className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
               E-posta
             </h3>
             <a
               href={`mailto:${email}`}
               onClick={handleEmailClick}
-              className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-medium text-lg mb-4 transition-colors break-all"
+              className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-medium text-sm mb-2 transition-colors break-all"
             >
               {email}
             </a>
             <div className="w-full flex flex-col items-center">
-              <div className="bg-white dark:bg-white p-3 rounded-lg">
+              <div className="bg-white dark:bg-white p-2 rounded-lg">
                 <QRCodeSVG
                   value={`mailto:${email}`}
-                  size={150}
+                  size={120}
                   level="H"
                   includeMargin={true}
                 />

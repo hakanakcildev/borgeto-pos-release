@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     node: process.versions.node,
     chrome: process.versions.chrome,
     electron: process.versions.electron,
+  },
+  quitApp: () => {
+    console.log("Preload: quitApp called, invoking quit-app IPC");
+    return ipcRenderer.invoke("quit-app");
   },
 });
 
@@ -22,6 +26,7 @@ declare global {
         chrome: string;
         electron: string;
       };
+      quitApp: () => Promise<void>;
     };
   }
 }

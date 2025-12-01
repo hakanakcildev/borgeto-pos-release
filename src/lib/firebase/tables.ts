@@ -121,6 +121,72 @@ export const addTable = async (
   }
 };
 
+// Standart masaları oluştur (Paket ve Hızlı Satış)
+export const createDefaultTables = async (
+  companyId: string,
+  branchId?: string
+): Promise<void> => {
+  try {
+    // Mevcut masaları kontrol et
+    const existingTables = await getTablesByCompany(companyId, branchId);
+    
+    // Duplicate masaları temizle (area-tableNumber kombinasyonuna göre)
+    const tableMap = new Map<string, Table>();
+    existingTables.forEach((table) => {
+      const key = `${table.area}-${table.tableNumber}`;
+      const existing = tableMap.get(key);
+      
+      if (!existing) {
+        tableMap.set(key, table);
+      } else {
+        // Daha yeni olanı tut
+        const existingDate = existing.updatedAt || existing.createdAt;
+        const currentDate = table.updatedAt || table.createdAt;
+        
+        if (currentDate > existingDate) {
+          tableMap.set(key, table);
+        }
+      }
+    });
+    
+    const uniqueTables = Array.from(tableMap.values());
+    
+    // Paket masası var mı kontrol et
+    const hasPaketTable = uniqueTables.some(
+      (table) => table.area === "Paket" && table.tableNumber === "Paket"
+    );
+    
+    // Hızlı Satış masası var mı kontrol et
+    const hasHizliSatisTable = uniqueTables.some(
+      (table) => table.area === "Hızlı Satış" && table.tableNumber === "Hızlı Satış"
+    );
+    
+    // Paket masası yoksa oluştur
+    if (!hasPaketTable) {
+      await addTable({
+        companyId,
+        branchId: branchId || undefined,
+        area: "Paket",
+        tableNumber: "Paket",
+        status: "available",
+      });
+    }
+    
+    // Hızlı Satış masası yoksa oluştur
+    if (!hasHizliSatisTable) {
+      await addTable({
+        companyId,
+        branchId: branchId || undefined,
+        area: "Hızlı Satış",
+        tableNumber: "Hızlı Satış",
+        status: "available",
+      });
+    }
+  } catch (error) {
+    throw error;
+  }
+};
+
 // Update table
 export const updateTable = async (
   id: string,

@@ -42,6 +42,7 @@ const convertToFirestore = (data: Partial<SalesStats>) => {
 const calculateStatsFromOrders = (orders: Order[]) => {
   const totalOrders = orders.length;
   const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
+  const totalDiscount = orders.reduce((sum, order) => sum + (order.discount || 0), 0);
   const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   // En çok satılan ürünleri hesapla
@@ -71,6 +72,7 @@ const calculateStatsFromOrders = (orders: Order[]) => {
   return {
     totalOrders,
     totalRevenue,
+    totalDiscount,
     averageOrderValue,
     topProducts,
   };

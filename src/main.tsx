@@ -21,11 +21,10 @@ function NotFound() {
           Sayfa bulunamadı
         </p>
         <Link
-          to="/"
-          search={{ area: undefined, activeOnly: false }}
+          to="/auth/login"
           className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-block"
         >
-          Ana Sayfaya Dön
+          Giriş Sayfasına Dön
         </Link>
       </div>
     </div>

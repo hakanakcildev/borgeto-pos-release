@@ -22,6 +22,10 @@ const TouchKeyboardContext = createContext<TouchKeyboardContextType | undefined>
 export const useTouchKeyboard = () => {
   const context = useContext(TouchKeyboardContext);
   if (context === undefined) {
+    // Development'ta hata göster ama production'da çalışmasını sağla
+    if (process.env.NODE_ENV === 'development') {
+      console.error("useTouchKeyboard must be used within a TouchKeyboardProvider");
+    }
     throw new Error("useTouchKeyboard must be used within a TouchKeyboardProvider");
   }
   return context;
@@ -75,6 +79,13 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
   }, [isOpen]);
 
   const closeKeyboard = useCallback(() => {
+    // Input'u blur et (focus'u kaldır)
+    if (inputRef.current?.current) {
+      const input = inputRef.current.current;
+      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+        input.blur();
+      }
+    }
     setIsOpen(false);
     inputRef.current = null;
   }, []);

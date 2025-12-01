@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { POSLayout } from "@/components/layouts/POSLayout";
 
 export const Route = createFileRoute("/menus")({
@@ -564,23 +565,23 @@ function MenuManagementContent() {
           </div>
 
           {/* Menus List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {filteredMenus.map((menu) => (
               <div
                 key={menu.id}
-                className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700"
+                className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <div className="flex items-start justify-between mb-1.5">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                       {menu.name}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {menu.category}
                     </p>
                   </div>
                   <span
-                    className={`px-2 py-1 text-xs rounded ${
+                    className={`px-1.5 py-0.5 text-[10px] rounded flex-shrink-0 ml-1 ${
                       menu.isAvailable
                         ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                         : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
@@ -590,29 +591,30 @@ function MenuManagementContent() {
                   </span>
                 </div>
                 {menu.description && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1.5 line-clamp-2">
                     {menu.description}
                   </p>
                 )}
-                <div className="flex items-center justify-between">
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                     ₺{menu.price.toFixed(2)}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleEditMenu(menu)}
+                      className="h-6 w-6 p-0"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleDeleteMenu(menu)}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
@@ -644,7 +646,7 @@ function MenuManagementContent() {
           </div>
 
           {/* Categories List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {displayCategories.map((category) => {
               const categoryMenusCount = uniqueMenus().filter(
                 (m) => m.category === category.name
@@ -652,20 +654,20 @@ function MenuManagementContent() {
               return (
                 <div
                   key={category.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700"
+                  className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <FolderOpen className="h-5 w-5" />
-                        {category.name}
+                  <div className="flex items-start justify-between mb-1.5">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                        <FolderOpen className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="truncate">{category.name}</span>
                       </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                         {categoryMenusCount} ürün
                       </p>
                     </div>
                     <span
-                      className={`px-2 py-1 text-xs rounded ${
+                      className={`px-1.5 py-0.5 text-[10px] rounded flex-shrink-0 ml-1 ${
                         category.isActive
                           ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                           : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
@@ -675,25 +677,26 @@ function MenuManagementContent() {
                     </span>
                   </div>
                   {category.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1.5 line-clamp-2">
                       {category.description}
                     </p>
                   )}
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleEditCategory(category)}
+                      className="h-6 w-6 p-0"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleDeleteCategory(category)}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
@@ -749,12 +752,11 @@ function MenuManagementContent() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Açıklama
                 </label>
-                <textarea
+                <Textarea
                   value={menuForm.description}
                   onChange={(e) =>
                     setMenuForm({ ...menuForm, description: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   rows={3}
                 />
               </div>
@@ -869,7 +871,7 @@ function MenuManagementContent() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Açıklama
                 </label>
-                <textarea
+                <Textarea
                   value={categoryForm.description}
                   onChange={(e) =>
                     setCategoryForm({
@@ -877,7 +879,6 @@ function MenuManagementContent() {
                       description: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   rows={3}
                 />
               </div>

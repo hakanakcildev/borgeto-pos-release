@@ -471,70 +471,70 @@ function StatisticsContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Toplam Ciro</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Toplam Ciro</p>
+              <p className="text-base font-bold text-blue-600 dark:text-blue-400 truncate">
                 ₺{stats.totalRevenue.toFixed(2)}
               </p>
             </div>
-            <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Toplam Ürün</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.totalOrders}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Toplam Ürün</p>
+              <p className="text-base font-bold text-green-600 dark:text-green-400">{stats.totalOrders}</p>
             </div>
-            <Package className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <Package className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Ortalama Sipariş</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Ortalama</p>
+              <p className="text-base font-bold text-purple-600 dark:text-purple-400 truncate">
                 ₺{stats.averageOrderValue.toFixed(2)}
               </p>
             </div>
-            <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+            <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">İptal Edilen</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.cancelledOrders}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">İptal</p>
+              <p className="text-base font-bold text-red-600 dark:text-red-400">{stats.cancelledOrders}</p>
             </div>
-            <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Toplam İndirim</p>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">İndirim</p>
+              <p className="text-base font-bold text-orange-600 dark:text-orange-400 truncate">
                 ₺{stats.totalDiscount.toFixed(2)}
               </p>
             </div>
-            <Percent className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+            <Percent className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Paket</p>
-              <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                {stats.totalCourierPackages} Paket
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Paket</p>
+              <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">
+                {stats.totalCourierPackages}
               </p>
-              <p className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 mt-1">
-                Toplam: ₺{stats.totalCourierPackageAmount.toFixed(2)}
+              <p className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 mt-0.5 truncate">
+                ₺{stats.totalCourierPackageAmount.toFixed(2)}
               </p>
             </div>
-            <Bike className="h-8 w-8 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+            <Bike className="h-5 w-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
           </div>
         </div>
       </div>
@@ -546,22 +546,22 @@ function StatisticsContent() {
             <CreditCard className="h-5 w-5" />
             Ödeme Yöntemine Göre Toplam
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {stats.paymentMethodStats.map((method, index) => (
               <div
                 key={index}
-                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
+                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-medium text-gray-900 dark:text-white">{method.methodName}</p>
-                  <span className="text-xs text-gray-600 dark:text-gray-400">{method.count} ödeme</span>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{method.methodName}</p>
+                  <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">{method.count}</span>
                 </div>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                   ₺{method.total.toFixed(2)}
                 </p>
                 {stats.totalRevenue > 0 && (
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    %{((method.total / stats.totalRevenue) * 100).toFixed(1)} toplam cirodan
+                  <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
+                    %{((method.total / stats.totalRevenue) * 100).toFixed(1)}
                   </p>
                 )}
               </div>
@@ -574,20 +574,20 @@ function StatisticsContent() {
       {stats.topProducts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">En Çok Satılan Ürünler</h2>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
             {stats.topProducts.map((product, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="w-6 h-6 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-[10px] flex-shrink-0">
                     {index + 1}
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{product.menuName}</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      {product.quantity} adet • ₺{product.revenue.toFixed(2)}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{product.menuName}</p>
+                    <p className="text-[10px] text-gray-600 dark:text-gray-400">
+                      {product.quantity}x • ₺{product.revenue.toFixed(2)}
                     </p>
                   </div>
                 </div>

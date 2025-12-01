@@ -1,12 +1,15 @@
-import { createRootRoute, Outlet, useLocation, useRouter } from "@tanstack/react-router";
+import { createRootRoute, Outlet, useLocation, useRouter, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { NetworkStatus } from "@/components/NetworkStatus";
 import TouchKeyboard from "@/components/ui/TouchKeyboard";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 function RootComponent() {
   const location = useLocation();
   const router = useRouter();
+  const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const {
     isOpen,
     closeKeyboard,
@@ -22,15 +25,19 @@ function RootComponent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // Başlangıçta "/" route'una yönlendir
+  // Başlangıçta route kontrolü yap - 404 sayfası gösteriliyorsa doğru route'a yönlendir
   useEffect(() => {
-    if (location.pathname === "" || location.pathname === "/") {
-      // Router'ın route'u bulup bulmadığını kontrol et
-      if (router.state.matches.length === 0) {
-        router.navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+    // Router'ın route'u bulup bulmadığını kontrol et
+    if (!authLoading && router.state.matches.length === 0) {
+      // Eğer route bulunamadıysa ve kullanıcı giriş yapmamışsa login'e yönlendir
+      if (!isAuthenticated) {
+        navigate({ to: "/auth/login", replace: true });
+      } else {
+        // Kullanıcı giriş yapmışsa ana sayfaya yönlendir
+        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
       }
     }
-  }, []);
+  }, [router.state.matches.length, authLoading, isAuthenticated, navigate]);
 
   return (
     <>

@@ -82,7 +82,7 @@ function SettingsContent() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-6">
           {themes.map((themeOption) => {
             const Icon = themeOption.icon;
             const isSelected = selectedTheme === themeOption.key;
@@ -91,25 +91,25 @@ function SettingsContent() {
               <button
                 key={themeOption.key}
                 onClick={() => setSelectedTheme(themeOption.key)}
-                className={`p-4 rounded-lg border-2 transition-all duration-200 text-left ${
+                className={`p-2 rounded-lg border-2 transition-all duration-200 text-left min-h-[44px] ${
                   isSelected
                     ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-200 dark:ring-blue-800"
                     : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 }`}
               >
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center gap-2">
                   <div
-                    className={`p-2 rounded-lg ${
+                    className={`p-1.5 rounded-lg flex-shrink-0 ${
                       isSelected
                         ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"
                         : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                     }`}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-4 w-4" />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div
-                      className={`font-semibold text-sm ${
+                      className={`font-semibold text-xs ${
                         isSelected
                           ? "text-blue-900 dark:text-blue-100"
                           : "text-gray-900 dark:text-white"
@@ -118,7 +118,7 @@ function SettingsContent() {
                       {themeOption.label}
                     </div>
                     <div
-                      className={`text-xs mt-0.5 ${
+                      className={`text-[10px] mt-0.5 ${
                         isSelected
                           ? "text-blue-700 dark:text-blue-300"
                           : "text-gray-500 dark:text-gray-400"
@@ -128,8 +128,8 @@ function SettingsContent() {
                     </div>
                   </div>
                   {isSelected && (
-                    <div className="w-5 h-5 bg-blue-500 dark:bg-blue-400 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-xs">✓</span>
+                    <div className="w-4 h-4 bg-blue-500 dark:bg-blue-400 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-[10px]">✓</span>
                     </div>
                   )}
                 </div>

@@ -176,7 +176,7 @@ export interface PaymentMethodConfig {
 export interface Payment {
   id?: string;
   amount: number;
-  method: PaymentMethod;
+  method: string; // Ödeme yöntemi kodu (PaymentMethodConfig.code)
   paidAt: Date;
   notes?: string;
   paidItems?: Array<{
@@ -241,7 +241,7 @@ export interface CourierAssignment {
   courierName: string;
   packageCount: number; // Paket sayısı
   changeAmount: number; // Para üstü
-  paymentMethod: PaymentMethod; // Ödeme yöntemi
+  paymentMethod: string; // Ödeme yöntemi kodu (PaymentMethodConfig.code)
   totalAmount: number; // Toplam tutar
   assignedAt: Date;
   assignedBy: string; // Kullanıcı ID'si
@@ -274,6 +274,7 @@ export interface SalesStats {
   period: "daily" | "weekly" | "monthly"; // Günlük, haftalık, aylık
   totalOrders: number;
   totalRevenue: number;
+  totalDiscount: number; // Toplam indirim tutarı
   averageOrderValue: number;
   topProducts: Array<{
     menuId: string;
@@ -283,5 +284,27 @@ export interface SalesStats {
   }>;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Adisyon (Bill/Receipt)
+export interface Bill {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  tableId: string;
+  tableNumber: string; // Masa numarası (snapshot)
+  orderId: string; // Hangi siparişten geldiği
+  billNumber: string; // Adisyon numarası (örn: "AD-2024-001")
+  items: OrderItem[]; // Ödenen ürünler
+  subtotal: number; // Ara toplam
+  discount?: number; // İndirim
+  total: number; // Toplam
+  payments: Payment[]; // Ödemeler
+  customerName?: string; // Müşteri adı (opsiyonel)
+  customerPhone?: string; // Müşteri telefonu (opsiyonel)
+  notes?: string; // Notlar
+  createdBy: string; // Kullanıcı ID'si
+  createdAt: Date;
+  closedAt: Date; // Ödeme alındığında
 }
 

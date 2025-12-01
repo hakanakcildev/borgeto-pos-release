@@ -3,19 +3,19 @@ import { cn } from "@/lib/utils";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 import { Keyboard } from "lucide-react";
 
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   showTouchKeyboard?: boolean;
   showKeyboardButton?: boolean;
 }
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, showTouchKeyboard = true, showKeyboardButton = true, onFocus, onBlur, maxLength, ...props }, ref) => {
-    const inputRef = React.useRef<HTMLInputElement>(null);
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, showTouchKeyboard = true, showKeyboardButton = true, onFocus, onBlur, maxLength, ...props }, ref) => {
+    const textareaRef = React.useRef<HTMLTextAreaElement>(null);
     const { openKeyboard, closeKeyboard, isOpen } = useTouchKeyboard();
     
     // Ref'i birleştir
-    React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement, []);
+    React.useImperativeHandle(ref, () => textareaRef.current as HTMLTextAreaElement, []);
 
     // Dokunmatik ekran kontrolü
     const isTouchDevice = React.useMemo(() => {
@@ -28,38 +28,26 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     }, []);
 
     const handleOpenKeyboard = React.useCallback(() => {
-      if (inputRef.current) {
-        // Klavye tipini belirle
-        let keyboardType: "text" | "number" | "email" | "password" | "tel" = "text";
-        if (type === "number" || type === "tel") {
-          keyboardType = type === "tel" ? "tel" : "number";
-        } else if (type === "email") {
-          keyboardType = "email";
-        } else if (type === "password") {
-          keyboardType = "password";
-        } else {
-          keyboardType = "text";
-        }
-
-        const currentValue = inputRef.current.value || "";
-        openKeyboard(inputRef as React.RefObject<HTMLInputElement>, keyboardType, currentValue, maxLength);
+      if (textareaRef.current) {
+        const currentValue = textareaRef.current.value || "";
+        openKeyboard(textareaRef as React.RefObject<HTMLTextAreaElement>, "text", currentValue, maxLength);
       }
-    }, [openKeyboard, type, maxLength]);
+    }, [openKeyboard, maxLength]);
 
     const handleFocus = React.useCallback(
-      (e: React.FocusEvent<HTMLInputElement>) => {
+      (e: React.FocusEvent<HTMLTextAreaElement>) => {
         if (onFocus) {
           onFocus(e);
         }
 
-        if (inputRef.current) {
+        if (textareaRef.current) {
           // Dokunmatik cihazlarda ve showTouchKeyboard true ise klavyeyi aç
           if (isTouchDevice && showTouchKeyboard) {
             // Varsayılan klavyeyi engelle
-            inputRef.current.setAttribute("readonly", "readonly");
+            textareaRef.current.setAttribute("readonly", "readonly");
             setTimeout(() => {
-              if (inputRef.current) {
-                inputRef.current.removeAttribute("readonly");
+              if (textareaRef.current) {
+                textareaRef.current.removeAttribute("readonly");
               }
             }, 100);
 
@@ -74,7 +62,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
 
     const handleBlur = React.useCallback(
-      (e: React.FocusEvent<HTMLInputElement>) => {
+      (e: React.FocusEvent<HTMLTextAreaElement>) => {
         if (onBlur) {
           onBlur(e);
         }
@@ -98,7 +86,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
              activeElement instanceof HTMLTextAreaElement)
           ) {
             // Klavye açıksa ve başka bir input/textarea'ya geçildiyse, klavyeyi açık tut
-            // handleFocus zaten yeni input için klavyeyi güncelleyecek
+            // handleFocus zaten yeni textarea için klavyeyi güncelleyecek
             return;
           }
           
@@ -108,15 +96,15 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             (activeElement.closest('[data-keyboard-container]') ||
              activeElement.closest('button[aria-label="Klavyeyi Aç"]'))
           ) {
-            // Input'a focus'u geri ver
-            if (inputRef.current) {
-              inputRef.current.focus();
+            // Textarea'ya focus'u geri ver
+            if (textareaRef.current) {
+              textareaRef.current.focus();
             }
             return;
           }
           
-          // Sadece gerçekten input dışına çıkıldıysa kapat
-          if (!inputRef.current?.contains(activeElement)) {
+          // Sadece gerçekten textarea dışına çıkıldıysa kapat
+          if (!textareaRef.current?.contains(activeElement)) {
             closeKeyboard();
           }
         }, 200);
@@ -126,14 +114,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
     return (
       <div className="relative w-full">
-        <input
-          type={type}
+        <textarea
           className={cn(
-            "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            showKeyboardButton && isTouchDevice && (type === "password" ? "pr-[5rem]" : "pr-[2.5rem]"),
+            "flex min-h-[5rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+            showKeyboardButton && isTouchDevice && "pr-[2.5rem]",
             className
           )}
-          ref={inputRef}
+          ref={textareaRef}
           onFocus={handleFocus}
           onBlur={handleBlur}
           maxLength={maxLength}
@@ -153,22 +140,21 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               handleOpenKeyboard();
             }}
             className={cn(
-              "absolute top-1/2 -translate-y-1/2 p-[0.4rem] rounded-[0.24rem] transition-colors touch-manipulation z-10",
-              type === "password" ? "right-[2.8rem]" : "right-[0.4rem]",
+              "absolute right-[0.4rem] top-[0.4rem] p-[0.3rem] rounded-[0.24rem] transition-colors touch-manipulation z-10",
               isOpen
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                 : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
             )}
             aria-label="Klavyeyi Aç"
-            title="Klavyeyi Aç"
           >
-            <Keyboard className="h-[1.1rem] w-[1.1rem]" />
+            <Keyboard className="h-[1rem] w-[1rem]" />
           </button>
         )}
       </div>
     );
   }
 );
-Input.displayName = "Input";
+Textarea.displayName = "Textarea";
 
-export { Input };
+export { Textarea };
+

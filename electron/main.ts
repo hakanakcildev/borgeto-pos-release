@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from "electron";
+import { app, BrowserWindow, Menu, shell, ipcMain } from "electron";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -11,6 +11,28 @@ const __dirname = dirname(__filename);
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
+
+// Register IPC handlers - this function ensures handler is always registered
+function registerIpcHandlers() {
+  // Always remove existing handler first (for hot reload compatibility)
+  try {
+    ipcMain.removeHandler("quit-app");
+  } catch (e) {
+    // Handler doesn't exist yet, that's fine
+  }
+  
+  // Register quit-app handler
+  ipcMain.handle("quit-app", async () => {
+    console.log("quit-app IPC handler called - quitting application");
+    app.quit();
+  });
+  
+  console.log("IPC handlers registered: quit-app at", new Date().toISOString());
+}
+
+// Register handlers immediately (before app is ready)
+// This ensures handler is available even if app.on("ready") hasn't fired yet
+registerIpcHandlers();
 
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
@@ -55,7 +77,17 @@ const createWindow = (): void => {
     mainWindow.loadURL(`http://localhost:${port}`);
   } else {
     // Production: Load from built files
-    mainWindow.loadFile(join(__dirname, "../dist/index.html"));
+    // Use loadURL with file:// protocol to ensure proper routing
+    const indexPath = join(__dirname, "../dist/index.html");
+    mainWindow.loadFile(indexPath);
+    
+    // Ensure proper routing by handling navigation
+    mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+      // If navigation fails, try loading index.html again
+      if (errorCode === -3) {
+        mainWindow.loadFile(indexPath);
+      }
+    });
   }
 
   // Show window when ready to prevent visual flash
@@ -64,6 +96,9 @@ const createWindow = (): void => {
     
     // Her zaman tam ekran modunu aktif et
     mainWindow?.setFullScreen(true);
+    
+    // Re-register IPC handlers when window is ready (for hot reload)
+    registerIpcHandlers();
     
     // Open DevTools in development
     if (isDev) {
@@ -99,6 +134,11 @@ const createWindow = (): void => {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // Re-register IPC handlers when webContents is created (for hot reload)
+  mainWindow.webContents.on("did-finish-load", () => {
+    registerIpcHandlers();
   });
 };
 
@@ -139,6 +179,9 @@ autoUpdater.on("update-downloaded", (info: { version: string }) => {
 
 // This method will be called when Electron has finished initialization
 app.on("ready", () => {
+  // Re-register IPC handlers on app ready (for hot reload compatibility)
+  registerIpcHandlers();
+  
   createWindow();
 
   // Check for updates on app start (only in production)
