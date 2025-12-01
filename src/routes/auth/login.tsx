@@ -313,7 +313,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.4
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.5
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
