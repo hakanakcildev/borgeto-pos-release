@@ -313,7 +313,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.3
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.4
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -330,7 +330,20 @@ function Login() {
                 <h3 className="text-[0.9rem] font-semibold text-gray-900 dark:text-white mb-[0.8rem]">
                   Yapılan Geliştirmeler
                 </h3>
-                <div className="space-y-[0.8rem]">
+                <div className="space-y-[0.8rem] max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
+                    <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
+                      v1.0.4 - Adisyon Yönetimi Güncellemesi
+                    </h4>
+                    <ul className="text-[0.7rem] text-gray-700 dark:text-gray-300 space-y-[0.4rem] list-disc list-inside">
+                      <li>Masa geçmişi adisyon bazlı görüntüleme sistemi eklendi</li>
+                      <li>Her ödeme sonrası otomatik adisyon kaydı oluşturma</li>
+                      <li>Adisyon detay modalı ile tüm bilgileri görüntüleme</li>
+                      <li>Adisyon yazdırma özelliği eklendi</li>
+                      <li>Adisyon numarası ve masa bilgisi gösterimi</li>
+                      <li>Ürün, ödeme ve toplam bilgilerinin detaylı görüntülenmesi</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
                     <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
                       v1.0.0 - İlk Sürüm
