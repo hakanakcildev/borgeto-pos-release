@@ -182,10 +182,10 @@ function PrintersContent() {
         const pc = new RTCPeerConnection({ iceServers: [] });
         pc.createDataChannel("");
         pc.createOffer()
-          .then(offer => pc.setLocalDescription(offer))
+          .then((offer: RTCSessionDescriptionInit) => pc.setLocalDescription(offer))
           .catch(() => resolve(null));
 
-        pc.onicecandidate = (event) => {
+        pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
           if (event.candidate) {
             const candidate = event.candidate.candidate;
             const match = candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);

@@ -48,7 +48,7 @@ if (!isDev) {
 const createWindow = (): void => {
   // Create the browser window
   const preloadPath = join(__dirname, "preload.js");
-  const iconPath = join(__dirname, "../public/borgeto-logo.ico");
+  const iconPath = join(__dirname, "../public/images/borgeto-logo.png");
   
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -82,9 +82,9 @@ const createWindow = (): void => {
     mainWindow.loadFile(indexPath);
     
     // Ensure proper routing by handling navigation
-    mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    mainWindow.webContents.on("did-fail-load", (_event, errorCode) => {
       // If navigation fails, try loading index.html again
-      if (errorCode === -3) {
+      if (errorCode === -3 && mainWindow) {
         mainWindow.loadFile(indexPath);
       }
     });

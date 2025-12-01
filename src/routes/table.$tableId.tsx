@@ -28,7 +28,6 @@ import {
   addCourierAssignment,
 } from "@/lib/firebase/couriers";
 import { addBill } from "@/lib/firebase/bills";
-import { updateStatsOnOrderClose } from "@/lib/firebase/statistics";
 import type { Courier } from "@/lib/firebase/types";
 import type {
   Table,
@@ -37,7 +36,6 @@ import type {
   Menu,
   Category,
   Payment,
-  PaymentMethod,
   PaymentMethodConfig,
 } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
@@ -200,7 +198,7 @@ function TableDetailContent() {
   >(new Set());
   const [paymentScreenSelectedQuantities, setPaymentScreenSelectedQuantities] =
     useState<Map<number, number>>(new Map()); // key: item index, value: selected quantity
-  const [paymentScreenAmount, setPaymentScreenAmount] = useState<string>("");
+  const [_paymentScreenAmount, setPaymentScreenAmount] = useState<string>("");
   const [paymentScreenDiscountType, setPaymentScreenDiscountType] = useState<
     "percentage" | "amount" | "manual"
   >("percentage");
@@ -2509,7 +2507,7 @@ function TableDetailContent() {
                     </div>
                     <div className="flex gap-2 pt-2">
                       <Button
-                        onClick={handlePayment}
+                        onClick={() => handlePayment()}
                         disabled={isProcessingPayment}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:text-white"
                       >
@@ -4312,7 +4310,7 @@ function TableDetailContent() {
                           </div>
                           <div className="flex gap-2 pt-2">
                             <Button
-                              onClick={handlePayment}
+                              onClick={() => handlePayment()}
                               disabled={isProcessingPayment}
                               className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:text-white"
                             >
@@ -6121,7 +6119,7 @@ function TableDetailContent() {
                             className={`h-14 ${isSelected ? "border-2 border-blue-500 dark:border-blue-400" : ""}`}
                             onClick={async () => {
                               setPaymentMethod(pm.code);
-                              setProcessingPaymentMethodId(pm.id);
+                              setProcessingPaymentMethodId(pm.id || null);
 
                               // Seçili ürün var mı kontrol et
                               const hasSelectedItems =

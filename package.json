@@ -100,8 +100,10 @@
         "nsis",
         "portable"
       ],
-      "publisherName": "Borgeto"
+      "publisherName": "Borgeto",
+      "icon": "public/borgeto-logo.ico"
     },
+    "icon": "public/images/borgeto-logo.png",
     "publish": [
       {
         "provider": "github",
