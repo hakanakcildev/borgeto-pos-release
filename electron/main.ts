@@ -48,7 +48,10 @@ if (!isDev) {
 const createWindow = (): void => {
   // Create the browser window
   const preloadPath = join(__dirname, "preload.js");
-  const iconPath = join(__dirname, "../public/images/borgeto-logo.png");
+  // Icon path - Windows için .ico, diğer platformlar için PNG
+  const iconPath = process.platform === "win32" 
+    ? join(__dirname, "../public/borgeto-logo.ico")
+    : join(__dirname, "../public/images/borgeto-logo.png");
   
   mainWindow = new BrowserWindow({
     width: 1280,
