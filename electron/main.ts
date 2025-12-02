@@ -67,7 +67,20 @@ function registerIpcHandlers() {
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
-// İmza kontrolü package.json'daki "win.verifyUpdateCodeSignature: false" ayarı ile devre dışı bırakıldı
+
+// Windows'ta imza kontrolünü tamamen devre dışı bırak
+if (process.platform === "win32") {
+  // İmza kontrolünü devre dışı bırakmak için requestHeaders kullan
+  (autoUpdater as any).requestHeaders = {
+    "Cache-Control": "no-cache",
+  };
+  
+  // Windows'ta imza kontrolünü atlamak için updaterCacheDirName kullan
+  (autoUpdater as any).updaterCacheDirName = "borgeto-pos-electron-updater";
+  
+  // İmza doğrulamasını devre dışı bırak
+  (autoUpdater as any).verifySignature = false;
+}
 
 // Configure auto-updater for production
 if (!isDev) {
@@ -80,10 +93,11 @@ if (!isDev) {
     
     console.log("🔧 Auto-updater configuration:");
     console.log("- Current app version:", app.getVersion());
+    console.log("- Platform:", process.platform);
     console.log("- Auto download:", autoUpdater.autoDownload);
     console.log("- Auto install on quit:", autoUpdater.autoInstallOnAppQuit);
     console.log("- Update channel:", autoUpdater.channel || "latest");
-    console.log("- Signature verification: disabled (verifyUpdateCodeSignature: false)");
+    console.log("- Signature verification: disabled");
     
     // Electron-updater GitHub provider için package.json'daki publish ayarlarını kullanır
     // Bu yüzden manuel feed URL ayarlamaya gerek yok

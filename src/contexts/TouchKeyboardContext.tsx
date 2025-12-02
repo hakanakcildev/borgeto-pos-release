@@ -51,7 +51,9 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
     ) => {
       inputRef.current = ref;
       setKeyboardType(type);
-      setCurrentValue(value || "");
+      // Input'un gerçek değerini kullan (eğer ref mevcut ise)
+      const actualValue = ref.current?.value || value || "";
+      setCurrentValue(actualValue);
       setMaxLength(maxLen);
       setIsOpen(true);
     },
@@ -94,7 +96,19 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
     (value: string) => {
       if (inputRef.current?.current) {
         const input = inputRef.current.current;
-        const newValue = currentValue + value;
+        
+        // Input'un gerçek değerini al (state yerine)
+        const inputValue = input.value || "";
+        
+        // Cursor pozisyonunu al
+        const cursorStart = input.selectionStart ?? inputValue.length;
+        const cursorEnd = input.selectionEnd ?? inputValue.length;
+        
+        // Cursor pozisyonuna göre yeni değeri oluştur
+        const newValue = 
+          inputValue.slice(0, cursorStart) + 
+          value + 
+          inputValue.slice(cursorEnd);
         
         if (maxLength && newValue.length > maxLength) {
           return;
@@ -116,6 +130,10 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
           nativeTextAreaValueSetter.call(input, newValue);
         }
 
+        // Cursor pozisyonunu yeni eklenen karakterin sonuna ayarla
+        const newCursorPosition = cursorStart + value.length;
+        input.setSelectionRange(newCursorPosition, newCursorPosition);
+
         // Event tetikle
         const inputEvent = new Event("input", { bubbles: true });
         input.dispatchEvent(inputEvent);
@@ -127,13 +145,41 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         setCurrentValue(newValue);
       }
     },
-    [currentValue, maxLength]
+    [maxLength]
   );
 
   const handleBackspace = useCallback(() => {
-    if (inputRef.current?.current && currentValue.length > 0) {
+    if (inputRef.current?.current) {
       const input = inputRef.current.current;
-      const newValue = currentValue.slice(0, -1);
+      
+      // Input'un gerçek değerini al (state yerine)
+      const inputValue = input.value || "";
+      
+      if (inputValue.length === 0) {
+        return;
+      }
+      
+      // Cursor pozisyonunu al
+      const cursorStart = input.selectionStart ?? inputValue.length;
+      const cursorEnd = input.selectionEnd ?? inputValue.length;
+      
+      // Eğer seçili metin varsa, seçili metni sil
+      // Yoksa cursor'un solundaki karakteri sil
+      let newValue: string;
+      let newCursorPosition: number;
+      
+      if (cursorStart !== cursorEnd) {
+        // Seçili metin varsa, seçili metni sil
+        newValue = inputValue.slice(0, cursorStart) + inputValue.slice(cursorEnd);
+        newCursorPosition = cursorStart;
+      } else if (cursorStart > 0) {
+        // Cursor'un solundaki karakteri sil
+        newValue = inputValue.slice(0, cursorStart - 1) + inputValue.slice(cursorStart);
+        newCursorPosition = cursorStart - 1;
+      } else {
+        // Cursor başta, silinecek bir şey yok
+        return;
+      }
 
       // Input değerini güncelle
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -151,6 +197,9 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         nativeTextAreaValueSetter.call(input, newValue);
       }
 
+      // Cursor pozisyonunu ayarla
+      input.setSelectionRange(newCursorPosition, newCursorPosition);
+
       // Event tetikle
       const event = new Event("input", { bubbles: true });
       input.dispatchEvent(event);
@@ -161,7 +210,7 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
 
       setCurrentValue(newValue);
     }
-  }, [currentValue]);
+  }, []);
 
   const value: TouchKeyboardContextType = {
     isOpen,

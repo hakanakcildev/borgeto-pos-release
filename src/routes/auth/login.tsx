@@ -367,7 +367,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.14
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.21
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -385,6 +385,26 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-[0.8rem] max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
+                    <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
+                      v1.0.21 - Güncelleme Sistemi İyileştirmeleri
+                    </h4>
+                    <ul className="text-[0.7rem] text-gray-700 dark:text-gray-300 space-y-[0.4rem] list-disc list-inside">
+                      <li>Windows güncelleme imza kontrolü sorunu düzeltildi</li>
+                      <li>Güncelleme mekanizması iyileştirildi</li>
+                      <li>İmzalanmamış güncellemelerin yüklenmesi sorunu çözüldü</li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
+                    <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
+                      v1.0.19 - Cursor Pozisyonu Düzeltmesi
+                    </h4>
+                    <ul className="text-[0.7rem] text-gray-700 dark:text-gray-300 space-y-[0.4rem] list-disc list-inside">
+                      <li>Dokunmatik klavyede cursor pozisyonu sorunu düzeltildi</li>
+                      <li>Input'larda cursor pozisyonuna göre yazma özelliği eklendi</li>
+                      <li>Backspace ile seçili metin veya cursor'un solundaki karakter silme özelliği</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
                     <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
                       v1.0.4 - Adisyon Yönetimi Güncellemesi
