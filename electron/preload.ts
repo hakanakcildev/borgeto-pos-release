@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onUpdateError: (callback: (error: string) => void) => {
     ipcRenderer.on("update-error", (_event, error: string) => callback(error));
   },
+  onUpdateChecking: (callback: () => void) => {
+    ipcRenderer.on("update-checking", () => callback());
+  },
 });
 
 // Type definitions for TypeScript
@@ -52,6 +55,7 @@ declare global {
       onUpdateDownloaded: (callback: (version: string) => void) => void;
       onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
       onUpdateError: (callback: (error: string) => void) => void;
+      onUpdateChecking: (callback: () => void) => void;
     };
   }
 }

@@ -270,15 +270,8 @@ autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: strin
   if (mainWindow) {
     mainWindow.webContents.send("update-downloaded", info.version);
   }
-  // Install update on next app quit
-  // Windows'ta imza kontrolünü atlamak için isSilent: true kullan
-  // false = isSilent, true = isForceRunAfter
-  if (process.platform === "win32") {
-    // Windows'ta imza kontrolünü atlamak için silent install kullan
-    autoUpdater.quitAndInstall(true, true);
-  } else {
-    autoUpdater.quitAndInstall(false, true);
-  }
+  // Frontend'den quitApp çağrıldığında otomatik kurulum yapılacak
+  // autoUpdater.autoInstallOnAppQuit = true olduğu için uygulama kapatıldığında otomatik kurulur
 });
 
 // This method will be called when Electron has finished initialization
@@ -288,17 +281,8 @@ app.on("ready", () => {
   
   createWindow();
 
-  // Check for updates on app start (only in production)
-  if (!isDev) {
-    // Wait a bit before checking for updates to let the app load
-    setTimeout(() => {
-      console.log("🚀 App started, checking for updates in 5 seconds...");
-      console.log("Current app version:", app.getVersion());
-      autoUpdater.checkForUpdates().catch((err) => {
-        console.error("❌ Error during initial update check:", err);
-      });
-    }, 5000); // 5 seconds after app start
-  }
+  // Update kontrolü artık frontend'den yapılıyor (__root.tsx'te)
+  // Bu sayede loading ekranı gösterilebiliyor
 
   // Set application menu (sadece development'ta)
   if (isDev) {
