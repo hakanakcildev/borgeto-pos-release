@@ -368,10 +368,6 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                 {symbol}
               </button>
             ))}
-            {/* Boşlukları doldur (işaretler az olduğunda) */}
-            {!isSymbol && Array.from({ length: 6 }).map((_, i) => (
-              <div key={`spacer-${i}`} className="h-10" />
-            ))}
           </div>
 
           {/* Sağ Kolon - Numerik Tuşlar (3x3 Grid + 0) */}
