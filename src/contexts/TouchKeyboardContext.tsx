@@ -22,11 +22,17 @@ const TouchKeyboardContext = createContext<TouchKeyboardContextType | undefined>
 export const useTouchKeyboard = () => {
   const context = useContext(TouchKeyboardContext);
   if (context === undefined) {
-    // Development'ta hata göster ama production'da çalışmasını sağla
-    if (process.env.NODE_ENV === 'development') {
-      console.error("useTouchKeyboard must be used within a TouchKeyboardProvider");
-    }
-    throw new Error("useTouchKeyboard must be used within a TouchKeyboardProvider");
+    // Provider yoksa fallback değer döndür (hata fırlatmak yerine)
+    return {
+      isOpen: false,
+      openKeyboard: () => {},
+      closeKeyboard: () => {},
+      handleInput: () => {},
+      handleBackspace: () => {},
+      keyboardType: "text" as KeyboardType,
+      currentValue: "",
+      maxLength: undefined,
+    };
   }
   return context;
 };

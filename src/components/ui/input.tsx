@@ -77,7 +77,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           requestAnimationFrame(() => {
             if (currentInput === document.activeElement) {
               const cursorStart = currentInput.selectionStart;
-              const cursorEnd = currentInput.selectionEnd;
               // Eğer cursor pozisyonu yoksa veya 0 ise, sona ayarla
               if (cursorStart === null || cursorStart === 0) {
                 const len = currentInput.value.length;
