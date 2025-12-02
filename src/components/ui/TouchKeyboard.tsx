@@ -353,7 +353,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           </div>
 
           {/* Orta Kolon - İşaretler (Dikey) */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {displayedSymbols.map((symbol) => (
               <button
                 key={symbol}
@@ -376,7 +376,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                   e.stopPropagation();
                   handleKeyPress(symbol);
                 }}
-                className="w-full h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                className="w-full h-8 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-xs font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
               >
                 {symbol}
               </button>
@@ -384,10 +384,10 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           </div>
 
           {/* Sağ Kolon - Numerik Tuşlar (3x3 Grid + 0) */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {/* 3x3 Grid */}
             {numberGrid.map((row, rowIndex) => (
-              <div key={rowIndex} className="grid grid-cols-3 gap-1.5">
+              <div key={rowIndex} className="grid grid-cols-3 gap-2">
                 {row.map((num) => (
                   <button
                     key={num}
@@ -410,7 +410,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                       e.stopPropagation();
                       handleKeyPress(num);
                     }}
-                    className="h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-base font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                    className="h-12 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-lg font-semibold text-gray-900 dark:text-white transition-colors touch-manipulation"
                   >
                     {num}
                   </button>
@@ -438,7 +438,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                 e.stopPropagation();
                 handleKeyPress(zeroKey);
               }}
-              className="w-full h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-base font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+              className="w-full h-12 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-lg font-semibold text-gray-900 dark:text-white transition-colors touch-manipulation"
             >
               {zeroKey}
             </button>
