@@ -9,7 +9,7 @@ declare global {
       };
       quitApp: () => Promise<void>;
       quitAndInstall: () => Promise<void>;
-      checkForUpdates: () => Promise<void>;
+      checkForUpdates: () => Promise<{ success: boolean; error?: string; devMode?: boolean }>;
       onUpdateAvailable: (callback: (version: string) => void) => void;
       onUpdateNotAvailable: (callback: (info?: { currentVersion?: string; latestVersion?: string }) => void) => void;
       onUpdateDownloaded: (callback: (version: string) => void) => void;
