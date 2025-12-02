@@ -13,6 +13,7 @@ import { TouchKeyboardProvider } from "./contexts/TouchKeyboardContext";
 const router = createRouter({
   routeTree,
   defaultPreload: "intent",
+  notFoundMode: "root",
 });
 
 // Register the router instance for type safety

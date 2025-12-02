@@ -45,13 +45,12 @@ function registerIpcHandlers() {
     console.log("Current app version:", app.getVersion());
     if (!isDev) {
       try {
-        const result = await autoUpdater.checkForUpdates();
-        console.log("Update check result:", result);
-        if (result) {
-          console.log("- Update info:", result.updateInfo);
-          console.log("- CancellationToken:", result.cancellationToken);
-        }
-        return result;
+        // checkForUpdates çağrısı yap ama sonucu döndürme (IPC serialization hatası)
+        // Event'ler ile zaten bildirim yapılıyor
+        await autoUpdater.checkForUpdates();
+        console.log("✅ Update check completed");
+        // Sadece success mesajı döndür
+        return { success: true };
       } catch (error) {
         console.error("❌ Error checking for updates:", error);
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -59,11 +58,12 @@ function registerIpcHandlers() {
         if (mainWindow) {
           mainWindow.webContents.send("update-error", errorMessage);
         }
-        throw error;
+        // Hata mesajını düzgün serialize et
+        return { success: false, error: errorMessage };
       }
     } else {
       console.log("⚠️ Update check skipped (development mode)");
-      return null;
+      return { success: true, devMode: true };
     }
   });
   

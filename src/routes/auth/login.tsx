@@ -145,8 +145,18 @@ function Login() {
     setError("");
     try {
       if (window.electronAPI?.checkForUpdates) {
-        await window.electronAPI.checkForUpdates();
+        // checkForUpdates çağrısı yap - event'ler ile sonuç bildirimi yapılacak
+        const result = await window.electronAPI.checkForUpdates();
+        console.log("Update check result:", result);
+        // Eğer hata varsa göster
+        if (result && !result.success && result.error) {
+          setError(result.error);
+          setCheckingUpdate(false);
+        }
+        // Başarılıysa event'lerden gelecek sonucu bekle
+        // setCheckingUpdate event handler'larda false yapılacak
       } else {
+        setCheckingUpdate(false);
         alert("Güncelleme kontrolü şu anda kullanılamıyor.");
       }
     } catch (error) {
@@ -155,8 +165,6 @@ function Login() {
           ? error.message
           : "Güncelleme kontrolü sırasında bir hata oluştu";
       setError(errorMessage);
-      alert(errorMessage);
-    } finally {
       setCheckingUpdate(false);
     }
   }, []);
@@ -462,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.47
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.49
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -481,6 +489,47 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.49 - Güncelleme Hatası ve 404 Sayfası Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        "Object could not be cloned" hatası düzeltildi - güncelleme kontrolü sorunsuz çalışıyor
+                      </li>
+                      <li>
+                        IPC serialization problemi çözüldü - sadece basit objeler gönderiliyor
+                      </li>
+                      <li>
+                        404 sayfası kullanıcı dostu hale getirildi - "Verileri Eşitle" mesajı gösteriliyor
+                      </li>
+                      <li>
+                        "Masalar Sayfasına Git" butonu eklendi - tek tıkla masalar sayfasına dönüş
+                      </li>
+                      <li>
+                        Güncelleme akışı iyileştirildi - yeni sürüm varsa direkt "İndir ve Kur" modalı gösteriliyor
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.48 - NotFound Sayfası Sorunu Kesin Çözüm
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        notFoundMode: "root" eklendi - router notFound durumunda root component gösteriyor
+                      </li>
+                      <li>
+                        Root path kontrolü eklendi - root path'te ise route'lar yüklenene kadar bekliyor
+                      </li>
+                      <li>
+                        200ms timeout ile kontrol - route match hala yoksa masalar sayfasına yönlendirme
+                      </li>
+                      <li>
+                        Root path dışında route match yoksa anında yönlendirme - hızlı çözüm
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.47 - Kritik: Oturum Temizleme ve Route Yönlendirme Düzeltildi
