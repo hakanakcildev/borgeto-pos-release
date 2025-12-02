@@ -237,7 +237,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
   const qwertyLayout = [
     ["q", "w", "e", "r", "t", "y", "u", "ı", "o", "p", "ğ", "ü"],
     ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ş", "i"],
-    ["z", "x", "c", "v", "b", "n", "m", "ö", "ç"],
+    ["z", "x", "c", "v", "b", "n", "m", "ö", "ç", "⌫"],
   ];
 
   // Ana işaretler (her zaman görünür) - En çok kullanılanlar

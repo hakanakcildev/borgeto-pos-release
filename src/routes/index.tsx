@@ -75,12 +75,29 @@ function POSLayoutWithTables() {
 
   const handleLogout = useCallback(async () => {
     try {
+      // Local storage'ı temizle
       localStorage.removeItem("posAuth");
+      
+      // Storage event tetikle
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: "posAuth",
+        newValue: null,
+      }));
+      
+      // Firebase'den çıkış yap
       await signOutUser();
-      navigate({ to: "/auth/login" });
+      
+      // Login sayfasına yönlendir
+      navigate({ to: "/auth/login", replace: true });
     } catch (error) {
+      console.error("Logout error:", error);
+      // Hata olsa bile temizle ve yönlendir
       localStorage.removeItem("posAuth");
-      navigate({ to: "/auth/login" });
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: "posAuth",
+        newValue: null,
+      }));
+      navigate({ to: "/auth/login", replace: true });
     }
   }, [navigate]);
 

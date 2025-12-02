@@ -462,7 +462,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.42
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.43
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -481,6 +481,25 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.43 - 404 Sorunu, Klavye ve Logout Düzeltmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        404 sayfa sorunu düzeltildi - oturum açıksa direkt masalar sayfasına yönlendiriliyor
+                      </li>
+                      <li>
+                        Klavye silme tuşu ç harfinin yanına taşındı - daha kolay erişim
+                      </li>
+                      <li>
+                        Logout çıkış butonu düzeltildi - storage event tetikleniyor, sorunsuz çıkış yapılıyor
+                      </li>
+                      <li>
+                        Route kontrolü iyileştirildi - authenticated kullanıcılar için 404 yerine ana sayfa
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.42 - Kritik Düzeltmeler: Input Focus ve Güncelleme Sistemi

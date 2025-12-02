@@ -45,8 +45,15 @@ function RootComponent() {
         return;
       }
     } else {
-      // Eğer kullanıcı giriş yapmışsa ve login sayfasındaysa ana sayfaya yönlendir
+      // Eğer kullanıcı giriş yapmışsa
       if (isLoginPage) {
+        // Login sayfasındaysa ana sayfaya yönlendir
+        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+        return;
+      }
+      
+      // 404 durumunda ana sayfaya yönlendir
+      if (isNotFound) {
         navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
         return;
       }
