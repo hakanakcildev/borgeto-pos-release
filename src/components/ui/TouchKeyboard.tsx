@@ -240,8 +240,14 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
     ["z", "x", "c", "v", "b", "n", "m"],
   ];
 
-  // En çok kullanılan işaretler - dikey kolon
-  const commonSymbols = ["@", "-", ".", "_", "/", "\\", ",", ":", ";"];
+  // Ana işaretler (her zaman görünür)
+  const primarySymbols = ["@", "-", "."];
+  
+  // Ek işaretler (sembol modu açıkken görünür)
+  const secondarySymbols = ["_", "/", "\\", ",", ":", ";"];
+  
+  // Gösterilecek işaretler
+  const displayedSymbols = isSymbol ? [...primarySymbols, ...secondarySymbols] : primarySymbols;
 
   // Numerik tuşlar - 3x3 grid + 0 (kalkülatör düzeni)
   const numberGrid = [
@@ -335,7 +341,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
 
           {/* Orta Kolon - İşaretler (Dikey) */}
           <div className="space-y-1.5">
-            {commonSymbols.map((symbol) => (
+            {displayedSymbols.map((symbol) => (
               <button
                 key={symbol}
                 type="button"
@@ -361,6 +367,10 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
               >
                 {symbol}
               </button>
+            ))}
+            {/* Boşlukları doldur (işaretler az olduğunda) */}
+            {!isSymbol && Array.from({ length: 6 }).map((_, i) => (
+              <div key={`spacer-${i}`} className="h-10" />
             ))}
           </div>
 
@@ -480,6 +490,35 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
             className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
           >
             Boşluk
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsSymbol(!isSymbol);
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsSymbol(!isSymbol);
+            }}
+            className={cn(
+              "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium transition-colors touch-manipulation",
+              isSymbol
+                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                : "text-gray-900 dark:text-white"
+            )}
+          >
+            Sym
           </button>
           {onEnter && (
             <button
