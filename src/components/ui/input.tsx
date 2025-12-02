@@ -106,14 +106,28 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       (e: React.MouseEvent<HTMLInputElement>) => {
         const currentRef = getInputRef();
         const currentInput = currentRef.current;
-        if (currentInput && e.currentTarget) {
+        if (currentInput) {
           // Input'a focus ver
           currentInput.focus();
           // Cursor pozisyonunu tıklanan yere ayarla
           requestAnimationFrame(() => {
             if (currentInput === document.activeElement) {
-              const clickPosition = e.currentTarget?.selectionStart ?? currentInput.value.length;
-              currentInput.setSelectionRange(clickPosition, clickPosition);
+              try {
+                // Mouse event'inden pozisyon al
+                const rect = currentInput.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const textBeforeCursor = currentInput.value.substring(0, currentInput.selectionStart || 0);
+                // Basit bir yaklaşım: değer uzunluğunun yarısına cursor koy
+                const clickPosition = Math.min(
+                  Math.max(0, Math.floor((x / rect.width) * currentInput.value.length)),
+                  currentInput.value.length
+                );
+                currentInput.setSelectionRange(clickPosition, clickPosition);
+              } catch (error) {
+                // Hata durumunda sona koy
+                const len = currentInput.value.length;
+                currentInput.setSelectionRange(len, len);
+              }
             }
           });
         }
@@ -181,12 +195,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
 
     return (
-      <div className="relative w-full">
+      <div className="relative w-full pointer-events-none">
         <input
           type={type}
           className={cn(
             "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
             "cursor-text caret-blue-600 selection:bg-blue-200 selection:text-blue-900 focus:caret-opacity-100",
+            "pointer-events-auto select-text touch-manipulation",
             showKeyboardButton && isTouchDevice && (type === "password" ? "pr-[5rem]" : "pr-[2.5rem]"),
             className
           )}
@@ -194,7 +209,27 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           onFocus={handleFocus}
           onBlur={handleBlur}
           onClick={handleClick}
+          onMouseDown={(e) => {
+            // Input'a tıklandığında focus'u engelleme
+            e.stopPropagation();
+            const currentRef = getInputRef();
+            const currentInput = currentRef.current;
+            if (currentInput && currentInput !== document.activeElement) {
+              currentInput.focus();
+            }
+          }}
+          onTouchStart={(e) => {
+            // Touch event'lerinde de focus'u engelleme
+            e.stopPropagation();
+            const currentRef = getInputRef();
+            const currentInput = currentRef.current;
+            if (currentInput && currentInput !== document.activeElement) {
+              currentInput.focus();
+            }
+          }}
           maxLength={maxLength}
+          tabIndex={0}
+          style={{ WebkitUserSelect: 'text', userSelect: 'text', pointerEvents: 'auto' }}
           {...props}
         />
         {showKeyboardButton && isTouchDevice && (
@@ -211,7 +246,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               handleOpenKeyboard();
             }}
             className={cn(
-              "absolute top-1/2 -translate-y-1/2 p-[0.4rem] rounded-[0.24rem] transition-colors touch-manipulation z-10",
+              "absolute top-1/2 -translate-y-1/2 p-[0.4rem] rounded-[0.24rem] transition-colors touch-manipulation z-10 pointer-events-auto",
               type === "password" ? "right-[2.8rem]" : "right-[0.4rem]",
               isOpen
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"

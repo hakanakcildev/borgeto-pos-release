@@ -221,7 +221,11 @@ function Login() {
               <label
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-700 mb-2 cursor-pointer"
-                onClick={() => emailInputRef.current?.focus()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  emailInputRef.current?.focus();
+                }}
               >
                 E-posta Adresi veya Kullanıcı Adı
               </label>
@@ -234,6 +238,8 @@ function Login() {
                 placeholder="E-posta adresinizi veya kullanıcı adınızı girin"
                 required
                 autoComplete="username"
+                readOnly={false}
+                disabled={false}
                 className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -243,7 +249,11 @@ function Login() {
               <label
                 htmlFor="password"
                 className="block text-sm font-medium text-gray-700 mb-2 cursor-pointer"
-                onClick={() => passwordInputRef.current?.focus()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  passwordInputRef.current?.focus();
+                }}
               >
                 Şifre
               </label>
@@ -257,6 +267,8 @@ function Login() {
                   placeholder="Şifrenizi girin"
                   required
                   autoComplete="current-password"
+                  readOnly={false}
+                  disabled={false}
                   className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-12"
                 />
                 <button
