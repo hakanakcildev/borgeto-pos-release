@@ -62,13 +62,13 @@ if (npmScript) {
   // Pass environment variables to electron-builder
   const env = { ...process.env };
   if (platform === "win") {
-    execSync(`npx electron-builder --${platform} --x64 --publish always`, {
+    execSync(`npx electron-builder --${platform} --x64 --publish never`, {
       stdio: "inherit",
       cwd: path.join(__dirname, ".."),
       env: env,
     });
   } else {
-    execSync(`npx electron-builder --${platform} --publish always`, {
+    execSync(`npx electron-builder --${platform} --publish never`, {
       stdio: "inherit",
       cwd: path.join(__dirname, ".."),
       env: env,
