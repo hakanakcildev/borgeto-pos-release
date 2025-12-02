@@ -97,6 +97,11 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
       if (inputRef.current?.current) {
         const input = inputRef.current.current;
         
+        // Input'a focus ver (klavye yazarken focus kaybolmasın)
+        if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+          input.focus();
+        }
+        
         // Input'un gerçek değerini al (state yerine)
         const inputValue = input.value || "";
         
@@ -132,7 +137,9 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
 
         // Cursor pozisyonunu yeni eklenen karakterin sonuna ayarla
         const newCursorPosition = cursorStart + value.length;
-        input.setSelectionRange(newCursorPosition, newCursorPosition);
+        setTimeout(() => {
+          input.setSelectionRange(newCursorPosition, newCursorPosition);
+        }, 0);
 
         // Event tetikle
         const inputEvent = new Event("input", { bubbles: true });
@@ -151,6 +158,11 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
   const handleBackspace = useCallback(() => {
     if (inputRef.current?.current) {
       const input = inputRef.current.current;
+      
+      // Input'a focus ver (klavye yazarken focus kaybolmasın)
+      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+        input.focus();
+      }
       
       // Input'un gerçek değerini al (state yerine)
       const inputValue = input.value || "";
@@ -198,7 +210,9 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
       }
 
       // Cursor pozisyonunu ayarla
-      input.setSelectionRange(newCursorPosition, newCursorPosition);
+      setTimeout(() => {
+        input.setSelectionRange(newCursorPosition, newCursorPosition);
+      }, 0);
 
       // Event tetikle
       const event = new Event("input", { bubbles: true });

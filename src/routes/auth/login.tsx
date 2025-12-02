@@ -215,7 +215,8 @@ function Login() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-[0.7rem] font-medium text-gray-700 mb-[0.4rem]"
+                className="block text-[0.7rem] font-medium text-gray-700 mb-[0.4rem] cursor-pointer"
+                onClick={() => emailInputRef.current?.focus()}
               >
                 E-posta Adresi veya Kullanıcı Adı
               </label>
@@ -227,7 +228,8 @@ function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="E-posta adresinizi veya kullanıcı adınızı girin"
                 required
-                className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400"
+                autoComplete="username"
+                className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none"
                 showKeyboardButton={false}
               />
             </div>
@@ -235,7 +237,8 @@ function Login() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-[0.7rem] font-medium text-gray-700 mb-[0.4rem]"
+                className="block text-[0.7rem] font-medium text-gray-700 mb-[0.4rem] cursor-pointer"
+                onClick={() => passwordInputRef.current?.focus()}
               >
                 Şifre
               </label>
@@ -248,7 +251,8 @@ function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Şifrenizi girin"
                   required
-                  className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400"
+                  autoComplete="current-password"
+                  className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none pr-[2.8rem]"
                   showKeyboardButton={false}
                 />
                 <button
@@ -367,7 +371,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.23
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.25
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -385,6 +389,19 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-[0.8rem] max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
+                    <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
+                      v1.0.25 - Login Sayfası Input Sorunları Tamamen Çözüldü
+                    </h4>
+                    <ul className="text-[0.7rem] text-gray-700 dark:text-gray-300 space-y-[0.4rem] list-disc list-inside">
+                      <li>Input ref yönetimi tamamen yeniden yapılandırıldı</li>
+                      <li>Cursor görünürlüğü ve pozisyonu düzeltildi</li>
+                      <li>Her input'a tıklanabilir ve focus yönetimi düzgün çalışıyor</li>
+                      <li>Dokunmatik klavye ile yazarken focus korunuyor</li>
+                      <li>Kullanıcı adı ve şifre inputlarına tıklama sorunu çözüldü</li>
+                      <li>Label'lara tıklayınca input'a focus veriliyor</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
                     <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
                       v1.0.23 - Login Sayfası Input Düzeltmeleri
