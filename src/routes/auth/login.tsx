@@ -220,12 +220,7 @@ function Login() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-2 cursor-pointer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  emailInputRef.current?.focus();
-                }}
+                className="block text-sm font-medium text-gray-700 mb-2"
               >
                 E-posta Adresi veya Kullanıcı Adı
               </label>
@@ -238,8 +233,6 @@ function Login() {
                 placeholder="E-posta adresinizi veya kullanıcı adınızı girin"
                 required
                 autoComplete="username"
-                readOnly={false}
-                disabled={false}
                 className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -248,12 +241,7 @@ function Login() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-2 cursor-pointer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  passwordInputRef.current?.focus();
-                }}
+                className="block text-sm font-medium text-gray-700 mb-2"
               >
                 Şifre
               </label>
@@ -267,8 +255,6 @@ function Login() {
                   placeholder="Şifrenizi girin"
                   required
                   autoComplete="current-password"
-                  readOnly={false}
-                  disabled={false}
                   className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-12"
                 />
                 <button
@@ -388,7 +374,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.36
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.37
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -406,6 +392,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.37 - NSIS Installer ve Login Input Sorunları Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>NSIS installer dosya kurulum sorunu düzeltildi - files listesi düzgün yapılandırıldı</li>
+                      <li>Login sayfasındaki label onClick event'leri kaldırıldı - inputlara direkt tıklanabilir</li>
+                      <li>readOnly ve disabled prop'ları kaldırıldı - inputlar tam çalışır durumda</li>
+                      <li>include: null kaldırıldı - NSIS installer varsayılan davranışı kullanıyor</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.36 - Input Tıklama ve Güncelleme Sorunları Düzeltildi
