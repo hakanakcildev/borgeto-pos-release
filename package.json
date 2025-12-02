@@ -82,9 +82,27 @@
       "dist/**/*",
       "dist-electron/**/*",
       "package.json",
-      "public/**/*"
+      "public/**/*",
+      "node_modules/**/*",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+      "!**/node_modules/.cache/**/*",
+      "!**/node_modules/**/*.{md,ts,map}",
+      "!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/**/.{bin,o,hprof,orig,pyc,pyo,rbc}",
+      "!**/node_modules/**/{.nyc_output,coverage,.nyc_output,*.tsbuildinfo}"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/@electron/**/*",
+      "**/node_modules/electron-updater/**/*",
+      "**/node_modules/electron-updater/out/**/*"
+    ],
     "extraMetadata": {
       "main": "dist-electron/main.js",
       "type": "commonjs"
@@ -118,7 +136,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "artifactName": "${productName} Setup ${version}.${ext}",
       "shortcutName": "${productName}",
@@ -126,7 +145,9 @@
       "deleteAppDataOnUninstall": false,
       "installerIcon": "public/borgeto-logo.ico",
       "uninstallerIcon": "public/borgeto-logo.ico",
-      "warningsAsErrors": false
+      "installerHeaderIcon": "public/borgeto-logo.ico",
+      "warningsAsErrors": false,
+      "perMachine": false
     },
     "linux": {
       "target": [
