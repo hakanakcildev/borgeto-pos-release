@@ -491,10 +491,10 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                 setIsSymbol(!isSymbol);
               }}
               className={cn(
-                "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-r-md rounded-l-none text-sm font-medium transition-colors touch-manipulation",
+                "h-10 px-3 rounded-r-md rounded-l-none text-sm font-semibold transition-colors touch-manipulation border-2",
                 isSymbol
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                  : "text-gray-900 dark:text-white"
+                  ? "bg-blue-500 text-white border-blue-600 hover:bg-blue-600 active:bg-blue-700"
+                  : "bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500 hover:bg-gray-300 dark:hover:bg-gray-500 active:bg-gray-400 dark:active:bg-gray-400"
               )}
             >
               Sym
@@ -546,9 +546,9 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
               e.stopPropagation();
               handleBackspace();
             }}
-            className="h-10 px-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 active:bg-red-200 dark:active:bg-red-900/40 rounded-md flex items-center justify-center transition-colors touch-manipulation"
+            className="h-10 px-3 bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-md flex items-center justify-center transition-colors touch-manipulation"
           >
-            <Delete className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <Delete className="h-5 w-5 text-white" />
           </button>
         </div>
       </div>
