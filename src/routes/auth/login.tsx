@@ -255,19 +255,17 @@ function Login() {
                   placeholder="Şifrenizi girin"
                   required
                   autoComplete="current-password"
-                  className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-12"
+                  className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-24"
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-gray-100 transition-colors z-20"
-                  onClick={(e) => {
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-gray-100 transition-colors z-10"
+                  onMouseDown={(e) => {
                     e.preventDefault();
-                    e.stopPropagation();
                     setShowPassword(!showPassword);
                   }}
-                  onTouchEnd={(e) => {
+                  onTouchStart={(e) => {
                     e.preventDefault();
-                    e.stopPropagation();
                     setShowPassword(!showPassword);
                   }}
                 >
@@ -374,7 +372,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.39
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.40
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -392,6 +390,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.40 - Input Cursor ve Şifre Input Sorunları Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>Cursor pozisyonu otomatik değişme sorunu düzeltildi - artık tıkladığınız yerde kalıyor</li>
+                      <li>Şifre inputuna tıklama sorunu düzeltildi - göz ikonu z-index düşürüldü</li>
+                      <li>Cursor görünürlüğü artırıldı - caretColor inline style olarak eklendi</li>
+                      <li>onMouseDown ve onTouchStart event'leri kaldırıldı - native davranış kullanılıyor</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.39 - NSIS Installer x64 Mimari Düzeltmesi

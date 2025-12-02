@@ -73,18 +73,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         }
 
         if (currentInput) {
-          // Cursor pozisyonunu sona ayarla (eğer değer varsa ve cursor pozisyonu yoksa)
-          requestAnimationFrame(() => {
-            if (currentInput === document.activeElement) {
-              const cursorStart = currentInput.selectionStart;
-              // Eğer cursor pozisyonu yoksa veya 0 ise, sona ayarla
-              if (cursorStart === null || cursorStart === 0) {
-                const len = currentInput.value.length;
-                currentInput.setSelectionRange(len, len);
-              }
-            }
-          });
-
           // Dokunmatik cihazlarda ve showTouchKeyboard true ise klavyeyi aç
           if (isTouchDevice && showTouchKeyboard) {
             // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
@@ -103,32 +91,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
 
     const handleClick = React.useCallback(
-      (e: React.MouseEvent<HTMLInputElement>) => {
+      () => {
         const currentRef = getInputRef();
         const currentInput = currentRef.current;
         if (currentInput) {
           // Input'a focus ver
           currentInput.focus();
-          // Cursor pozisyonunu tıklanan yere ayarla
-          requestAnimationFrame(() => {
-            if (currentInput === document.activeElement) {
-              try {
-                // Mouse event'inden pozisyon al
-                const rect = currentInput.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                // Basit bir yaklaşım: tıklanan pozisyona göre cursor koy
-                const clickPosition = Math.min(
-                  Math.max(0, Math.floor((x / rect.width) * currentInput.value.length)),
-                  currentInput.value.length
-                );
-                currentInput.setSelectionRange(clickPosition, clickPosition);
-              } catch (error) {
-                // Hata durumunda sona koy
-                const len = currentInput.value.length;
-                currentInput.setSelectionRange(len, len);
-              }
-            }
-          });
         }
       },
       [getInputRef]
@@ -199,36 +167,22 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           type={type}
           className={cn(
             "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            "cursor-text caret-blue-600 selection:bg-blue-200 selection:text-blue-900 focus:caret-opacity-100",
+            "cursor-text selection:bg-blue-200 selection:text-blue-900",
             "select-text touch-manipulation",
             showKeyboardButton && isTouchDevice && (type === "password" ? "pr-[5rem]" : "pr-[2.5rem]"),
             className
           )}
+          style={{ 
+            caretColor: '#2563eb',
+            WebkitUserSelect: 'text', 
+            userSelect: 'text'
+          }}
           ref={setRefs}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onClick={handleClick}
-          onMouseDown={() => {
-            // Input'a tıklandığında focus ver
-            const currentRef = getInputRef();
-            const currentInput = currentRef.current;
-            if (currentInput) {
-              // Focus'u hemen ver
-              currentInput.focus();
-            }
-          }}
-          onTouchStart={() => {
-            // Touch event'lerinde de focus ver
-            const currentRef = getInputRef();
-            const currentInput = currentRef.current;
-            if (currentInput) {
-              // Focus'u hemen ver
-              currentInput.focus();
-            }
-          }}
           maxLength={maxLength}
           tabIndex={0}
-          style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
           {...props}
         />
         {showKeyboardButton && isTouchDevice && (
