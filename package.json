@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -83,6 +83,7 @@
       "dist-electron/**/*",
       "package.json",
       "public/**/*",
+      "!public/_redirects",
       "node_modules/**/*",
       "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
       "!.editorconfig",
@@ -95,7 +96,13 @@
       "!**/node_modules/**/*.{md,ts,map}",
       "!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}",
       "!**/node_modules/**/.{bin,o,hprof,orig,pyc,pyo,rbc}",
-      "!**/node_modules/**/{.nyc_output,coverage,.nyc_output,*.tsbuildinfo}"
+      "!**/node_modules/**/{.nyc_output,coverage,.nyc_output,*.tsbuildinfo}",
+      "!src/**/*",
+      "!electron/**/*",
+      "!scripts/**/*",
+      "!*.config.*",
+      "!*.md",
+      "!.env*"
     ],
     "asar": true,
     "asarUnpack": [

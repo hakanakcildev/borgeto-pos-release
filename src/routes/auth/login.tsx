@@ -388,7 +388,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.33
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.34
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -406,6 +406,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.34 - NSIS Installer Dosya Kurulum Sorunu Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>NSIS installer artık tüm dosyaları kuruyor</li>
+                      <li>files listesi düzeltildi - tüm gerekli dosyalar dahil edildi</li>
+                      <li>directories.app ayarı eklendi</li>
+                      <li>Gereksiz dosyalar exclude edildi</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.33 - NSIS Installer Düzeltmesi
