@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.34",
+  "version": "1.0.35",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -79,30 +79,19 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "package.json",
-      "public/**/*",
-      "!public/_redirects",
-      "node_modules/**/*",
-      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
-      "!.editorconfig",
-      "!**/._*",
-      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
-      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
-      "!**/{appveyor.yml,.travis.yml,circle.yml}",
-      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
-      "!**/node_modules/.cache/**/*",
-      "!**/node_modules/**/*.{md,ts,map}",
-      "!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}",
-      "!**/node_modules/**/.{bin,o,hprof,orig,pyc,pyo,rbc}",
-      "!**/node_modules/**/{.nyc_output,coverage,.nyc_output,*.tsbuildinfo}",
+      "**/*",
       "!src/**/*",
       "!electron/**/*",
       "!scripts/**/*",
       "!*.config.*",
       "!*.md",
-      "!.env*"
+      "!.env*",
+      "!.git/**/*",
+      "!release/**/*",
+      "!dist/**/*.map",
+      "!dist-electron/**/*.map",
+      "!node_modules/**/*.{md,ts,map}",
+      "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}/**/*"
     ],
     "asar": true,
     "asarUnpack": [
@@ -156,7 +145,8 @@
       "installerHeaderIcon": "public/borgeto-logo.ico",
       "warningsAsErrors": false,
       "perMachine": false,
-      "differentialPackage": false
+      "differentialPackage": false,
+      "include": null
     },
     "linux": {
       "target": [
