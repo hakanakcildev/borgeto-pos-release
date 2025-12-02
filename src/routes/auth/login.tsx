@@ -4,9 +4,7 @@ import * as React from "react";
 import { signInWithCredentials } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Lock, Keyboard, RefreshCw, FileText, X } from "lucide-react";
-import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
-import { cn } from "@/lib/utils";
+import { Eye, EyeOff, Lock, RefreshCw, FileText, X } from "lucide-react";
 
 export const Route = createFileRoute("/auth/login")({
   component: Login,
@@ -23,7 +21,6 @@ function Login() {
   const [showUpdateNotes, setShowUpdateNotes] = useState(false);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
-  const { openKeyboard, isOpen } = useTouchKeyboard();
 
   const handleLogin = useCallback(
     async (e: React.FormEvent) => {
@@ -85,38 +82,6 @@ function Login() {
     [email, password, navigate]
   );
 
-  const handleKeyboardButtonClick = useCallback(() => {
-    // Aktif input'u bul veya email input'una odaklan
-    const activeElement = document.activeElement;
-    let targetInput: HTMLInputElement | null = null;
-    let keyboardType: "text" | "email" | "password" = "text";
-    let currentValue = "";
-
-    if (activeElement === emailInputRef.current || activeElement === passwordInputRef.current) {
-      targetInput = activeElement as HTMLInputElement;
-    } else if (emailInputRef.current) {
-      targetInput = emailInputRef.current;
-      emailInputRef.current.focus();
-    } else if (passwordInputRef.current) {
-      targetInput = passwordInputRef.current;
-      passwordInputRef.current.focus();
-    }
-
-    if (targetInput) {
-      if (targetInput === passwordInputRef.current) {
-        keyboardType = "password";
-        currentValue = password;
-      } else {
-        keyboardType = "email";
-        currentValue = email;
-      }
-      openKeyboard(
-        { current: targetInput } as React.RefObject<HTMLInputElement>,
-        keyboardType,
-        currentValue
-      );
-    }
-  }, [openKeyboard, email, password]);
 
   const handleCheckUpdates = useCallback(async () => {
     setCheckingUpdate(true);
@@ -230,7 +195,6 @@ function Login() {
                 required
                 autoComplete="username"
                 className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none"
-                showKeyboardButton={false}
               />
             </div>
 
@@ -253,11 +217,10 @@ function Login() {
                   required
                   autoComplete="current-password"
                   className="h-[2.4rem] text-[0.8rem] bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none pr-[2.8rem]"
-                  showKeyboardButton={false}
                 />
                 <button
                   type="button"
-                  className="absolute right-[0.4rem] top-1/2 -translate-y-1/2 p-[0.3rem] rounded-[0.24rem] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer z-20"
+                  className="absolute right-[2.8rem] top-1/2 -translate-y-1/2 p-[0.3rem] rounded-[0.24rem] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer z-20"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -278,38 +241,13 @@ function Login() {
               </div>
             </div>
 
-            <div className="flex gap-[0.8rem]">
-              <Button
-                type="submit"
-                className="flex-1 h-[2.4rem] text-[0.8rem] font-medium bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={loading}
-              >
-                {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
-              </Button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyboardButtonClick();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyboardButtonClick();
-                }}
-                className={cn(
-                  "h-[2.4rem] w-[2.4rem] rounded-[0.24rem] transition-colors touch-manipulation flex items-center justify-center",
-                  isOpen
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-                )}
-                aria-label="Klavyeyi Aç"
-                title="Klavyeyi Aç"
-              >
-                <Keyboard className="h-[1.2rem] w-[1.2rem]" />
-              </button>
-            </div>
+            <Button
+              type="submit"
+              className="w-full h-[2.4rem] text-[0.8rem] font-medium bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={loading}
+            >
+              {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
+            </Button>
           </form>
 
           <p className="mt-[1.2rem] text-center text-[0.7rem] text-gray-600">
@@ -371,7 +309,7 @@ function Login() {
                 </h3>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-[0.8rem] p-[0.8rem]">
                   <p className="text-[0.8rem] text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.25
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.26
                   </p>
                   <p className="text-[0.7rem] text-gray-600 dark:text-gray-400 mt-[0.4rem]">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -389,6 +327,19 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-[0.8rem] max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
+                    <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
+                      v1.0.26 - Login Sayfası ve Klavye İyileştirmeleri
+                    </h4>
+                    <ul className="text-[0.7rem] text-gray-700 dark:text-gray-300 space-y-[0.4rem] list-disc list-inside">
+                      <li>Klavye boyutu küçültüldü (daha kompakt tasarım)</li>
+                      <li>Input ref yönetimi sorunu tamamen çözüldü</li>
+                      <li>Her input kendi klavye butonunu gösteriyor</li>
+                      <li>Cursor görünürlüğü ve pozisyonu düzeltildi</li>
+                      <li>Şifre inputuna tıklayınca doğru input'a yazıyor</li>
+                      <li>Focus yönetimi iyileştirildi</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-[0.8rem] p-[0.8rem]">
                     <h4 className="text-[0.8rem] font-medium text-gray-900 dark:text-white mb-[0.4rem]">
                       v1.0.25 - Login Sayfası Input Sorunları Tamamen Çözüldü
