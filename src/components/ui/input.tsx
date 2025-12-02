@@ -194,13 +194,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
 
     return (
-      <div className="relative w-full pointer-events-none">
+      <div className="relative w-full">
         <input
           type={type}
           className={cn(
             "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
             "cursor-text caret-blue-600 selection:bg-blue-200 selection:text-blue-900 focus:caret-opacity-100",
-            "pointer-events-auto select-text touch-manipulation",
+            "select-text touch-manipulation",
             showKeyboardButton && isTouchDevice && (type === "password" ? "pr-[5rem]" : "pr-[2.5rem]"),
             className
           )}
@@ -228,7 +228,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           }}
           maxLength={maxLength}
           tabIndex={0}
-          style={{ WebkitUserSelect: 'text', userSelect: 'text', pointerEvents: 'auto' }}
+          style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
           {...props}
         />
         {showKeyboardButton && isTouchDevice && (
@@ -245,7 +245,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               handleOpenKeyboard();
             }}
             className={cn(
-              "absolute top-1/2 -translate-y-1/2 p-[0.4rem] rounded-[0.24rem] transition-colors touch-manipulation z-10 pointer-events-auto",
+              "absolute top-1/2 -translate-y-1/2 p-[0.4rem] rounded-[0.24rem] transition-colors touch-manipulation z-10",
               type === "password" ? "right-[2.8rem]" : "right-[0.4rem]",
               isOpen
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
