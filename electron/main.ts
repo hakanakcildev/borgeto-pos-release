@@ -1,22 +1,49 @@
 import { app, BrowserWindow, Menu, shell, ipcMain } from "electron";
 import { join } from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 import { autoUpdater } from "electron-updater";
 
-// ES Module compatibility for __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+
+// Get paths safely for both dev and production
+function getAppPath(): string {
+  if (isDev) {
+    // In development, use process.cwd()
+    return process.cwd();
+  } else {
+    // In production, use app.getAppPath() which handles asar correctly
+    // This works because createWindow is called after app.on('ready')
+    try {
+      return app.getAppPath();
+    } catch (e) {
+      // Fallback if app is not ready yet (shouldn't happen)
+      return process.resourcesPath ? join(process.resourcesPath, "app.asar") : process.cwd();
+    }
+  }
+}
+
+function getDistPath(): string {
+  if (isDev) {
+    return join(process.cwd(), "dist-electron");
+  } else {
+    // In production, dist-electron is in resources/app.asar/dist-electron
+    const appPath = getAppPath();
+    return join(appPath, "dist-electron");
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 
 // Register IPC handlers - this function ensures handler is always registered
 function registerIpcHandlers() {
-  // Always remove existing handler first (for hot reload compatibility)
+  // Always remove existing handlers first (for hot reload compatibility)
   try {
     ipcMain.removeHandler("quit-app");
+  } catch (e) {
+    // Handler doesn't exist yet, that's fine
+  }
+  
+  try {
+    ipcMain.removeHandler("check-for-updates");
   } catch (e) {
     // Handler doesn't exist yet, that's fine
   }
@@ -29,29 +56,61 @@ function registerIpcHandlers() {
   
   // Register check-for-updates handler
   ipcMain.handle("check-for-updates", async () => {
-    console.log("check-for-updates IPC handler called - checking for updates");
+    console.log("🔍 Manual update check requested");
+    console.log("Current app version:", app.getVersion());
     if (!isDev) {
       try {
-        await autoUpdater.checkForUpdates();
-      } catch (error) {
-        console.error("Error checking for updates:", error);
-        if (mainWindow) {
-          mainWindow.webContents.send("update-error", error instanceof Error ? error.message : String(error));
+        const result = await autoUpdater.checkForUpdates();
+        console.log("Update check result:", result);
+        if (result) {
+          console.log("- Update info:", result.updateInfo);
+          console.log("- CancellationToken:", result.cancellationToken);
         }
+        return result;
+      } catch (error) {
+        console.error("❌ Error checking for updates:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("- Error details:", error);
+        if (mainWindow) {
+          mainWindow.webContents.send("update-error", errorMessage);
+        }
+        throw error;
       }
+    } else {
+      console.log("⚠️ Update check skipped (development mode)");
+      return null;
     }
   });
   
   console.log("IPC handlers registered: quit-app, check-for-updates at", new Date().toISOString());
 }
 
-// Register handlers immediately (before app is ready)
-// This ensures handler is available even if app.on("ready") hasn't fired yet
-registerIpcHandlers();
-
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
+
+// Configure auto-updater for production
+if (!isDev) {
+  // Electron-updater otomatik olarak package.json'daki publish ayarlarını kullanır
+  // Ancak manuel olarak da ayarlayabiliriz
+  try {
+    // GitHub provider için gerekli bilgileri ayarla
+    // Bu bilgiler package.json'daki publish ayarlarından otomatik okunur
+    // Ancak manuel olarak da ayarlanabilir
+    
+    console.log("🔧 Auto-updater configuration:");
+    console.log("- Current app version:", app.getVersion());
+    console.log("- Auto download:", autoUpdater.autoDownload);
+    console.log("- Auto install on quit:", autoUpdater.autoInstallOnAppQuit);
+    console.log("- Update channel:", autoUpdater.channel || "latest");
+    
+    // Electron-updater GitHub provider için package.json'daki publish ayarlarını kullanır
+    // Bu yüzden manuel feed URL ayarlamaya gerek yok
+    // Ancak debug için kontrol edebiliriz
+  } catch (error) {
+    console.error("❌ Error configuring auto-updater:", error);
+  }
+}
 
 // Check for updates every 4 hours
 if (!isDev) {
@@ -68,11 +127,13 @@ if (!isDev) {
 
 const createWindow = (): void => {
   // Create the browser window
-  const preloadPath = join(__dirname, "preload.js");
+  const distPath = getDistPath();
+  const preloadPath = join(distPath, "preload.js");
   // Icon path - Windows için .ico, diğer platformlar için PNG
+  const appPath = getAppPath();
   const iconPath = process.platform === "win32" 
-    ? join(__dirname, "../public/borgeto-logo.ico")
-    : join(__dirname, "../public/images/borgeto-logo.png");
+    ? join(appPath, "public", "borgeto-logo.ico")
+    : join(appPath, "public", "images", "borgeto-logo.png");
   
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -102,7 +163,8 @@ const createWindow = (): void => {
   } else {
     // Production: Load from built files
     // Use loadURL with file:// protocol to ensure proper routing
-    const indexPath = join(__dirname, "../dist/index.html");
+    const appPath = getAppPath();
+    const indexPath = join(appPath, "dist", "index.html");
     mainWindow.loadFile(indexPath);
     
     // Ensure proper routing by handling navigation
@@ -120,9 +182,6 @@ const createWindow = (): void => {
     
     // Her zaman tam ekran modunu aktif et
     mainWindow?.setFullScreen(true);
-    
-    // Re-register IPC handlers when window is ready (for hot reload)
-    registerIpcHandlers();
     
     // Open DevTools in development
     if (isDev) {
@@ -159,57 +218,85 @@ const createWindow = (): void => {
     shell.openExternal(url);
     return { action: "deny" };
   });
-
-  // Re-register IPC handlers when webContents is created (for hot reload)
-  mainWindow.webContents.on("did-finish-load", () => {
-    registerIpcHandlers();
-  });
 };
 
 // Auto-updater events
 autoUpdater.on("checking-for-update", () => {
-  console.log("Checking for update...");
+  console.log("🔍 Checking for update...");
+  console.log("Current app version:", app.getVersion());
+  if (mainWindow) {
+    mainWindow.webContents.send("update-checking");
+  }
 });
 
-autoUpdater.on("update-available", (info: { version: string }) => {
-  console.log("Update available:", info.version);
+autoUpdater.on("update-available", (info: { version: string; releaseDate: string; path: string }) => {
+  console.log("✅ Update available!");
+  console.log("- New version:", info.version);
+  console.log("- Current version:", app.getVersion());
+  console.log("- Release date:", info.releaseDate);
+  console.log("- Path:", info.path);
   if (mainWindow) {
     mainWindow.webContents.send("update-available", info.version);
   }
 });
 
-autoUpdater.on("update-not-available", () => {
-  console.log("Update not available");
+autoUpdater.on("update-not-available", (info: { version: string }) => {
+  const currentVersion = app.getVersion();
+  const latestVersion = info.version;
+  
+  console.log("ℹ️ Update not available");
+  console.log("- Current version:", currentVersion);
+  console.log("- Latest version:", latestVersion);
+  console.log("- Versions match:", currentVersion === latestVersion);
+  
+  // Version karşılaştırması için daha detaylı kontrol
+  if (currentVersion !== latestVersion) {
+    console.warn("⚠️ Version mismatch detected but update-not-available event fired!");
+    console.warn("This might indicate a problem with version comparison.");
+  }
+  
   if (mainWindow) {
-    mainWindow.webContents.send("update-not-available");
+    mainWindow.webContents.send("update-not-available", {
+      currentVersion: currentVersion,
+      latestVersion: latestVersion,
+    });
   }
 });
 
 autoUpdater.on("error", (err: Error) => {
-  console.error("Error in auto-updater:", err);
+  console.error("❌ Error in auto-updater:", err);
+  console.error("- Error message:", err.message);
+  console.error("- Error stack:", err.stack);
   if (mainWindow) {
     mainWindow.webContents.send("update-error", err.message || String(err));
   }
 });
 
-autoUpdater.on("download-progress", (progressObj: { percent: number }) => {
+autoUpdater.on("download-progress", (progressObj: { percent: number; transferred: number; total: number }) => {
+  console.log(`📥 Download progress: ${progressObj.percent.toFixed(2)}%`);
+  console.log(`- Transferred: ${progressObj.transferred} bytes`);
+  console.log(`- Total: ${progressObj.total} bytes`);
   if (mainWindow) {
     mainWindow.webContents.send("download-progress", progressObj);
   }
 });
 
-autoUpdater.on("update-downloaded", (info: { version: string }) => {
-  console.log("Update downloaded:", info.version);
+autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: string; path: string }) => {
+  console.log("✅ Update downloaded!");
+  console.log("- Version:", info.version);
+  console.log("- Release date:", info.releaseDate);
+  console.log("- Path:", info.path);
   if (mainWindow) {
     mainWindow.webContents.send("update-downloaded", info.version);
   }
   // Install update on next app quit
+  // false = isSilent, true = isForceRunAfter
   autoUpdater.quitAndInstall(false, true);
 });
 
 // This method will be called when Electron has finished initialization
 app.on("ready", () => {
-  // Re-register IPC handlers on app ready (for hot reload compatibility)
+  // Register IPC handlers on app ready
   registerIpcHandlers();
   
   createWindow();
@@ -218,7 +305,11 @@ app.on("ready", () => {
   if (!isDev) {
     // Wait a bit before checking for updates to let the app load
     setTimeout(() => {
-      autoUpdater.checkForUpdates();
+      console.log("🚀 App started, checking for updates in 5 seconds...");
+      console.log("Current app version:", app.getVersion());
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error("❌ Error during initial update check:", err);
+      });
     }, 5000); // 5 seconds after app start
   }
 

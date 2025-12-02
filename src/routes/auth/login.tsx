@@ -146,9 +146,13 @@ function Login() {
       alert(`Yeni güncelleme mevcut: ${version}. Güncelleme indiriliyor...`);
     };
 
-    const handleUpdateNotAvailable = () => {
+    const handleUpdateNotAvailable = (info?: { currentVersion?: string; latestVersion?: string }) => {
       setError("");
-      alert("En son sürümü kullanıyorsunuz.");
+      if (info?.currentVersion && info?.latestVersion) {
+        alert(`Mevcut sürüm: ${info.currentVersion}\nEn son sürüm: ${info.latestVersion}\n\nEn güncel sürümü kullanıyorsunuz.`);
+      } else {
+        alert("En son sürümü kullanıyorsunuz.");
+      }
       setCheckingUpdate(false);
     };
 
