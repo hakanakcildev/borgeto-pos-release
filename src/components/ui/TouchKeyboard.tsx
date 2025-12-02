@@ -321,7 +321,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           <div className="space-y-1.5">
             {/* İşaret Butonları - Harflerin Üstünde */}
             <div className="flex gap-1 justify-start flex-wrap">
-              {primarySymbols.map((symbol) => (
+              {displayedSymbols.map((symbol) => (
                 <button
                   key={symbol}
                   type="button"
