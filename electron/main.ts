@@ -93,9 +93,7 @@ function registerIpcHandlers() {
 
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
-// autoInstallOnAppQuit'i false yapıyoruz - manuel kurulum yapacağız
-// Bu sayede güncelleme sırasında dosyaların silinmesi sorunu çözülür
-autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 // Windows'ta imza kontrolü package.json'daki "win.verifyUpdateCodeSignature: false" ayarı ile devre dışı bırakıldı
 // Runtime'da ek bir ayar gerekmez
@@ -299,8 +297,8 @@ autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: strin
   if (mainWindow) {
     mainWindow.webContents.send("update-downloaded", info.version);
   }
-  // Güncelleme indirildi, frontend'den quitApp çağrıldığında manuel kurulum yapılacak
-  // autoInstallOnAppQuit = false olduğu için manuel olarak quitAndInstall() çağırmalıyız
+  // Frontend'den quitApp çağrıldığında otomatik kurulum yapılacak
+  // autoUpdater.autoInstallOnAppQuit = true olduğu için uygulama kapatıldığında otomatik kurulur
 });
 
 // This method will be called when Electron has finished initialization

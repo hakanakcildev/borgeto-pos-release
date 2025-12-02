@@ -49,13 +49,9 @@ function RootComponent() {
       setIsDownloadingUpdate(false);
       setDownloadProgress(100);
       console.log("Güncelleme indirildi:", version);
-      // Kısa bir süre sonra güncellemeyi kur ve uygulamayı yeniden başlat
-      // quitAndInstall kullanarak güvenli bir şekilde güncelleme yapılır
+      // Kısa bir süre sonra uygulamayı kapat (update otomatik kurulacak)
       setTimeout(() => {
-        if (window.electronAPI?.quitAndInstall) {
-          window.electronAPI.quitAndInstall();
-        } else if (window.electronAPI?.quitApp) {
-          // Fallback: Eğer quitAndInstall yoksa normal çıkış yap
+        if (window.electronAPI?.quitApp) {
           window.electronAPI.quitApp();
         }
       }, 2000);
