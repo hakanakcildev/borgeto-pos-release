@@ -43,22 +43,28 @@ function Login() {
     } else if (emailInputRef.current) {
       // Aktif input yoksa email input'una focus ver
       targetInput = emailInputRef.current;
-      targetInput.focus();
       keyboardType = "email";
       currentValue = email;
     } else if (passwordInputRef.current) {
       targetInput = passwordInputRef.current;
-      targetInput.focus();
       keyboardType = "password";
       currentValue = password;
     }
 
     if (targetInput) {
-      openKeyboard(
-        { current: targetInput } as React.RefObject<HTMLInputElement>,
-        keyboardType,
-        currentValue
-      );
+      // Input'a focus ver
+      targetInput.focus();
+      
+      // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
+      setTimeout(() => {
+        if (targetInput && targetInput === document.activeElement) {
+          openKeyboard(
+            { current: targetInput } as React.RefObject<HTMLInputElement>,
+            keyboardType,
+            currentValue
+          );
+        }
+      }, 50);
     }
   }, [openKeyboard, email, password]);
 

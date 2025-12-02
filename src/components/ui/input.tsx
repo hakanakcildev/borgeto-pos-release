@@ -106,13 +106,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       (e: React.MouseEvent<HTMLInputElement>) => {
         const currentRef = getInputRef();
         const currentInput = currentRef.current;
-        if (currentInput) {
+        if (currentInput && e.currentTarget) {
           // Input'a focus ver
           currentInput.focus();
           // Cursor pozisyonunu tıklanan yere ayarla
           requestAnimationFrame(() => {
             if (currentInput === document.activeElement) {
-              const clickPosition = e.currentTarget.selectionStart ?? currentInput.value.length;
+              const clickPosition = e.currentTarget?.selectionStart ?? currentInput.value.length;
               currentInput.setSelectionRange(clickPosition, clickPosition);
             }
           });
