@@ -374,7 +374,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.38
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.39
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -392,6 +392,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.39 - NSIS Installer x64 Mimari Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>Windows build x64 mimarisine çevrildi - ARM64 yerine x64 kullanılıyor</li>
+                      <li>NSIS installer artık tüm dosyaları kuruyor - mimari uyumsuzluğu düzeltildi</li>
+                      <li>packElevateHelper: true eklendi - installer yetkilendirme düzgün çalışıyor</li>
+                      <li>Target arch explicit olarak x64 yapıldı - Windows bilgisayarlarda çalışıyor</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.38 - NSIS Installer Kritik Düzeltme - files Listesi Kaldırıldı

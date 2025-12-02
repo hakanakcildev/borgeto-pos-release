@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -97,8 +97,18 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "publisherName": "Borgeto",
       "icon": "public/borgeto-logo.ico",
@@ -130,7 +140,8 @@
       "installerHeaderIcon": "public/borgeto-logo.ico",
       "warningsAsErrors": false,
       "perMachine": false,
-      "differentialPackage": false
+      "differentialPackage": false,
+      "packElevateHelper": true
     },
     "linux": {
       "target": [
