@@ -388,7 +388,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.29
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.30
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -406,6 +406,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.30 - Login Yönlendirme ve Input Tıklama Sorunları Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>İlk açılışta authenticated değilse direkt login sayfasına yönlendirme eklendi</li>
+                      <li>Daha önce giriş yapıldıysa direkt masalar sayfası görünecek</li>
+                      <li>Input component'inde pointer-events sorunu tamamen düzeltildi - artık inputlara tıklanabilir</li>
+                      <li>Wrapper div'den gereksiz pointer-events-none kaldırıldı</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.29 - Input Seçim Sorunu Düzeltmesi
