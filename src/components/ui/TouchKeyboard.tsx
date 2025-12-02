@@ -315,8 +315,8 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           </button>
         </div>
 
-        {/* Yeni Düzen: Sol (QWERTY Harfler - Geniş), Orta (İşaretler - Dikey), Sağ (Sayılar - Grid) */}
-        <div className="grid grid-cols-[2fr_1fr_1fr] gap-3 mb-1.5">
+        {/* Yeni Düzen: Sol (QWERTY Harfler - Geniş), Sağ (Sayılar - Grid) */}
+        <div className="grid grid-cols-[2fr_1fr] gap-3 mb-1.5">
           {/* Sol Kolon - Gerçek QWERTY Klavye Düzeni */}
           <div className="space-y-1.5">
             {qwertyLayout.map((row, rowIndex) => (
@@ -349,37 +349,6 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                   </button>
                 ))}
               </div>
-            ))}
-          </div>
-
-          {/* Orta Kolon - İşaretler (Dikey) */}
-          <div className="space-y-1.5 flex flex-col">
-            {displayedSymbols.map((symbol) => (
-              <button
-                key={symbol}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyPress(symbol);
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyPress(symbol);
-                }}
-                className="h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[40px]"
-              >
-                {symbol}
-              </button>
             ))}
           </div>
 
