@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
