@@ -353,7 +353,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           </div>
 
           {/* Orta Kolon - İşaretler (Dikey) */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 flex flex-col">
             {displayedSymbols.map((symbol) => (
               <button
                 key={symbol}
@@ -376,7 +376,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                   e.stopPropagation();
                   handleKeyPress(symbol);
                 }}
-                className="w-full h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                className="h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[40px]"
               >
                 {symbol}
               </button>
