@@ -462,7 +462,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.46
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.47
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -481,6 +481,25 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.47 - Kritik: Oturum Temizleme ve Route Yönlendirme Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        deleteAppDataOnUninstall: true yapıldı - program kaldırılınca localStorage temizleniyor
+                      </li>
+                      <li>
+                        Route yönlendirmesi setTimeout kaldırıldı - direkt yönlendirme yapılıyor
+                      </li>
+                      <li>
+                        Storage change event'inde console.log eklendi - oturum temizleme izlenebiliyor
+                      </li>
+                      <li>
+                        Authenticated kullanıcılar için route match yoksa anında masalar sayfasına yönlendirme
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.46 - Program Kapanınca Oturum Temizleme ve Route Düzeltmesi

@@ -79,6 +79,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setCompanyData(posAuth.company || null);
           } else {
             // Cleared
+            console.log("posAuth removed from localStorage, clearing auth state");
+            setCurrentUser(null);
             setUserData(null);
             setBranchData(null);
             setCompanyData(null);
@@ -87,6 +89,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setAuthType(null);
           }
         } catch (error) {
+          console.error("Error handling storage change:", error);
         }
       }
     };

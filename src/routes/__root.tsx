@@ -52,13 +52,10 @@ function RootComponent() {
         return;
       }
       
-      // Route match yoksa ana sayfaya yönlendir
+      // Route match yoksa direkt ana sayfaya yönlendir (gecikme yok)
       if (router.state.matches.length === 0) {
-        console.log("No route match, redirecting to home");
-        // Küçük bir gecikme ile yönlendir (route'ların yüklenmesi için)
-        setTimeout(() => {
-          navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-        }, 100);
+        console.log("No route match found, redirecting to home immediately");
+        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
         return;
       }
     } else {
