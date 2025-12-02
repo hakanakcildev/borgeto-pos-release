@@ -261,6 +261,11 @@ const createWindow = (): void => {
     mainWindow = null;
   });
 
+  // Uygulama tamamen kapandığında localStorage'ı temizle
+  mainWindow.webContents.on("destroyed", () => {
+    console.log("WebContents destroyed - cleaning up");
+  });
+
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -449,6 +454,23 @@ app.on("window-all-closed", () => {
   // On macOS, keep app running even when all windows are closed
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+// Uygulama kapanmadan önce localStorage'ı temizle
+app.on("before-quit", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // WebContents'e localStorage temizleme komutu gönder
+    mainWindow.webContents.executeJavaScript(`
+      try {
+        localStorage.removeItem("posAuth");
+        console.log("localStorage cleaned on app quit");
+      } catch (e) {
+        console.error("Error cleaning localStorage:", e);
+      }
+    `).catch(err => {
+      console.error("Failed to clean localStorage:", err);
+    });
   }
 });
 

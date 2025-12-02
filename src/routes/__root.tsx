@@ -36,25 +36,36 @@ function RootComponent() {
 
     const isLoginPage = location.pathname === "/auth/login" || location.pathname === "/auth";
 
+    console.log("Route control:", {
+      pathname: location.pathname,
+      isAuthenticated,
+      authLoading,
+      matchesLength: router.state.matches.length
+    });
+
     // Eğer kullanıcı giriş yapmışsa
     if (isAuthenticated) {
       // Login sayfasındaysa ana sayfaya yönlendir
       if (isLoginPage) {
+        console.log("Authenticated user on login page, redirecting to home");
         navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
         return;
       }
       
-      // İlk açılışta root path'teyse (/) ve route match yoksa, yine de ana sayfaya git
-      // Bu, uygulama ilk açıldığında route'ların hazır olmamasını çözer
+      // Route match yoksa ana sayfaya yönlendir
       if (router.state.matches.length === 0) {
         console.log("No route match, redirecting to home");
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+        // Küçük bir gecikme ile yönlendir (route'ların yüklenmesi için)
+        setTimeout(() => {
+          navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+        }, 100);
         return;
       }
     } else {
       // Eğer kullanıcı giriş yapmamışsa
       // Login sayfasında değilse login'e yönlendir
       if (!isLoginPage) {
+        console.log("Not authenticated, redirecting to login");
         navigate({ to: "/auth/login", replace: true });
         return;
       }
