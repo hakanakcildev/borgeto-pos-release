@@ -25,19 +25,25 @@ function RootComponent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // Başlangıçta route kontrolü yap - 404 sayfası gösteriliyorsa doğru route'a yönlendir
+  // Başlangıçta route kontrolü yap - 404 sayfası gösteriliyorsa veya kullanıcı giriş yapmamışsa login'e yönlendir
   useEffect(() => {
-    // Router'ın route'u bulup bulmadığını kontrol et
-    if (!authLoading && router.state.matches.length === 0) {
-      // Eğer route bulunamadıysa ve kullanıcı giriş yapmamışsa login'e yönlendir
-      if (!isAuthenticated) {
-        navigate({ to: "/auth/login", replace: true });
-      } else {
-        // Kullanıcı giriş yapmışsa ana sayfaya yönlendir
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-      }
+    // Auth yüklenene kadar bekle
+    if (authLoading) return;
+
+    // Eğer route bulunamadıysa (404) veya kullanıcı giriş yapmamışsa ve korumalı bir route'daysa login'e yönlendir
+    const isProtectedRoute = location.pathname !== "/auth/login" && location.pathname !== "/auth";
+    const isNotFound = router.state.matches.length === 0;
+    
+    if (isNotFound || (isProtectedRoute && !isAuthenticated)) {
+      navigate({ to: "/auth/login", replace: true });
+      return;
     }
-  }, [router.state.matches.length, authLoading, isAuthenticated, navigate]);
+
+    // Eğer kullanıcı giriş yapmışsa ve login sayfasındaysa ana sayfaya yönlendir
+    if (isAuthenticated && location.pathname === "/auth/login") {
+      navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+    }
+  }, [router.state.matches.length, authLoading, isAuthenticated, navigate, location.pathname]);
 
   return (
     <>
