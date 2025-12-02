@@ -149,8 +149,7 @@
       "installerHeaderIcon": "public/borgeto-logo.ico",
       "warningsAsErrors": false,
       "perMachine": false,
-      "differentialPackage": false,
-      "warnIfUpdating": true
+      "differentialPackage": false
     },
     "linux": {
       "target": [
