@@ -68,25 +68,8 @@ function registerIpcHandlers() {
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
-// Windows'ta imza kontrolünü tamamen devre dışı bırak
-if (process.platform === "win32") {
-  // İmza kontrolünü devre dışı bırakmak için requestHeaders kullan
-  (autoUpdater as any).requestHeaders = {
-    "Cache-Control": "no-cache",
-  };
-  
-  // Windows'ta imza kontrolünü atlamak için updaterCacheDirName kullan
-  (autoUpdater as any).updaterCacheDirName = "borgeto-pos-electron-updater";
-  
-  // İmza doğrulamasını devre dışı bırak
-  (autoUpdater as any).verifySignature = false;
-  
-  // Windows'ta imza kontrolünü atlamak için disableWebInstaller kullan
-  (autoUpdater as any).disableWebInstaller = false;
-  
-  // Windows'ta imza kontrolünü atlamak için allowDowngrade kullan
-  (autoUpdater as any).allowDowngrade = true;
-}
+// Windows'ta imza kontrolü package.json'daki "win.verifyUpdateCodeSignature: false" ayarı ile devre dışı bırakıldı
+// Runtime'da ek bir ayar gerekmez
 
 // Configure auto-updater for production
 if (!isDev) {
