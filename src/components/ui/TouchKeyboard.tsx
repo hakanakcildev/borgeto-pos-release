@@ -319,6 +319,37 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
         <div className="grid grid-cols-[2fr_1fr] gap-3 mb-1.5">
           {/* Sol Kolon - Gerçek QWERTY Klavye Düzeni */}
           <div className="space-y-1.5">
+            {/* İşaret Butonları - Harflerin Üstünde */}
+            <div className="flex gap-1.5 justify-start">
+              {primarySymbols.map((symbol) => (
+                <button
+                  key={symbol}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleKeyPress(symbol);
+                  }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleKeyPress(symbol);
+                  }}
+                  className="h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[40px]"
+                >
+                  {symbol}
+                </button>
+              ))}
+            </div>
+            {/* Harf Butonları */}
             {qwertyLayout.map((row, rowIndex) => (
               <div key={rowIndex} className="flex gap-1.5 justify-start">
                 {row.map((letter) => (
