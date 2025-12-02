@@ -388,7 +388,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.35
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.36
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -406,6 +406,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.36 - Input Tıklama ve Güncelleme Sorunları Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>İkinci input'a tıklama sorunu düzeltildi - artık tüm inputlara tıklanabilir</li>
+                      <li>e.stopPropagation() kaldırıldı - inputlar arası geçiş sorunsuz çalışıyor</li>
+                      <li>Güncelleme mekanizmasına hata yakalama eklendi</li>
+                      <li>Blur timeout'u 200ms'den 100ms'ye düşürüldü - daha hızlı yanıt</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.35 - NSIS Installer Kritik Düzeltme

@@ -188,7 +188,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           if (currentInput && !currentInput.contains(activeElement)) {
             closeKeyboard();
           }
-        }, 200);
+        }, 100);
       },
       [onBlur, closeKeyboard, showTouchKeyboard, getInputRef]
     );
@@ -208,21 +208,21 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           onFocus={handleFocus}
           onBlur={handleBlur}
           onClick={handleClick}
-          onMouseDown={(e) => {
-            // Input'a tıklandığında focus'u engelleme
-            e.stopPropagation();
+          onMouseDown={() => {
+            // Input'a tıklandığında focus ver
             const currentRef = getInputRef();
             const currentInput = currentRef.current;
-            if (currentInput && currentInput !== document.activeElement) {
+            if (currentInput) {
+              // Focus'u hemen ver
               currentInput.focus();
             }
           }}
-          onTouchStart={(e) => {
-            // Touch event'lerinde de focus'u engelleme
-            e.stopPropagation();
+          onTouchStart={() => {
+            // Touch event'lerinde de focus ver
             const currentRef = getInputRef();
             const currentInput = currentRef.current;
-            if (currentInput && currentInput !== document.activeElement) {
+            if (currentInput) {
+              // Focus'u hemen ver
               currentInput.focus();
             }
           }}

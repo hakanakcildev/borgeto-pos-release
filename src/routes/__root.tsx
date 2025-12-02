@@ -50,9 +50,16 @@ function RootComponent() {
       setDownloadProgress(100);
       console.log("Güncelleme indirildi:", version);
       // Kısa bir süre sonra uygulamayı kapat (update otomatik kurulacak)
+      // autoInstallOnAppQuit: true olduğu için uygulama kapatıldığında otomatik kurulur
       setTimeout(() => {
         if (window.electronAPI?.quitApp) {
-          window.electronAPI.quitApp();
+          try {
+            window.electronAPI.quitApp();
+          } catch (error) {
+            console.error("Güncelleme kurulumu sırasında hata:", error);
+            // Hata olsa bile uygulamayı kapat
+            window.location.reload();
+          }
         }
       }, 2000);
     };
