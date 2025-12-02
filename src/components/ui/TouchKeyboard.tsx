@@ -233,27 +233,30 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
     );
   }
 
-  // Alfanumerik klavye
-  const qwertyLayout = [
-    ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-    ["z", "x", "c", "v", "b", "n", "m"],
+  // Alfanumerik klavye - Yeni düzen: Sol (harfler), Orta (işaretler), Sağ (sayılar)
+  const letters = [
+    ["q", "w", "e", "r", "t"],
+    ["a", "s", "d", "f", "g"],
+    ["z", "x", "c", "v", "b"],
+    ["y", "u", "i", "o", "p"],
+    ["h", "j", "k", "l"],
+    ["n", "m"],
   ];
 
-  const turkishLayout = [
-    ["q", "w", "e", "r", "t", "y", "u", "ı", "o", "p", "ğ", "ü"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ş", "i"],
-    ["z", "x", "c", "v", "b", "n", "m", "ö", "ç"],
+  // En çok kullanılan işaretler
+  const commonSymbols = [
+    ["@", "-", "."],
+    ["_", "/", "\\"],
+    [",", ":", ";"],
   ];
 
+  // Sayılar
   const numbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-  const symbols = [
-    ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"],
-    ["-", "_", "=", "+", "[", "]", "{", "}", "\\", "|"],
-    [";", ":", "'", '"', ",", ".", "<", ">", "/", "?"],
-  ];
 
-  const currentLayout = isSymbol ? symbols : isShift ? turkishLayout : qwertyLayout;
+  // Shift ile büyük harfler
+  const getDisplayLetter = (letter: string) => {
+    return isShift ? letter.toUpperCase() : letter;
+  };
 
   return (
     <div
@@ -295,9 +298,82 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           </button>
         </div>
 
-        {/* Number Row */}
-        {!isSymbol && (
-          <div className="flex gap-1.5 mb-1.5">
+        {/* Yeni Düzen: Sol (Harfler), Orta (İşaretler), Sağ (Sayılar) */}
+        <div className="grid grid-cols-3 gap-2 mb-1.5">
+          {/* Sol Kolon - Harfler */}
+          <div className="space-y-1.5">
+            {letters.map((row, rowIndex) => (
+              <div key={rowIndex} className="flex gap-1.5">
+                {row.map((letter) => (
+                  <button
+                    key={letter}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKeyPress(getDisplayLetter(letter));
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKeyPress(getDisplayLetter(letter));
+                    }}
+                    className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                  >
+                    {getDisplayLetter(letter)}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Orta Kolon - Yaygın İşaretler */}
+          <div className="space-y-1.5">
+            {commonSymbols.map((row, rowIndex) => (
+              <div key={rowIndex} className="flex gap-1.5">
+                {row.map((symbol) => (
+                  <button
+                    key={symbol}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKeyPress(symbol);
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKeyPress(symbol);
+                    }}
+                    className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {/* Boşluk tuşu için yer */}
+            <div className="h-10"></div>
+          </div>
+
+          {/* Sağ Kolon - Sayılar */}
+          <div className="space-y-1.5">
             {numbers.map((num) => (
               <button
                 key={num}
@@ -320,135 +396,16 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                   e.stopPropagation();
                   handleKeyPress(num);
                 }}
-                className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-base font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+                className="w-full h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-base font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
               >
                 {num}
               </button>
             ))}
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleBackspace();
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleBackspace();
-              }}
-              className="w-16 h-10 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 active:bg-red-200 dark:active:bg-red-900/40 rounded-md flex items-center justify-center transition-colors touch-manipulation"
-            >
-              <Delete className="h-4 w-4 text-red-600 dark:text-red-400" />
-            </button>
           </div>
-        )}
-
-        {/* Main Keyboard */}
-        <div className="space-y-1.5 mb-1.5">
-          {currentLayout.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex gap-1.5 justify-center">
-              {row.map((key) => {
-                const displayKey = isShift && !isSymbol ? key.toUpperCase() : key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKeyPress(displayKey);
-                    }}
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKeyPress(displayKey);
-                    }}
-                    className="h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[40px] flex-1"
-                  >
-                    {displayKey}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
         </div>
 
         {/* Bottom Row */}
         <div className="flex gap-1.5">
-          {!isSymbol && (
-            <>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsShift(!isShift);
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsShift(!isShift);
-                }}
-                className={cn(
-                  "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium transition-colors touch-manipulation",
-                  isShift
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                    : "text-gray-900 dark:text-white"
-                )}
-              >
-                ⇧
-              </button>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyPress(" ");
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyPress(" ");
-                }}
-                className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
-              >
-                Boşluk
-              </button>
-            </>
-          )}
           <button
             type="button"
             onMouseDown={(e) => {
@@ -458,7 +415,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsSymbol(!isSymbol);
+              setIsShift(!isShift);
             }}
             onTouchStart={(e) => {
               e.preventDefault();
@@ -467,16 +424,40 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
             onTouchEnd={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsSymbol(!isSymbol);
+              setIsShift(!isShift);
             }}
             className={cn(
               "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium transition-colors touch-manipulation",
-              isSymbol
+              isShift
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
                 : "text-gray-900 dark:text-white"
             )}
           >
-            {isSymbol ? "ABC" : "123"}
+            ⇧
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleKeyPress(" ");
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleKeyPress(" ");
+            }}
+            className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+          >
+            Boşluk
           </button>
           {onEnter && (
             <button
@@ -504,32 +485,30 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
               Enter
             </button>
           )}
-          {!isSymbol && (
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleBackspace();
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleBackspace();
-              }}
-              className="h-10 px-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 active:bg-red-200 dark:active:bg-red-900/40 rounded-md flex items-center justify-center transition-colors touch-manipulation"
-            >
-              <Delete className="h-4 w-4 text-red-600 dark:text-red-400" />
-            </button>
-          )}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleBackspace();
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleBackspace();
+            }}
+            className="h-10 px-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 active:bg-red-200 dark:active:bg-red-900/40 rounded-md flex items-center justify-center transition-colors touch-manipulation"
+          >
+            <Delete className="h-4 w-4 text-red-600 dark:text-red-400" />
+          </button>
         </div>
       </div>
     </div>
