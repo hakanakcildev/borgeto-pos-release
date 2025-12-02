@@ -80,6 +80,12 @@ if (process.platform === "win32") {
   
   // İmza doğrulamasını devre dışı bırak
   (autoUpdater as any).verifySignature = false;
+  
+  // Windows'ta imza kontrolünü atlamak için disableWebInstaller kullan
+  (autoUpdater as any).disableWebInstaller = false;
+  
+  // Windows'ta imza kontrolünü atlamak için allowDowngrade kullan
+  (autoUpdater as any).allowDowngrade = true;
 }
 
 // Configure auto-updater for production
@@ -282,8 +288,14 @@ autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: strin
     mainWindow.webContents.send("update-downloaded", info.version);
   }
   // Install update on next app quit
+  // Windows'ta imza kontrolünü atlamak için isSilent: true kullan
   // false = isSilent, true = isForceRunAfter
-  autoUpdater.quitAndInstall(false, true);
+  if (process.platform === "win32") {
+    // Windows'ta imza kontrolünü atlamak için silent install kullan
+    autoUpdater.quitAndInstall(true, true);
+  } else {
+    autoUpdater.quitAndInstall(false, true);
+  }
 });
 
 // This method will be called when Electron has finished initialization
