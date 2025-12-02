@@ -1,35 +1,14 @@
 import { app, BrowserWindow, Menu, shell, ipcMain } from "electron";
 import { join } from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 import { autoUpdater } from "electron-updater";
 
+// ES Module compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
-
-// Get paths safely for both dev and production
-function getAppPath(): string {
-  if (isDev) {
-    // In development, use process.cwd()
-    return process.cwd();
-  } else {
-    // In production, use app.getAppPath() which handles asar correctly
-    // This works because createWindow is called after app.on('ready')
-    try {
-      return app.getAppPath();
-    } catch (e) {
-      // Fallback if app is not ready yet (shouldn't happen)
-      return process.resourcesPath ? join(process.resourcesPath, "app.asar") : process.cwd();
-    }
-  }
-}
-
-function getDistPath(): string {
-  if (isDev) {
-    return join(process.cwd(), "dist-electron");
-  } else {
-    // In production, dist-electron is in resources/app.asar/dist-electron
-    const appPath = getAppPath();
-    return join(appPath, "dist-electron");
-  }
-}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -127,13 +106,11 @@ if (!isDev) {
 
 const createWindow = (): void => {
   // Create the browser window
-  const distPath = getDistPath();
-  const preloadPath = join(distPath, "preload.js");
+  const preloadPath = join(__dirname, "preload.js");
   // Icon path - Windows için .ico, diğer platformlar için PNG
-  const appPath = getAppPath();
   const iconPath = process.platform === "win32" 
-    ? join(appPath, "public", "borgeto-logo.ico")
-    : join(appPath, "public", "images", "borgeto-logo.png");
+    ? join(__dirname, "../public/borgeto-logo.ico")
+    : join(__dirname, "../public/images/borgeto-logo.png");
   
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -163,8 +140,7 @@ const createWindow = (): void => {
   } else {
     // Production: Load from built files
     // Use loadURL with file:// protocol to ensure proper routing
-    const appPath = getAppPath();
-    const indexPath = join(appPath, "dist", "index.html");
+    const indexPath = join(__dirname, "../dist/index.html");
     mainWindow.loadFile(indexPath);
     
     // Ensure proper routing by handling navigation
