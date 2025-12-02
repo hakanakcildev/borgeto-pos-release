@@ -191,6 +191,15 @@ const createWindow = (): void => {
     // Her zaman tam ekran modunu aktif et
     mainWindow?.setFullScreen(true);
     
+    // Focus'u window'a ver (input'ların çalışması için)
+    mainWindow?.focus();
+    
+    // Kısa bir gecikme ile tekrar focus ver (güvenlik için)
+    setTimeout(() => {
+      mainWindow?.focus();
+      mainWindow?.webContents.focus();
+    }, 100);
+    
     // Open DevTools in development
     if (isDev) {
       mainWindow?.webContents.openDevTools();
@@ -205,7 +214,27 @@ const createWindow = (): void => {
         event.preventDefault();
       }
     });
-  } else {
+  }
+  
+  // Window focus olaylarını dinle
+  mainWindow.on("focus", () => {
+    // Window focus aldığında webContents'e de focus ver
+    mainWindow?.webContents.focus();
+  });
+  
+  mainWindow.on("blur", () => {
+    // Window blur olduğunda (alt+tab ile çıkıldığında)
+    // Tekrar focus alındığında input'ların çalışması için hazırla
+    console.log("Window blur - focus kaybedildi");
+  });
+  
+  mainWindow.on("restore", () => {
+    // Window restore olduğunda focus ver
+    mainWindow?.focus();
+    mainWindow?.webContents.focus();
+  });
+  
+  if (isDev) {
     // Development'ta F11 ile tam ekran açıp kapatabilirsiniz
     mainWindow?.webContents.on("before-input-event", (event, input) => {
       // Development'ta sadece ESC'yi engelle (F11'e izin ver)

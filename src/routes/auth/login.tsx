@@ -3,7 +3,15 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { signInWithCredentials } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Lock, RefreshCw, FileText, X, Keyboard } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  RefreshCw,
+  FileText,
+  X,
+  Keyboard,
+} from "lucide-react";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 
 export const Route = createFileRoute("/auth/login")({
@@ -19,7 +27,7 @@ function Login() {
   const [error, setError] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [showUpdateNotes, setShowUpdateNotes] = useState(false);
-  
+
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const { openKeyboard, isOpen } = useTouchKeyboard();
@@ -54,7 +62,7 @@ function Login() {
     if (targetInput) {
       // Input'a focus ver
       targetInput.focus();
-      
+
       // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
       setTimeout(() => {
         if (targetInput && targetInput === document.activeElement) {
@@ -77,7 +85,7 @@ function Login() {
 
       try {
         const result = await signInWithCredentials(email, password);
-        
+
         // Local storage'a kaydet (uygulama kapatılsa bile oturum açık kalır)
         localStorage.setItem(
           "posAuth",
@@ -91,15 +99,17 @@ function Login() {
             timestamp: Date.now(),
           })
         );
-        
+
         // Storage event tetikle
-        window.dispatchEvent(new StorageEvent("storage", {
-          key: "posAuth",
-          newValue: localStorage.getItem("posAuth"),
-        }));
-        
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: "posAuth",
+            newValue: localStorage.getItem("posAuth"),
+          })
+        );
+
         // Kısa bir gecikme ile navigate et
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         navigate({ to: "/", search: { area: undefined, activeOnly: false } });
       } catch (error: unknown) {
         if (error && typeof error === "object" && "message" in error) {
@@ -136,7 +146,10 @@ function Login() {
         alert("Güncelleme kontrolü şu anda kullanılamıyor.");
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Güncelleme kontrolü sırasında bir hata oluştu";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Güncelleme kontrolü sırasında bir hata oluştu";
       setError(errorMessage);
       alert(errorMessage);
     } finally {
@@ -153,10 +166,15 @@ function Login() {
       alert(`Yeni güncelleme mevcut: ${version}. Güncelleme indiriliyor...`);
     };
 
-    const handleUpdateNotAvailable = (info?: { currentVersion?: string; latestVersion?: string }) => {
+    const handleUpdateNotAvailable = (info?: {
+      currentVersion?: string;
+      latestVersion?: string;
+    }) => {
       setError("");
       if (info?.currentVersion && info?.latestVersion) {
-        alert(`Mevcut sürüm: ${info.currentVersion}\nEn son sürüm: ${info.latestVersion}\n\nEn güncel sürümü kullanıyorsunuz.`);
+        alert(
+          `Mevcut sürüm: ${info.currentVersion}\nEn son sürüm: ${info.latestVersion}\n\nEn güncel sürümü kullanıyorsunuz.`
+        );
       } else {
         alert("En son sürümü kullanıyorsunuz.");
       }
@@ -165,7 +183,9 @@ function Login() {
 
     const handleUpdateDownloaded = (version: string) => {
       setError("");
-      alert(`Güncelleme indirildi: ${version}. Program kapatıldığında otomatik olarak kurulacak.`);
+      alert(
+        `Güncelleme indirildi: ${version}. Program kapatıldığında otomatik olarak kurulacak.`
+      );
       setCheckingUpdate(false);
     };
 
@@ -372,13 +392,14 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.40
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.41
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
-                    Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
+                    Son Güncelleme:{" "}
+                    {new Date().toLocaleDateString("tr-TR", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
                     })}
                   </p>
                 </div>
@@ -392,13 +413,48 @@ function Login() {
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.41 - İlk Açılışta Input Focus Sorunu Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        İlk açılışta input'lara tıklanamama sorunu düzeltildi -
+                        window focus otomatik veriliyor
+                      </li>
+                      <li>
+                        Alt+Tab sonrası input çalışma sorunu düzeltildi - focus
+                        event'leri eklendi
+                      </li>
+                      <li>
+                        ready-to-show event'inde window.focus() ve
+                        webContents.focus() çağrılıyor
+                      </li>
+                      <li>
+                        Window restore, focus, blur event'leri dinleniyor -
+                        her durumda çalışıyor
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.40 - Input Cursor ve Şifre Input Sorunları Düzeltildi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Cursor pozisyonu otomatik değişme sorunu düzeltildi - artık tıkladığınız yerde kalıyor</li>
-                      <li>Şifre inputuna tıklama sorunu düzeltildi - göz ikonu z-index düşürüldü</li>
-                      <li>Cursor görünürlüğü artırıldı - caretColor inline style olarak eklendi</li>
-                      <li>onMouseDown ve onTouchStart event'leri kaldırıldı - native davranış kullanılıyor</li>
+                      <li>
+                        Cursor pozisyonu otomatik değişme sorunu düzeltildi -
+                        artık tıkladığınız yerde kalıyor
+                      </li>
+                      <li>
+                        Şifre inputuna tıklama sorunu düzeltildi - göz ikonu
+                        z-index düşürüldü
+                      </li>
+                      <li>
+                        Cursor görünürlüğü artırıldı - caretColor inline style
+                        olarak eklendi
+                      </li>
+                      <li>
+                        onMouseDown ve onTouchStart event'leri kaldırıldı -
+                        native davranış kullanılıyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -406,31 +462,66 @@ function Login() {
                       v1.0.39 - NSIS Installer x64 Mimari Düzeltmesi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Windows build x64 mimarisine çevrildi - ARM64 yerine x64 kullanılıyor</li>
-                      <li>NSIS installer artık tüm dosyaları kuruyor - mimari uyumsuzluğu düzeltildi</li>
-                      <li>packElevateHelper: true eklendi - installer yetkilendirme düzgün çalışıyor</li>
-                      <li>Target arch explicit olarak x64 yapıldı - Windows bilgisayarlarda çalışıyor</li>
+                      <li>
+                        Windows build x64 mimarisine çevrildi - ARM64 yerine x64
+                        kullanılıyor
+                      </li>
+                      <li>
+                        NSIS installer artık tüm dosyaları kuruyor - mimari
+                        uyumsuzluğu düzeltildi
+                      </li>
+                      <li>
+                        packElevateHelper: true eklendi - installer
+                        yetkilendirme düzgün çalışıyor
+                      </li>
+                      <li>
+                        Target arch explicit olarak x64 yapıldı - Windows
+                        bilgisayarlarda çalışıyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.38 - NSIS Installer Kritik Düzeltme - files Listesi Kaldırıldı
+                      v1.0.38 - NSIS Installer Kritik Düzeltme - files Listesi
+                      Kaldırıldı
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>files listesi tamamen kaldırıldı - electron-builder otomatik dosya algılama kullanıyor</li>
-                      <li>runAfterFinish: false yapıldı - installer dosyaları kurmadan uygulamayı çalıştırmıyor</li>
-                      <li>NSIS installer artık tüm dosyaları kuruyor - otomatik algılama daha güvenilir</li>
+                      <li>
+                        files listesi tamamen kaldırıldı - electron-builder
+                        otomatik dosya algılama kullanıyor
+                      </li>
+                      <li>
+                        runAfterFinish: false yapıldı - installer dosyaları
+                        kurmadan uygulamayı çalıştırmıyor
+                      </li>
+                      <li>
+                        NSIS installer artık tüm dosyaları kuruyor - otomatik
+                        algılama daha güvenilir
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.37 - NSIS Installer ve Login Input Sorunları Düzeltildi
+                      v1.0.37 - NSIS Installer ve Login Input Sorunları
+                      Düzeltildi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>NSIS installer dosya kurulum sorunu düzeltildi - files listesi düzgün yapılandırıldı</li>
-                      <li>Login sayfasındaki label onClick event'leri kaldırıldı - inputlara direkt tıklanabilir</li>
-                      <li>readOnly ve disabled prop'ları kaldırıldı - inputlar tam çalışır durumda</li>
-                      <li>include: null kaldırıldı - NSIS installer varsayılan davranışı kullanıyor</li>
+                      <li>
+                        NSIS installer dosya kurulum sorunu düzeltildi - files
+                        listesi düzgün yapılandırıldı
+                      </li>
+                      <li>
+                        Login sayfasındaki label onClick event'leri kaldırıldı -
+                        inputlara direkt tıklanabilir
+                      </li>
+                      <li>
+                        readOnly ve disabled prop'ları kaldırıldı - inputlar tam
+                        çalışır durumda
+                      </li>
+                      <li>
+                        include: null kaldırıldı - NSIS installer varsayılan
+                        davranışı kullanıyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -438,10 +529,19 @@ function Login() {
                       v1.0.36 - Input Tıklama ve Güncelleme Sorunları Düzeltildi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>İkinci input'a tıklama sorunu düzeltildi - artık tüm inputlara tıklanabilir</li>
-                      <li>e.stopPropagation() kaldırıldı - inputlar arası geçiş sorunsuz çalışıyor</li>
+                      <li>
+                        İkinci input'a tıklama sorunu düzeltildi - artık tüm
+                        inputlara tıklanabilir
+                      </li>
+                      <li>
+                        e.stopPropagation() kaldırıldı - inputlar arası geçiş
+                        sorunsuz çalışıyor
+                      </li>
                       <li>Güncelleme mekanizmasına hata yakalama eklendi</li>
-                      <li>Blur timeout'u 200ms'den 100ms'ye düşürüldü - daha hızlı yanıt</li>
+                      <li>
+                        Blur timeout'u 200ms'den 100ms'ye düşürüldü - daha hızlı
+                        yanıt
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -449,9 +549,17 @@ function Login() {
                       v1.0.35 - NSIS Installer Kritik Düzeltme
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>NSIS installer artık tüm dosyaları kuruyor - files listesi tamamen yeniden yapılandırıldı</li>
-                      <li>Kısayol sorunu düzeltildi - artık dosyalar kuruluyor</li>
-                      <li>include: null eklendi - NSIS installer'ın tüm dosyaları kurması garanti edildi</li>
+                      <li>
+                        NSIS installer artık tüm dosyaları kuruyor - files
+                        listesi tamamen yeniden yapılandırıldı
+                      </li>
+                      <li>
+                        Kısayol sorunu düzeltildi - artık dosyalar kuruluyor
+                      </li>
+                      <li>
+                        include: null eklendi - NSIS installer'ın tüm dosyaları
+                        kurması garanti edildi
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -460,7 +568,10 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>NSIS installer artık tüm dosyaları kuruyor</li>
-                      <li>files listesi düzeltildi - tüm gerekli dosyalar dahil edildi</li>
+                      <li>
+                        files listesi düzeltildi - tüm gerekli dosyalar dahil
+                        edildi
+                      </li>
                       <li>directories.app ayarı eklendi</li>
                       <li>Gereksiz dosyalar exclude edildi</li>
                     </ul>
@@ -471,7 +582,9 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>NSIS installer ayarları kontrol edildi</li>
-                      <li>Dosyaların kurulması için ayarlar gözden geçirildi</li>
+                      <li>
+                        Dosyaların kurulması için ayarlar gözden geçirildi
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -479,7 +592,9 @@ function Login() {
                       v1.0.32 - Güncelleme Mekanizması Geri Alındı
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Güncelleme mekanizması çalışan eski haline döndürüldü</li>
+                      <li>
+                        Güncelleme mekanizması çalışan eski haline döndürüldü
+                      </li>
                       <li>autoInstallOnAppQuit tekrar aktif edildi</li>
                     </ul>
                   </div>
@@ -488,21 +603,45 @@ function Login() {
                       v1.0.31 - Güncelleme Mekanizması Düzeltmesi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Güncelleme sırasında dosyaların silinmesi sorunu düzeltildi</li>
-                      <li>Güvenli güncelleme kurulumu eklendi - quitAndInstall() kullanılıyor</li>
-                      <li>autoInstallOnAppQuit kapatıldı - manuel kurulum ile daha güvenli</li>
-                      <li>NSIS ayarları iyileştirildi - güncelleme sırasında uyarı gösteriliyor</li>
+                      <li>
+                        Güncelleme sırasında dosyaların silinmesi sorunu
+                        düzeltildi
+                      </li>
+                      <li>
+                        Güvenli güncelleme kurulumu eklendi - quitAndInstall()
+                        kullanılıyor
+                      </li>
+                      <li>
+                        autoInstallOnAppQuit kapatıldı - manuel kurulum ile daha
+                        güvenli
+                      </li>
+                      <li>
+                        NSIS ayarları iyileştirildi - güncelleme sırasında uyarı
+                        gösteriliyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.30 - Login Yönlendirme ve Input Tıklama Sorunları Düzeltmesi
+                      v1.0.30 - Login Yönlendirme ve Input Tıklama Sorunları
+                      Düzeltmesi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>İlk açılışta authenticated değilse direkt login sayfasına yönlendirme eklendi</li>
-                      <li>Daha önce giriş yapıldıysa direkt masalar sayfası görünecek</li>
-                      <li>Input component'inde pointer-events sorunu tamamen düzeltildi - artık inputlara tıklanabilir</li>
-                      <li>Wrapper div'den gereksiz pointer-events-none kaldırıldı</li>
+                      <li>
+                        İlk açılışta authenticated değilse direkt login
+                        sayfasına yönlendirme eklendi
+                      </li>
+                      <li>
+                        Daha önce giriş yapıldıysa direkt masalar sayfası
+                        görünecek
+                      </li>
+                      <li>
+                        Input component'inde pointer-events sorunu tamamen
+                        düzeltildi - artık inputlara tıklanabilir
+                      </li>
+                      <li>
+                        Wrapper div'den gereksiz pointer-events-none kaldırıldı
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -510,7 +649,10 @@ function Login() {
                       v1.0.29 - Input Seçim Sorunu Düzeltmesi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Input seçim sorunu düzeltildi - artık input'lara tıklayınca focus alıyor</li>
+                      <li>
+                        Input seçim sorunu düzeltildi - artık input'lara
+                        tıklayınca focus alıyor
+                      </li>
                       <li>Pointer-events ve user-select ayarları eklendi</li>
                       <li>Touch event'leri iyileştirildi</li>
                       <li>Label tıklamaları düzeltildi</li>
@@ -521,11 +663,22 @@ function Login() {
                       v1.0.28 - Otomatik Versiyon Kontrolü ve Oturum Kalıcılığı
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>Uygulama açıldığında otomatik versiyon kontrolü eklendi</li>
+                      <li>
+                        Uygulama açıldığında otomatik versiyon kontrolü eklendi
+                      </li>
                       <li>Güncel versiyonsa hiçbir uyarı gösterilmiyor</li>
-                      <li>Yeni versiyon varsa loading ekranı ile indirme gösteriliyor</li>
-                      <li>Oturum bilgileri localStorage'a taşındı - uygulama kapatılsa bile oturum açık kalıyor</li>
-                      <li>404 hatası düzeltildi - uygulama ilk açıldığında login sayfasına yönlendiriliyor</li>
+                      <li>
+                        Yeni versiyon varsa loading ekranı ile indirme
+                        gösteriliyor
+                      </li>
+                      <li>
+                        Oturum bilgileri localStorage'a taşındı - uygulama
+                        kapatılsa bile oturum açık kalıyor
+                      </li>
+                      <li>
+                        404 hatası düzeltildi - uygulama ilk açıldığında login
+                        sayfasına yönlendiriliyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -533,9 +686,14 @@ function Login() {
                       v1.0.27 - TouchKeyboardProvider Hata Düzeltmesi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>useTouchKeyboard hook'u provider yoksa fallback değer döndürüyor</li>
+                      <li>
+                        useTouchKeyboard hook'u provider yoksa fallback değer
+                        döndürüyor
+                      </li>
                       <li>Provider hatası çözüldü - artık hata fırlatmıyor</li>
-                      <li>Input component'i provider olmadan da çalışabiliyor</li>
+                      <li>
+                        Input component'i provider olmadan da çalışabiliyor
+                      </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -561,9 +719,13 @@ function Login() {
                       <li>Numerik tuş takımı ile miktar girişi</li>
                       <li>İskonto uygulama sistemi (oran ve fiyat bazlı)</li>
                       <li>Kısmi ödeme alma özelliği</li>
-                      <li>Paket masaları için kurye atama ve para üstü işlemleri</li>
+                      <li>
+                        Paket masaları için kurye atama ve para üstü işlemleri
+                      </li>
                       <li>Kurye yönetimi ve istatistikleri</li>
-                      <li>Gelişmiş masa yönetimi (aktif masalar, tüm masalar)</li>
+                      <li>
+                        Gelişmiş masa yönetimi (aktif masalar, tüm masalar)
+                      </li>
                       <li>Otomatik zaman güncellemeleri</li>
                       <li>Yazıcı yönetimi (USB, Seri Port, Ağ yazıcıları)</li>
                       <li>Koyu tema desteği</li>
