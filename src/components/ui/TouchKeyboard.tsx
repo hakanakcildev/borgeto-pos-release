@@ -467,59 +467,61 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           >
             ⇧
           </button>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleKeyPress(" ");
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleKeyPress(" ");
-            }}
-            className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
-          >
-            Boşluk
-          </button>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsSymbol(!isSymbol);
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsSymbol(!isSymbol);
-            }}
-            className={cn(
-              "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium transition-colors touch-manipulation",
-              isSymbol
-                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                : "text-gray-900 dark:text-white"
-            )}
-          >
-            Sym
-          </button>
+          <div className="flex gap-0 flex-1">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleKeyPress(" ");
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleKeyPress(" ");
+              }}
+              className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-l-md rounded-r-none text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
+            >
+              Boşluk
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsSymbol(!isSymbol);
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsSymbol(!isSymbol);
+              }}
+              className={cn(
+                "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-r-md rounded-l-none text-sm font-medium transition-colors touch-manipulation",
+                isSymbol
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-900 dark:text-white"
+              )}
+            >
+              Sym
+            </button>
+          </div>
           {onEnter && (
             <button
               type="button"
