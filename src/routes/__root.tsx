@@ -20,7 +20,6 @@ function RootComponent() {
     currentValue,
     maxLength,
   } = useTouchKeyboard();
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
@@ -34,12 +33,7 @@ function RootComponent() {
     if (!window.electronAPI) return;
 
     // Update event listener'ları
-    const handleUpdateChecking = () => {
-      setIsCheckingUpdate(true);
-    };
-
     const handleUpdateAvailable = (version: string) => {
-      setIsCheckingUpdate(false);
       setIsDownloadingUpdate(true);
       setDownloadProgress(0);
       console.log("Yeni güncelleme mevcut:", version);
@@ -47,7 +41,6 @@ function RootComponent() {
 
     const handleUpdateNotAvailable = () => {
       // Güncel versiyonsa hiçbir uyarı gösterme
-      setIsCheckingUpdate(false);
       setIsDownloadingUpdate(false);
       console.log("Güncel versiyon kullanılıyor");
     };
@@ -69,15 +62,11 @@ function RootComponent() {
     };
 
     const handleUpdateError = (error: string) => {
-      setIsCheckingUpdate(false);
       setIsDownloadingUpdate(false);
       console.error("Güncelleme hatası:", error);
     };
 
     // Event listener'ları kaydet
-    if (window.electronAPI.onUpdateChecking) {
-      window.electronAPI.onUpdateChecking(handleUpdateChecking);
-    }
     if (window.electronAPI.onUpdateAvailable) {
       window.electronAPI.onUpdateAvailable(handleUpdateAvailable);
     }
