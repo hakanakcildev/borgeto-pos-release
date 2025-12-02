@@ -61,7 +61,18 @@ if (npmScript) {
   // For Windows, build for x64 architecture (Intel/AMD)
   // Pass environment variables to electron-builder
   const env = { ...process.env };
+  
+  // Windows'ta sertifika dosyası yoksa CSC_LINK'i kaldır
   if (platform === "win") {
+    const certPath = path.join(__dirname, "..", "certificate.pfx");
+    if (env.CSC_LINK && !fs.existsSync(certPath)) {
+      console.log("⚠️  Sertifika dosyası bulunamadı, imzasız build alınıyor...");
+      delete env.CSC_LINK;
+      delete env.CSC_KEY_PASSWORD;
+      delete env.WIN_CSC_LINK;
+      delete env.WIN_CSC_KEY_PASSWORD;
+    }
+    
     execSync(`npx electron-builder --${platform} --x64 --publish never`, {
       stdio: "inherit",
       cwd: path.join(__dirname, ".."),
