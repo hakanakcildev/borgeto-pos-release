@@ -75,11 +75,11 @@ function POSLayoutWithTables() {
 
   const handleLogout = useCallback(async () => {
     try {
-      sessionStorage.removeItem("posAuth");
+      localStorage.removeItem("posAuth");
       await signOutUser();
       navigate({ to: "/auth/login" });
     } catch (error) {
-      sessionStorage.removeItem("posAuth");
+      localStorage.removeItem("posAuth");
       navigate({ to: "/auth/login" });
     }
   }, [navigate]);

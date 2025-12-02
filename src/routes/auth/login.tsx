@@ -78,8 +78,8 @@ function Login() {
       try {
         const result = await signInWithCredentials(email, password);
         
-        // Session storage'a kaydet
-        sessionStorage.setItem(
+        // Local storage'a kaydet (uygulama kapatılsa bile oturum açık kalır)
+        localStorage.setItem(
           "posAuth",
           JSON.stringify({
             type: result.type,
@@ -95,7 +95,7 @@ function Login() {
         // Storage event tetikle
         window.dispatchEvent(new StorageEvent("storage", {
           key: "posAuth",
-          newValue: sessionStorage.getItem("posAuth"),
+          newValue: localStorage.getItem("posAuth"),
         }));
         
         // Kısa bir gecikme ile navigate et

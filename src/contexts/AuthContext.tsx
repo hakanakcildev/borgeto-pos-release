@@ -40,11 +40,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authType, setAuthType] = useState<"firebase" | "staff" | "branch" | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load auth data from sessionStorage on mount
+  // Load auth data from localStorage on mount
   useEffect(() => {
     const loadSessionAuth = () => {
       try {
-        const posAuthStr = sessionStorage.getItem("posAuth");
+        const posAuthStr = localStorage.getItem("posAuth");
         if (posAuthStr) {
           const posAuth = JSON.parse(posAuthStr);
           setAuthType(posAuth.type);
@@ -112,8 +112,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUserData(null);
         }
       } else {
-        // If Firebase Auth user is null, check sessionStorage
-        const posAuthStr = sessionStorage.getItem("posAuth");
+        // If Firebase Auth user is null, check localStorage
+        const posAuthStr = localStorage.getItem("posAuth");
         if (posAuthStr) {
           try {
             const posAuth = JSON.parse(posAuthStr);
