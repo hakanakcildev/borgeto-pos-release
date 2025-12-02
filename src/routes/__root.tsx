@@ -35,33 +35,27 @@ function RootComponent() {
     if (authLoading) return;
 
     const isLoginPage = location.pathname === "/auth/login" || location.pathname === "/auth";
-    const isNotFound = router.state.matches.length === 0;
 
-    // Eğer kullanıcı giriş yapmamışsa
-    if (!isAuthenticated) {
+    // Eğer kullanıcı giriş yapmışsa
+    if (isAuthenticated) {
+      // Login sayfasındaysa ana sayfaya yönlendir
+      if (isLoginPage) {
+        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+        return;
+      }
+      
+      // Root path'te değilse ve geçerli bir route değilse ana sayfaya yönlendir
+      if (location.pathname !== "/" && router.state.matches.length === 0) {
+        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
+        return;
+      }
+    } else {
+      // Eğer kullanıcı giriş yapmamışsa
       // Login sayfasında değilse login'e yönlendir
       if (!isLoginPage) {
         navigate({ to: "/auth/login", replace: true });
         return;
       }
-    } else {
-      // Eğer kullanıcı giriş yapmışsa
-      if (isLoginPage) {
-        // Login sayfasındaysa ana sayfaya yönlendir
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-        return;
-      }
-      
-      // 404 durumunda ana sayfaya yönlendir
-      if (isNotFound) {
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-        return;
-      }
-    }
-
-    // 404 durumunda authenticated değilse login'e yönlendir
-    if (isNotFound && !isAuthenticated) {
-      navigate({ to: "/auth/login", replace: true });
     }
   }, [router.state.matches.length, authLoading, isAuthenticated, navigate, location.pathname]);
 
