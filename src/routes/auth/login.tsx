@@ -388,7 +388,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.30
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.31
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme: {new Date().toLocaleDateString('tr-TR', { 
@@ -406,6 +406,17 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.31 - Güncelleme Mekanizması Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>Güncelleme sırasında dosyaların silinmesi sorunu düzeltildi</li>
+                      <li>Güvenli güncelleme kurulumu eklendi - quitAndInstall() kullanılıyor</li>
+                      <li>autoInstallOnAppQuit kapatıldı - manuel kurulum ile daha güvenli</li>
+                      <li>NSIS ayarları iyileştirildi - güncelleme sırasında uyarı gösteriliyor</li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.30 - Login Yönlendirme ve Input Tıklama Sorunları Düzeltmesi

@@ -8,6 +8,7 @@ declare global {
         electron: string;
       };
       quitApp: () => Promise<void>;
+      quitAndInstall: () => Promise<void>;
       checkForUpdates: () => Promise<void>;
       onUpdateAvailable: (callback: (version: string) => void) => void;
       onUpdateNotAvailable: (callback: (info?: { currentVersion?: string; latestVersion?: string }) => void) => void;

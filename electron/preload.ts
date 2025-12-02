@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     console.log("Preload: quitApp called, invoking quit-app IPC");
     return ipcRenderer.invoke("quit-app");
   },
+  quitAndInstall: () => {
+    console.log("Preload: quitAndInstall called, invoking quit-and-install IPC");
+    return ipcRenderer.invoke("quit-and-install");
+  },
   checkForUpdates: () => {
     console.log("Preload: checkForUpdates called, invoking check-for-updates IPC");
     return ipcRenderer.invoke("check-for-updates");
@@ -49,6 +53,7 @@ declare global {
         electron: string;
       };
       quitApp: () => Promise<void>;
+      quitAndInstall: () => Promise<void>;
       checkForUpdates: () => Promise<void>;
       onUpdateAvailable: (callback: (version: string) => void) => void;
       onUpdateNotAvailable: (callback: (info?: { currentVersion?: string; latestVersion?: string }) => void) => void;

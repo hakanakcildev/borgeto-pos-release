@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -148,7 +148,9 @@
       "uninstallerIcon": "public/borgeto-logo.ico",
       "installerHeaderIcon": "public/borgeto-logo.ico",
       "warningsAsErrors": false,
-      "perMachine": false
+      "perMachine": false,
+      "differentialPackage": false,
+      "warnIfUpdating": true
     },
     "linux": {
       "target": [

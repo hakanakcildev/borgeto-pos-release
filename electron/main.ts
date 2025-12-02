@@ -27,6 +27,12 @@ function registerIpcHandlers() {
     // Handler doesn't exist yet, that's fine
   }
   
+  try {
+    ipcMain.removeHandler("quit-and-install");
+  } catch (e) {
+    // Handler doesn't exist yet, that's fine
+  }
+  
   // Register quit-app handler
   ipcMain.handle("quit-app", async () => {
     console.log("quit-app IPC handler called - quitting application");
@@ -61,12 +67,35 @@ function registerIpcHandlers() {
     }
   });
   
-  console.log("IPC handlers registered: quit-app, check-for-updates at", new Date().toISOString());
+  // Register quit-and-install handler for manual update installation
+  ipcMain.handle("quit-and-install", async () => {
+    console.log("🔄 quit-and-install IPC handler called - installing update and quitting");
+    if (!isDev) {
+      try {
+        // Güncelleme indirildiyse kurulum yap ve çık
+        autoUpdater.quitAndInstall(false, true);
+      } catch (error) {
+        console.error("❌ Error installing update:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (mainWindow) {
+          mainWindow.webContents.send("update-error", errorMessage);
+        }
+        throw error;
+      }
+    } else {
+      console.log("⚠️ Update installation skipped (development mode)");
+      app.quit();
+    }
+  });
+  
+    console.log("IPC handlers registered: quit-app, check-for-updates, quit-and-install at", new Date().toISOString());
 }
 
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+// autoInstallOnAppQuit'i false yapıyoruz - manuel kurulum yapacağız
+// Bu sayede güncelleme sırasında dosyaların silinmesi sorunu çözülür
+autoUpdater.autoInstallOnAppQuit = false;
 
 // Windows'ta imza kontrolü package.json'daki "win.verifyUpdateCodeSignature: false" ayarı ile devre dışı bırakıldı
 // Runtime'da ek bir ayar gerekmez
@@ -270,8 +299,8 @@ autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: strin
   if (mainWindow) {
     mainWindow.webContents.send("update-downloaded", info.version);
   }
-  // Frontend'den quitApp çağrıldığında otomatik kurulum yapılacak
-  // autoUpdater.autoInstallOnAppQuit = true olduğu için uygulama kapatıldığında otomatik kurulur
+  // Güncelleme indirildi, frontend'den quitApp çağrıldığında manuel kurulum yapılacak
+  // autoInstallOnAppQuit = false olduğu için manuel olarak quitAndInstall() çağırmalıyız
 });
 
 // This method will be called when Electron has finished initialization
