@@ -44,8 +44,10 @@ function RootComponent() {
         return;
       }
       
-      // Root path'te değilse ve geçerli bir route değilse ana sayfaya yönlendir
-      if (location.pathname !== "/" && router.state.matches.length === 0) {
+      // İlk açılışta root path'teyse (/) ve route match yoksa, yine de ana sayfaya git
+      // Bu, uygulama ilk açıldığında route'ların hazır olmamasını çözer
+      if (router.state.matches.length === 0) {
+        console.log("No route match, redirecting to home");
         navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
         return;
       }

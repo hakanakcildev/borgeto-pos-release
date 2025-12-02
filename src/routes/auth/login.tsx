@@ -462,7 +462,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.44
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.45
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -481,6 +481,25 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.45 - İlk Açılışta Route Eşleşmesi Sorunu Düzeltildi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        İlk açılışta route match olmasa bile authenticated kullanıcılar masalar sayfasına yönlendiriliyor
+                      </li>
+                      <li>
+                        router.state.matches.length === 0 kontrolü her durumda çalışıyor
+                      </li>
+                      <li>
+                        Console log eklendi - route eşleşme sorunlarını izlemek için
+                      </li>
+                      <li>
+                        Oturum açıkken program açıldığında kesinlikle masalar sayfası açılıyor
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.44 - 404 Sayfası Kaldırıldı, Route Kontrolü Tamamen Düzeltildi
