@@ -240,11 +240,11 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
     ["z", "x", "c", "v", "b", "n", "m", "ö", "ç"],
   ];
 
-  // Ana işaretler (her zaman görünür)
-  const primarySymbols = ["@", "-", "."];
+  // Ana işaretler (her zaman görünür) - En çok kullanılanlar
+  const primarySymbols = ["@", "-", ".", "_", "/", ",", ":", ";", "!", "?", "#", "(", ")"];
   
   // Ek işaretler (sembol modu açıkken görünür)
-  const secondarySymbols = ["_", "/", "\\", ",", ":", ";"];
+  const secondarySymbols = ["\\", "%", "&", "*", "+", "=", "[", "]", "{", "}", "$"];
   
   // Gösterilecek işaretler
   const displayedSymbols = isSymbol ? [...primarySymbols, ...secondarySymbols] : primarySymbols;
@@ -320,7 +320,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           {/* Sol Kolon - Gerçek QWERTY Klavye Düzeni */}
           <div className="space-y-1.5">
             {/* İşaret Butonları - Harflerin Üstünde */}
-            <div className="flex gap-1.5 justify-start">
+            <div className="flex gap-1 justify-start flex-wrap">
               {primarySymbols.map((symbol) => (
                 <button
                   key={symbol}
@@ -343,7 +343,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
                     e.stopPropagation();
                     handleKeyPress(symbol);
                   }}
-                  className="h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[40px]"
+                  className="h-10 px-2 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation min-w-[36px]"
                 >
                   {symbol}
                 </button>
