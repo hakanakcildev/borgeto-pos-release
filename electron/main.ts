@@ -67,6 +67,8 @@ function registerIpcHandlers() {
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
+// İmza kontrolünü devre dışı bırak (dijital imza olmadığı için)
+autoUpdater.verifySignature = false;
 
 // Configure auto-updater for production
 if (!isDev) {
@@ -81,6 +83,7 @@ if (!isDev) {
     console.log("- Current app version:", app.getVersion());
     console.log("- Auto download:", autoUpdater.autoDownload);
     console.log("- Auto install on quit:", autoUpdater.autoInstallOnAppQuit);
+    console.log("- Verify signature:", autoUpdater.verifySignature);
     console.log("- Update channel:", autoUpdater.channel || "latest");
     
     // Electron-updater GitHub provider için package.json'daki publish ayarlarını kullanır
