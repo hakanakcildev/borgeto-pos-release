@@ -3,7 +3,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { signInWithCredentials } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Lock, RefreshCw, FileText, X } from "lucide-react";
+import { Eye, EyeOff, Lock, RefreshCw, FileText, X, Keyboard } from "lucide-react";
+import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 
 export const Route = createFileRoute("/auth/login")({
   component: Login,
@@ -21,6 +22,45 @@ function Login() {
   
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+  const { openKeyboard, isOpen } = useTouchKeyboard();
+
+  // Klavye butonu tıklandığında aktif input'a focus ver ve klavyeyi aç
+  const handleKeyboardButtonClick = useCallback(() => {
+    const activeElement = document.activeElement;
+    let targetInput: HTMLInputElement | null = null;
+    let keyboardType: "text" | "email" | "password" = "text";
+    let currentValue = "";
+
+    // Aktif input'u kontrol et
+    if (activeElement === emailInputRef.current) {
+      targetInput = emailInputRef.current;
+      keyboardType = "email";
+      currentValue = email;
+    } else if (activeElement === passwordInputRef.current) {
+      targetInput = passwordInputRef.current;
+      keyboardType = "password";
+      currentValue = password;
+    } else if (emailInputRef.current) {
+      // Aktif input yoksa email input'una focus ver
+      targetInput = emailInputRef.current;
+      targetInput.focus();
+      keyboardType = "email";
+      currentValue = email;
+    } else if (passwordInputRef.current) {
+      targetInput = passwordInputRef.current;
+      targetInput.focus();
+      keyboardType = "password";
+      currentValue = password;
+    }
+
+    if (targetInput) {
+      openKeyboard(
+        { current: targetInput } as React.RefObject<HTMLInputElement>,
+        keyboardType,
+        currentValue
+      );
+    }
+  }, [openKeyboard, email, password]);
 
   // Giriş işlemi
   const handleLogin = useCallback(
@@ -236,14 +276,38 @@ function Login() {
               </div>
             </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full h-12 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white"
-              disabled={loading}
-            >
-              {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
-            </Button>
+            {/* Submit Button and Keyboard Button */}
+            <div className="flex gap-3">
+              <Button
+                type="submit"
+                className="flex-1 h-12 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={loading}
+              >
+                {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
+              </Button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleKeyboardButtonClick();
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleKeyboardButtonClick();
+                }}
+                className={`h-12 w-12 rounded-lg transition-colors touch-manipulation flex items-center justify-center ${
+                  isOpen
+                    ? "bg-blue-100 text-blue-600"
+                    : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                }`}
+                aria-label="Klavyeyi Aç"
+                title="Klavyeyi Aç"
+              >
+                <Keyboard className="h-6 w-6" />
+              </button>
+            </div>
           </form>
 
           {/* Info Text */}
