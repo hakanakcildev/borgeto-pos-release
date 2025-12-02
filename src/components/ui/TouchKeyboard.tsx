@@ -233,11 +233,11 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
     );
   }
 
-  // Gerçek QWERTY klavye düzeni
+  // Türkçe QWERTY klavye düzeni
   const qwertyLayout = [
-    ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-    ["z", "x", "c", "v", "b", "n", "m"],
+    ["q", "w", "e", "r", "t", "y", "u", "ı", "o", "p", "ğ", "ü"],
+    ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ş", "i"],
+    ["z", "x", "c", "v", "b", "n", "m", "ö", "ç"],
   ];
 
   // Ana işaretler (her zaman görünür)
@@ -257,9 +257,22 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
   ];
   const zeroKey = "0";
 
-  // Shift ile büyük harfler
+  // Shift ile büyük harfler (Türkçe karakterler için özel dönüşüm)
   const getDisplayLetter = (letter: string) => {
-    return isShift ? letter.toUpperCase() : letter;
+    if (!isShift) return letter;
+    
+    // Türkçe karakterler için özel dönüşüm
+    const turkishMap: Record<string, string> = {
+      "ı": "I",
+      "i": "İ",
+      "ğ": "Ğ",
+      "ü": "Ü",
+      "ş": "Ş",
+      "ö": "Ö",
+      "ç": "Ç",
+    };
+    
+    return turkishMap[letter] || letter.toUpperCase();
   };
 
   return (
