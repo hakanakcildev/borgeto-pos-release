@@ -470,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.49
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.50
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -489,6 +489,37 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.50 - 404 Sorunu KESİN ÇÖZÜM! (Son Güncelleme)
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        ✅ Electron before-quit event'i devre dışı - oturum artık kalıcı
+                      </li>
+                      <li>
+                        ✅ localStorage artık uygulama kapanınca temizlenmiyor
+                      </li>
+                      <li>
+                        ✅ 404 sayfası tamamen kaldırıldı - direkt yönlendirme yapılıyor
+                      </li>
+                      <li>
+                        ✅ Agresif route kontrolü - authenticated kullanıcılar her zaman masalar sayfasında
+                      </li>
+                      <li>
+                        ✅ Detaylı console log'lar - sorunları kolayca takip edebilirsiniz
+                      </li>
+                      <li>
+                        ✅ AuthContext geliştirildi - daha güvenilir auth yükleme
+                      </li>
+                      <li>
+                        🎯 SORUN: Program açıldığında 404 sayfası gösteriyordu
+                      </li>
+                      <li>
+                        🎯 ÇÖZÜM: Oturum artık kalıcı ve her durumda doğru sayfaya yönlendiriliyor
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.49 - Güncelleme Hatası ve 404 Sayfası Düzeltmesi

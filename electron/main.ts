@@ -457,22 +457,22 @@ app.on("window-all-closed", () => {
   }
 });
 
-// Uygulama kapanmadan önce localStorage'ı temizle
-app.on("before-quit", () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    // WebContents'e localStorage temizleme komutu gönder
-    mainWindow.webContents.executeJavaScript(`
-      try {
-        localStorage.removeItem("posAuth");
-        console.log("localStorage cleaned on app quit");
-      } catch (e) {
-        console.error("Error cleaning localStorage:", e);
-      }
-    `).catch(err => {
-      console.error("Failed to clean localStorage:", err);
-    });
-  }
-});
+// Uygulama kapanmadan önce localStorage'ı TEMİZLEME - oturum kalıcı olsun
+// app.on("before-quit", () => {
+//   if (mainWindow && !mainWindow.isDestroyed()) {
+//     // WebContents'e localStorage temizleme komutu gönder
+//     mainWindow.webContents.executeJavaScript(`
+//       try {
+//         localStorage.removeItem("posAuth");
+//         console.log("localStorage cleaned on app quit");
+//       } catch (e) {
+//         console.error("Error cleaning localStorage:", e);
+//       }
+//     `).catch(err => {
+//       console.error("Failed to clean localStorage:", err);
+//     });
+//   }
+// });
 
 app.on("activate", () => {
   // On macOS, re-create window when dock icon is clicked

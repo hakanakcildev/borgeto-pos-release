@@ -45,19 +45,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const loadSessionAuth = () => {
       try {
         const posAuthStr = localStorage.getItem("posAuth");
+        console.log("🔑 Loading auth from localStorage:", posAuthStr ? "Found" : "Not found");
         if (posAuthStr) {
           const posAuth = JSON.parse(posAuthStr);
+          console.log("✅ Auth data loaded:", {
+            type: posAuth.type,
+            hasUser: !!posAuth.user,
+            hasBranch: !!posAuth.branch,
+            hasCompany: !!posAuth.company
+          });
           setAuthType(posAuth.type);
           setCompanyId(posAuth.companyId);
           setBranchId(posAuth.branchId);
           setUserData(posAuth.user || null);
           setBranchData(posAuth.branch || null);
           setCompanyData(posAuth.company || null);
+        } else {
+          console.log("ℹ️ No auth data in localStorage");
         }
       } catch (error) {
+        console.error("❌ Error loading auth from localStorage:", error);
       } finally {
         // Always set loading to false after initial load
         setLoading(false);
+        console.log("✅ Auth loading complete");
       }
     };
 
