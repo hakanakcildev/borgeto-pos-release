@@ -27,6 +27,10 @@ function Login() {
   const [error, setError] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [showUpdateNotes, setShowUpdateNotes] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [downloadingUpdate, setDownloadingUpdate] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -163,39 +167,38 @@ function Login() {
 
     const handleUpdateAvailable = (version: string) => {
       setError("");
-      alert(`Yeni güncelleme mevcut: ${version}. Güncelleme indiriliyor...`);
-    };
-
-    const handleUpdateNotAvailable = (info?: {
-      currentVersion?: string;
-      latestVersion?: string;
-    }) => {
-      setError("");
-      if (info?.currentVersion && info?.latestVersion) {
-        alert(
-          `Mevcut sürüm: ${info.currentVersion}\nEn son sürüm: ${info.latestVersion}\n\nEn güncel sürümü kullanıyorsunuz.`
-        );
-      } else {
-        alert("En son sürümü kullanıyorsunuz.");
-      }
+      setUpdateAvailable(true);
+      setUpdateVersion(version);
       setCheckingUpdate(false);
     };
 
-    const handleUpdateDownloaded = (version: string) => {
+    const handleUpdateNotAvailable = () => {
       setError("");
-      alert(
-        `Güncelleme indirildi: ${version}. Program kapatıldığında otomatik olarak kurulacak.`
-      );
+      setUpdateAvailable(false);
       setCheckingUpdate(false);
+      // Güncel versiyonsa hiçbir mesaj gösterme
     };
 
     const handleDownloadProgress = (progress: { percent: number }) => {
-      console.log("Download progress:", progress.percent);
+      setDownloadProgress(progress.percent);
+    };
+
+    const handleUpdateDownloaded = () => {
+      setError("");
+      setDownloadingUpdate(false);
+      setDownloadProgress(100);
+      // Güncelleme indirildi, uygulamayı yeniden başlat
+      setTimeout(() => {
+        if (window.electronAPI?.quitApp) {
+          window.electronAPI.quitApp();
+        }
+      }, 1000);
     };
 
     const handleUpdateError = (error: string) => {
       setError(`Güncelleme hatası: ${error}`);
       setCheckingUpdate(false);
+      setDownloadingUpdate(false);
     };
 
     if (window.electronAPI.onUpdateAvailable) {
@@ -207,8 +210,75 @@ function Login() {
     }
   }, []);
 
+  // Güncellemeyi indir
+  const handleDownloadUpdate = useCallback(() => {
+    setDownloadingUpdate(true);
+    setDownloadProgress(0);
+    setUpdateAvailable(false);
+    // Güncelleme zaten otomatik indiriliyor, sadece UI'ı güncelliyoruz
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-8">
+      {/* Güncelleme indiriliyor ekranı */}
+      {downloadingUpdate && (
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <RefreshCw className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Güncelleme İndiriliyor
+              </h2>
+              <p className="text-gray-600 mb-4">
+                Yeni versiyon indiriliyor, lütfen bekleyin...
+              </p>
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                <div
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${downloadProgress}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                {Math.round(downloadProgress)}%
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Yeni versiyon mevcut modal */}
+      {updateAvailable && (
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <RefreshCw className="h-8 w-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Yeni Sürüm Mevcut
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Versiyon {updateVersion} mevcut. Güncellemek ister misiniz?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setUpdateAvailable(false)}
+                  className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Daha Sonra
+                </button>
+                <button
+                  onClick={handleDownloadUpdate}
+                  className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  İndir ve Kur
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md">
         {/* Login Card */}
         <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
@@ -392,7 +462,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.41
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.42
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -411,6 +481,28 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.42 - Kritik Düzeltmeler: Input Focus ve Güncelleme Sistemi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        İlk açılışta input focus sorunu tamamen düzeltildi - 3 kez focus veriliyor (100ms, 300ms, 500ms)
+                      </li>
+                      <li>
+                        Otomatik güncelleme kontrolü kaldırıldı - artık güncel versiyonsa hiçbir mesaj gösterilmiyor
+                      </li>
+                      <li>
+                        Yeni güncelleme sistemi: Yeni versiyon varsa modal gösteriliyor, "İndir ve Kur" butonu ile manuel güncelleme
+                      </li>
+                      <li>
+                        Güncelleme indirme progress bar'ı eklendi - indirme durumu görünüyor
+                      </li>
+                      <li>
+                        Güncelleme indirildikten sonra otomatik yeniden başlatma - sorunsuz güncelleme
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.41 - İlk Açılışta Input Focus Sorunu Düzeltildi

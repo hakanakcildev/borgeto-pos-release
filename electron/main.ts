@@ -193,12 +193,23 @@ const createWindow = (): void => {
     
     // Focus'u window'a ver (input'ların çalışması için)
     mainWindow?.focus();
+    mainWindow?.webContents.focus();
     
-    // Kısa bir gecikme ile tekrar focus ver (güvenlik için)
+    // Birden fazla kez focus ver (input'ların kesinlikle çalışması için)
     setTimeout(() => {
       mainWindow?.focus();
       mainWindow?.webContents.focus();
     }, 100);
+    
+    setTimeout(() => {
+      mainWindow?.focus();
+      mainWindow?.webContents.focus();
+    }, 300);
+    
+    setTimeout(() => {
+      mainWindow?.focus();
+      mainWindow?.webContents.focus();
+    }, 500);
     
     // Open DevTools in development
     if (isDev) {
