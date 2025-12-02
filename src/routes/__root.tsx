@@ -91,7 +91,6 @@ function RootComponent() {
         }
       } catch (error) {
         console.error("Versiyon kontrolü hatası:", error);
-        setIsCheckingUpdate(false);
       }
     };
 
