@@ -67,13 +67,12 @@ function registerIpcHandlers() {
 // Auto-updater configuration
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
-// İmza kontrolünü devre dışı bırak (dijital imza olmadığı için)
-autoUpdater.verifySignature = false;
+// İmza kontrolü package.json'daki "win.verifyUpdateCodeSignature: false" ayarı ile devre dışı bırakıldı
 
 // Configure auto-updater for production
 if (!isDev) {
   // Electron-updater otomatik olarak package.json'daki publish ayarlarını kullanır
-  // Ancak manuel olarak da ayarlayabiliriz
+  // verifyUpdateCodeSignature ayarı package.json'da false olarak ayarlandı
   try {
     // GitHub provider için gerekli bilgileri ayarla
     // Bu bilgiler package.json'daki publish ayarlarından otomatik okunur
@@ -83,8 +82,8 @@ if (!isDev) {
     console.log("- Current app version:", app.getVersion());
     console.log("- Auto download:", autoUpdater.autoDownload);
     console.log("- Auto install on quit:", autoUpdater.autoInstallOnAppQuit);
-    console.log("- Verify signature:", autoUpdater.verifySignature);
     console.log("- Update channel:", autoUpdater.channel || "latest");
+    console.log("- Signature verification: disabled (verifyUpdateCodeSignature: false)");
     
     // Electron-updater GitHub provider için package.json'daki publish ayarlarını kullanır
     // Bu yüzden manuel feed URL ayarlamaya gerek yok
