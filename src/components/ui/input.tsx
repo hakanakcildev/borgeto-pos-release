@@ -116,8 +116,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                 // Mouse event'inden pozisyon al
                 const rect = currentInput.getBoundingClientRect();
                 const x = e.clientX - rect.left;
-                const textBeforeCursor = currentInput.value.substring(0, currentInput.selectionStart || 0);
-                // Basit bir yaklaşım: değer uzunluğunun yarısına cursor koy
+                // Basit bir yaklaşım: tıklanan pozisyona göre cursor koy
                 const clickPosition = Math.min(
                   Math.max(0, Math.floor((x / rect.width) * currentInput.value.length)),
                   currentInput.value.length
