@@ -470,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.53
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.56
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -489,6 +489,62 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border-2 border-blue-300">
+                    <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center gap-2">
+                      <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-md">YENİ</span>
+                      v1.0.56 - Ödeme Ekranı UI/UX İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">🎨</span>
+                        <span><strong>Dinamik Etiket Sistemi:</strong> Ödeme ekranında akıllı etiket gösterimi</span>
+                      </li>
+                      <li className="flex items-start gap-2 ml-6">
+                        <span className="text-green-600">✓</span>
+                        <span>Sol tarafta ürün seçilmediğinde '<strong>Alınacak Ödeme</strong>' (yeşil renk ile vurgulanmış)</span>
+                      </li>
+                      <li className="flex items-start gap-2 ml-6">
+                        <span className="text-green-600">✓</span>
+                        <span>Sağ tarafta (kısmi ödeme) ürün seçildiğinde '<strong>Alınacak Ödeme</strong>' (yeşil renk ile vurgulanmış)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">📱</span>
+                        <span><strong>İki Panel Sistemi:</strong> Sol panel (tüm ürünler), Sağ panel (kısmi ödeme alanı)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✨</span>
+                        <span>Daha anlaşılır ödeme akışı ve görsel ayrım</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✨</span>
+                        <span>Yeşil renk ile alınacak ödeme vurgusu</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✨</span>
+                        <span>Kısmi ödeme seçimlerinde net görsel geri bildirim</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>Dinamik CSS sınıfları ve state bazlı etiket değişimi</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.55 - Ödeme Ekranı Dinamik Etiket Sistemi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        ✅ Ödeme ekranında dinamik etiket gösterimi eklendi
+                      </li>
+                      <li>
+                        ✅ Yeşil renk ile alınacak ödeme vurgusu
+                      </li>
+                      <li>
+                        ✅ Kısmi ödeme ve tam ödeme ayrımı netleştirildi
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.53 - Klavye Delete Butonu Düzeltmesi

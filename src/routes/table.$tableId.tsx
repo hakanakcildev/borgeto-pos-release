@@ -218,7 +218,7 @@ function TableDetailContent() {
     useState<string>("");
   const [showPaymentScreenDiscountModal, setShowPaymentScreenDiscountModal] =
     useState(false);
-  const [selectedNumericKey, setSelectedNumericKey] = useState<number | null>(
+  const [, setSelectedNumericKey] = useState<number | null>(
     null
   );
   const [paymentScreenQuantityInput, setPaymentScreenQuantityInput] = useState<string>("");
