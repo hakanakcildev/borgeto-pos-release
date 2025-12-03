@@ -41,6 +41,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 import {
   ArrowLeft,
   ArrowRight,
@@ -147,6 +148,8 @@ function TableDetailContent() {
     null
   );
   const [itemNote, setItemNote] = useState("");
+  const itemNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const { openKeyboard } = useTouchKeyboard();
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
@@ -218,6 +221,7 @@ function TableDetailContent() {
   const [selectedNumericKey, setSelectedNumericKey] = useState<number | null>(
     null
   );
+  const [paymentScreenQuantityInput, setPaymentScreenQuantityInput] = useState<string>("");
   // Paket masaları için kurye atama state'leri
   const [paymentScreenSelectedCourierId, setPaymentScreenSelectedCourierId] = useState<string>("");
   const [paymentScreenChangeAmount, setPaymentScreenChangeAmount] = useState<string>("0");
@@ -1988,6 +1992,25 @@ function TableDetailContent() {
       selectedMoveQuantities,
     ]
   );
+
+  // Not ekleme modalı açıldığında Textarea'ya focus ver ve klavyeyi aç
+  useEffect(() => {
+    if (showAddNoteModal && itemNoteTextareaRef.current) {
+      // Kısa bir gecikme ile focus ver (modal render olması için)
+      setTimeout(() => {
+        if (itemNoteTextareaRef.current) {
+          itemNoteTextareaRef.current.focus();
+          // Klavyeyi aç
+          const currentValue = itemNoteTextareaRef.current.value || "";
+          openKeyboard(
+            itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
+            "text",
+            currentValue
+          );
+        }
+      }, 100);
+    }
+  }, [showAddNoteModal, openKeyboard]);
 
   // Taşı modalı açıldığında masaları yükle
   useEffect(() => {
@@ -5105,10 +5128,13 @@ function TableDetailContent() {
                     Not (Opsiyonel)
                   </label>
                   <Textarea
+                    ref={itemNoteTextareaRef}
                     value={itemNote}
                     onChange={(e) => setItemNote(e.target.value)}
                     placeholder="Örn: Az baharatlı, ekstra peynir..."
                     className="h-24"
+                    showTouchKeyboard={true}
+                    showKeyboardButton={true}
                   />
                 </div>
                 <div className="flex gap-2">
@@ -5849,6 +5875,7 @@ function TableDetailContent() {
                     setPaymentScreenSelectedItems(new Set());
                     setPaymentScreenSelectedQuantities(new Map());
                     setSelectedNumericKey(null);
+                    setPaymentScreenQuantityInput("");
                   }}
                   className="flex items-center gap-2"
                 >
@@ -5866,6 +5893,7 @@ function TableDetailContent() {
                     setPaymentScreenManualDiscount("");
                     setPaymentScreenSelectedItems(new Set());
                     setPaymentScreenSelectedQuantities(new Map());
+                    setPaymentScreenQuantityInput("");
                     setSelectedNumericKey(null);
                     navigateToHome();
                   }}
@@ -5879,7 +5907,7 @@ function TableDetailContent() {
 
             {/* Content */}
             <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Üst Kısım - Ürünler ve Seçilen Ürünler */}
+              {/* Üst Kısım - Ürünler ve Kısmi Ödeme Alanı */}
               <div className="flex-1 overflow-hidden flex border-b border-gray-200 dark:border-gray-700">
                 {/* Sol Taraf - Tüm Ürünler */}
                 <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-gray-700">
@@ -5895,11 +5923,6 @@ function TableDetailContent() {
                           <div
                             key={index}
                             onClick={() => {
-                              // Numeric keypad'de seçili sayı varsa o kadar, yoksa 1 adet ekle
-                              const quantityToAdd =
-                                selectedNumericKey !== null
-                                  ? selectedNumericKey
-                                  : 1;
                               const newSelected = new Set(
                                 paymentScreenSelectedItems
                               );
@@ -5907,30 +5930,67 @@ function TableDetailContent() {
                                 paymentScreenSelectedQuantities
                               );
 
+                              let quantityToAdd = 0.5;
+                              
+                              // Miktar girişi varsa onu kullan
+                              if (paymentScreenQuantityInput) {
+                                // Virgülü noktaya çevir ve parse et
+                                const quantityStr = paymentScreenQuantityInput.replace(",", ".");
+                                const parsedQuantity = parseFloat(quantityStr);
+                                if (!isNaN(parsedQuantity) && parsedQuantity > 0) {
+                                  quantityToAdd = parsedQuantity;
+                                }
+                              } else {
+                                // Miktar girişi yoksa akıllı seçim yap
+                                if (newSelected.has(index)) {
+                                  // Zaten seçiliyse, 1 adet artır
+                                  quantityToAdd = 1;
+                                  } else {
+                                    // Yeni seçiliyorsa
+                                    // Eğer ürünün miktarı tam sayı ise, 1 adet seç
+                                    // Eğer küsüratlı ise, küsürat kadar seç
+                                    const roundedQuantity = Math.round(itemQuantity * 100) / 100;
+                                    if (roundedQuantity % 1 === 0) {
+                                      // Tam sayı (1, 2, 3, 4, vb.)
+                                      quantityToAdd = 1;
+                                    } else {
+                                      // Küsüratlı sayı (1.5, 1.25, 2.75, vb.)
+                                      // Küsüratı bul ve yuvarla (örn: 1.5 → 0.5, 1.25 → 0.25, 0.8799999 → 0.88)
+                                      const fractionalPart = roundedQuantity % 1;
+                                      quantityToAdd = Math.round(fractionalPart * 100) / 100;
+                                    }
+                                  }
+                              }
+
                               // Eğer zaten seçiliyse, adetini artır
                               if (newSelected.has(index)) {
                                 const currentQty =
                                   newQuantities.get(index) || 0;
+                                const roundedCurrentQty = Math.round(currentQty * 100) / 100;
+                                const roundedItemQty = Math.round(itemQuantity * 100) / 100;
                                 const newQty = Math.min(
-                                  currentQty + quantityToAdd,
-                                  itemQuantity
+                                  roundedCurrentQty + quantityToAdd,
+                                  roundedItemQty
                                 );
-                                newQuantities.set(index, newQty);
+                                // Yuvarlanmış değeri kaydet
+                                newQuantities.set(index, Math.round(newQty * 100) / 100);
                               } else {
                                 // Yeni seçiliyorsa, seçilen sayı kadar ekle
+                                const roundedItemQty = Math.round(itemQuantity * 100) / 100;
                                 const finalQty = Math.min(
                                   quantityToAdd,
-                                  itemQuantity
+                                  roundedItemQty
                                 );
                                 newSelected.add(index);
-                                newQuantities.set(index, finalQty);
+                                // Yuvarlanmış değeri kaydet
+                                newQuantities.set(index, Math.round(finalQty * 100) / 100);
                               }
 
                               setPaymentScreenSelectedItems(newSelected);
                               setPaymentScreenSelectedQuantities(newQuantities);
 
-                              // Numeric keypad seçimini temizle (kullanıldı)
-                              setSelectedNumericKey(null);
+                              // Miktar girişini temizle (kullanıldı)
+                              setPaymentScreenQuantityInput("");
 
                               // Seçili ürünlerin toplamını hesapla
                               const selectedTotal = Array.from(
@@ -5971,16 +6031,48 @@ function TableDetailContent() {
                   {/* Tüm Ürünler Toplamı */}
                   <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700/50 min-h-[80px] flex items-center">
                     <div className="space-y-1 w-full">
-                      <div className="flex justify-end items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Toplam
-                        </span>
-                        <span className="text-xl font-bold text-gray-900 dark:text-white">
-                          ₺
-                          {order.items
-                            .reduce((sum, item) => sum + item.subtotal, 0)
-                            .toFixed(2)}
-                        </span>
+                      <div className="flex justify-between items-center gap-4">
+                        {/* Miktar Göstergesi */}
+                        <div className="flex items-center gap-3">
+                          <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg border-2 border-gray-300 dark:border-gray-600 flex items-center gap-3 min-w-[200px]">
+                            <div className="flex-1">
+                              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Miktar
+                              </div>
+                              <div className="text-xl font-bold text-gray-900 dark:text-white">
+                                {paymentScreenQuantityInput || "0"}
+                              </div>
+                            </div>
+                            {/* C (Temizle) Tuşu */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                // Tümünü temizle
+                                setPaymentScreenQuantityInput("");
+                              }}
+                              className="h-8 w-8 p-0"
+                            >
+                              C
+                            </Button>
+                          </div>
+                        </div>
+                        {/* Toplam / Alınacak Ödeme */}
+                        <div className="flex justify-end items-center gap-2">
+                          <span className={`text-sm font-medium ${
+                            paymentScreenSelectedItems.size === 0 
+                              ? "text-green-600 dark:text-green-400" 
+                              : "text-gray-700 dark:text-gray-300"
+                          }`}>
+                            {paymentScreenSelectedItems.size === 0 ? "Alınacak Ödeme" : "Toplam"}
+                          </span>
+                          <span className="text-xl font-bold text-gray-900 dark:text-white">
+                            ₺
+                            {order.items
+                              .reduce((sum, item) => sum + item.subtotal, 0)
+                              .toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                       {(() => {
                         const baseAmount = order.items.reduce(
@@ -6031,25 +6123,27 @@ function TableDetailContent() {
                   </div>
                 </div>
 
-                {/* Sağ Taraf - Seçilen Ürünler */}
+                {/* Sağ Taraf - Kısmi Ödeme Alanı */}
                 <div className="w-96 flex flex-col bg-gray-50 dark:bg-gray-800">
                   <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Seçilen Ürünler
+                      Kısmi Ödeme Alanı
                     </h3>
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-4">
                     {paymentScreenSelectedItems.size === 0 ? (
                       <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-8">
-                        Seçili ürün yok
+                        Kısmi ödeme için ürün seçilmedi
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {Array.from(paymentScreenSelectedItems).map((index) => {
                           const item = order.items[index];
-                          const selectedQty =
+                          const rawSelectedQty =
                             paymentScreenSelectedQuantities.get(index) || 1;
+                          // Miktarı 2 ondalık basamağa yuvarla
+                          const selectedQty = Math.round(rawSelectedQty * 100) / 100;
                           const itemPrice = selectedQty * item.menuPrice;
 
                           return (
@@ -6085,11 +6179,14 @@ function TableDetailContent() {
                                         newSelected
                                       ).reduce((sum, idx) => {
                                         const item = order.items[idx];
-                                        const selectedQty =
+                                        const rawSelectedQty =
                                           newQuantities.get(idx) || 1;
+                                        // Miktarı yuvarla
+                                        const selectedQty = Math.round(rawSelectedQty * 100) / 100;
+                                        const roundedItemQty = Math.round(item.quantity * 100) / 100;
                                         const actualQty = Math.min(
                                           selectedQty,
-                                          item.quantity
+                                          roundedItemQty
                                         );
                                         return sum + actualQty * item.menuPrice;
                                       }, 0);
@@ -6121,12 +6218,16 @@ function TableDetailContent() {
                     )}
                   </div>
 
-                  {/* Seçilen Ürünler Toplamı */}
+                  {/* Kısmi Ödeme Alanı Toplamı */}
                   <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700/50 min-h-[80px] flex items-center">
                     <div className="space-y-1 w-full">
                       <div className="flex justify-end items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Toplam
+                        <span className={`text-sm font-medium ${
+                          paymentScreenSelectedItems.size > 0 
+                            ? "text-green-600 dark:text-green-400" 
+                            : "text-gray-700 dark:text-gray-300"
+                        }`}>
+                          {paymentScreenSelectedItems.size > 0 ? "Alınacak Ödeme" : "Toplam"}
                         </span>
                         <span className="text-xl font-bold text-gray-900 dark:text-white">
                           ₺
@@ -6136,11 +6237,14 @@ function TableDetailContent() {
                                 paymentScreenSelectedItems
                               ).reduce((sum, idx) => {
                                 const item = order.items[idx];
-                                const selectedQty =
+                                const rawSelectedQty =
                                   paymentScreenSelectedQuantities.get(idx) || 1;
+                                // Miktarı yuvarla
+                                const selectedQty = Math.round(rawSelectedQty * 100) / 100;
+                                const roundedItemQty = Math.round(item.quantity * 100) / 100;
                                 const actualQty = Math.min(
                                   selectedQty,
-                                  item.quantity
+                                  roundedItemQty
                                 );
                                 return sum + actualQty * item.menuPrice;
                               }, 0);
@@ -6156,12 +6260,15 @@ function TableDetailContent() {
                             ? Array.from(paymentScreenSelectedItems).reduce(
                                 (sum, idx) => {
                                   const item = order.items[idx];
-                                  const selectedQty =
+                                  const rawSelectedQty =
                                     paymentScreenSelectedQuantities.get(idx) ||
                                     1;
+                                  // Miktarı yuvarla
+                                  const selectedQty = Math.round(rawSelectedQty * 100) / 100;
+                                  const roundedItemQty = Math.round(item.quantity * 100) / 100;
                                   const actualQty = Math.min(
                                     selectedQty,
-                                    item.quantity
+                                    roundedItemQty
                                   );
                                   return sum + actualQty * item.menuPrice;
                                 },
@@ -6223,23 +6330,57 @@ function TableDetailContent() {
                   {/* Sol Taraf - Numeric Keypad */}
                   <div className="w-80">
                     <div className="grid grid-cols-3 gap-3">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                         <Button
                           key={num}
-                          variant={
-                            selectedNumericKey === num ? "default" : "outline"
-                          }
+                          variant="outline"
                           onClick={() => {
-                            // Numeric keypad'de sayı seç/seçimi kaldır
-                            setSelectedNumericKey(
-                              selectedNumericKey === num ? null : num
-                            );
+                            // Sayı ekle
+                            setPaymentScreenQuantityInput((prev) => prev + num.toString());
                           }}
                           className="h-14 text-xl font-semibold"
                         >
                           {num}
                         </Button>
                       ))}
+                      {/* Virgül tuşu */}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          // Virgül ekle (eğer yoksa)
+                          setPaymentScreenQuantityInput((prev) => {
+                            if (prev.includes(",") || prev.includes(".")) {
+                              return prev;
+                            }
+                            return prev === "" ? "0," : prev + ",";
+                          });
+                        }}
+                        className="h-14 text-xl font-semibold"
+                      >
+                        ,
+                      </Button>
+                      {/* 0 tuşu */}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          // 0 ekle
+                          setPaymentScreenQuantityInput((prev) => prev + "0");
+                        }}
+                        className="h-14 text-xl font-semibold"
+                      >
+                        0
+                      </Button>
+                      {/* Silme tuşu */}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          // Son karakteri sil
+                          setPaymentScreenQuantityInput((prev) => prev.slice(0, -1));
+                        }}
+                        className="h-14 text-xl font-semibold text-red-600 dark:text-red-400"
+                      >
+                        <Delete className="h-5 w-5" />
+                      </Button>
                     </div>
                   </div>
 
@@ -6479,6 +6620,7 @@ function TableDetailContent() {
                                 setShowFullScreenPayment(false);
                                 setPaymentScreenAmount("");
                                 setPaymentScreenDiscountType("percentage");
+                                setPaymentScreenQuantityInput("");
                                 setPaymentScreenDiscountValue("");
                                 setPaymentScreenManualDiscount("");
                                 setPaymentScreenSelectedItems(new Set());

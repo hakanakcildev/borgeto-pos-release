@@ -90,7 +90,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
       <div
         ref={keyboardRef}
         className={cn(
-          "fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl z-50 transition-transform duration-300",
+          "fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl z-[60] transition-transform duration-300",
           isOpen ? "translate-y-0" : "translate-y-full"
         )}
       >
@@ -279,7 +279,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
       ref={keyboardRef}
       data-keyboard-container
       className={cn(
-        "fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl z-50 transition-transform duration-300",
+        "fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl z-[60] transition-transform duration-300",
         isOpen ? "translate-y-0" : "translate-y-full"
       )}
     >
@@ -535,30 +535,30 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
           >
             ⇧
           </button>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleKeyPress(" ");
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleKeyPress(" ");
-            }}
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleKeyPress(" ");
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleKeyPress(" ");
+              }}
             className="flex-1 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium text-gray-900 dark:text-white transition-colors touch-manipulation"
-          >
-            Boşluk
-          </button>
+            >
+              Boşluk
+            </button>
           {onEnter && (
             <button
               type="button"

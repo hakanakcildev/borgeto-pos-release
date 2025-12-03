@@ -17,14 +17,9 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     // Ref'i birleştir
     React.useImperativeHandle(ref, () => textareaRef.current as HTMLTextAreaElement, []);
 
-    // Dokunmatik ekran kontrolü
+    // Dokunmatik ekran kontrolü - her zaman true (POS sistemleri için)
     const isTouchDevice = React.useMemo(() => {
-      return (
-        "ontouchstart" in window ||
-        navigator.maxTouchPoints > 0 ||
-        // @ts-ignore
-        navigator.msMaxTouchPoints > 0
-      );
+      return true; // POS sistemleri için her zaman dokunmatik klavye göster
     }, []);
 
     const handleOpenKeyboard = React.useCallback(() => {
