@@ -470,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.51
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.52
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -489,6 +489,31 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.52 - Otomatik Güncelleme ve Kurulum Sonrası Başlatma
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        ✅ Otomatik güncelleme kontrolü eklendi - Program açıldığında 3 saniye sonra kontrol
+                      </li>
+                      <li>
+                        ✅ Yeni versiyon varsa otomatik olarak "İndir ve Kur" modalı gösteriliyor
+                      </li>
+                      <li>
+                        ✅ runAfterFinish: true - Kurulum sonrası program otomatik başlatılıyor
+                      </li>
+                      <li>
+                        ✅ Güncelleme indirildikten sonra otomatik yeniden başlatma
+                      </li>
+                      <li>
+                        🎯 ÖZELLİK: İlk açılışta otomatik güncelleme kontrolü
+                      </li>
+                      <li>
+                        🎯 ÖZELLİK: Kurulum sonrası otomatik başlatma
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.51 - File Protocol Routing Fix (GERÇEK ÇÖZÜM!)

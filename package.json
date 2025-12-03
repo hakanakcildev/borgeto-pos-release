@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "1.0.51",
+  "version": "1.0.52",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -133,7 +133,7 @@
       "createStartMenuShortcut": true,
       "artifactName": "${productName} Setup ${version}.${ext}",
       "shortcutName": "${productName}",
-      "runAfterFinish": false,
+      "runAfterFinish": true,
       "deleteAppDataOnUninstall": true,
       "installerIcon": "public/borgeto-logo.ico",
       "uninstallerIcon": "public/borgeto-logo.ico",

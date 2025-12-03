@@ -353,8 +353,16 @@ app.on("ready", () => {
   
   createWindow();
 
-  // Update kontrolü artık frontend'den yapılıyor (__root.tsx'te)
-  // Bu sayede loading ekranı gösterilebiliyor
+  // Otomatik güncelleme kontrolü - production'da çalışır
+  if (!isDev) {
+    console.log("🔍 Starting automatic update check on app ready...");
+    // Window hazır olduktan 3 saniye sonra güncelleme kontrolü yap
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error("❌ Error checking for updates on startup:", err);
+      });
+    }, 3000);
+  }
 
   // Set application menu (sadece development'ta)
   if (isDev) {
