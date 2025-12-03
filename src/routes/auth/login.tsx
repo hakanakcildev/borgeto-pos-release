@@ -470,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.50
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.51
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -489,6 +489,34 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.51 - File Protocol Routing Fix (GERÇEK ÇÖZÜM!)
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        🔥 FILE PROTOCOL SORUNU ÇÖZÜLDÜ - Electron file:// protokolü ile yüklendiğinde router çalışmıyordu
+                      </li>
+                      <li>
+                        ✅ DOMContentLoaded event'inde manuel navigation eklendi
+                      </li>
+                      <li>
+                        ✅ History API ile path düzeltme yapılıyor
+                      </li>
+                      <li>
+                        ✅ Authenticated kullanıcılar için otomatik "/" redirect
+                      </li>
+                      <li>
+                        ✅ 100ms gecikme ile router state güvenli şekilde kontrol ediliyor
+                      </li>
+                      <li>
+                        🎯 SORUN: file:// protokolü router'ı bozuyordu
+                      </li>
+                      <li>
+                        🎯 ÇÖZÜM: Manuel navigation ve history API ile düzeltme
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.50 - 404 Sorunu KESİN ÇÖZÜM! (Son Güncelleme)
