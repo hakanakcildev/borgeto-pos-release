@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { type User as FirebaseUser } from "firebase/auth";
 import { onAuthStateChange, getCurrentUserData } from "../lib/firebase/auth";
+import { clearAllTableHistory } from "../lib/firebase/tableHistory";
 import type { User, Branch, Company } from "../lib/firebase/types";
 
 interface AuthContextType {
@@ -154,6 +155,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return unsubscribe;
   }, []);
+
+  // Masa geçmişi temizleme dinleyicisi (Electron IPC event)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.electronAPI?.onTriggerClearTableHistory) {
+      console.log("🗑️ Setting up table history cleanup listener");
+      
+      window.electronAPI.onTriggerClearTableHistory(async () => {
+        console.log("🗑️ Table history cleanup triggered");
+        
+        // Eğer authenticated ise companyId ve branchId'yi al
+        if (companyId) {
+          try {
+            console.log("🗑️ Clearing table history for company:", companyId, "branch:", branchId);
+            await clearAllTableHistory(companyId, branchId || undefined);
+            console.log("✅ Table history cleared successfully");
+          } catch (error) {
+            console.error("❌ Error clearing table history:", error);
+          }
+        } else {
+          console.log("⚠️ Cannot clear table history: no company ID");
+        }
+      });
+    }
+  }, [companyId, branchId]);
 
   const value: AuthContextType = {
     currentUser,

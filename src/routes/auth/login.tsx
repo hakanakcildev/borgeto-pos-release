@@ -431,7 +431,7 @@ function Login() {
               ) : (
                 <>
                   <RefreshCw className="h-5 w-5 mr-2" />
-                  Güncellemeleri Kontrol Et
+                  Güncelleme Kontrolü
                 </>
               )}
             </button>
@@ -441,7 +441,7 @@ function Login() {
               className="flex-1 h-12 text-sm font-medium border-2 border-gray-400 rounded-lg bg-gray-200 text-gray-900 hover:bg-gray-300 flex items-center justify-center transition-colors"
             >
               <FileText className="h-5 w-5 mr-2" />
-              Güncelleme Notları
+              Sürüm Notları
             </button>
           </div>
         </div>
@@ -470,7 +470,7 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.52
+                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.53
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     Son Güncelleme:{" "}
@@ -489,6 +489,28 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.53 - Klavye Delete Butonu Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        ✅ Klavyede ç harfinin yanındaki delete butonu düzeltildi
+                      </li>
+                      <li>
+                        ✅ Delete butonu artık karakter silme işlevi görüyor
+                      </li>
+                      <li>
+                        ✅ Kırmızı renk ve Delete ikonu ile görsel olarak ayırt ediliyor
+                      </li>
+                      <li>
+                        🎯 SORUN: ç yanındaki buton harf gibi davranıyordu
+                      </li>
+                      <li>
+                        🎯 ÇÖZÜM: Delete butonu handleBackspace fonksiyonunu çağırıyor
+                      </li>
+                    </ul>
+                  </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.52 - Otomatik Güncelleme ve Kurulum Sonrası Başlatma

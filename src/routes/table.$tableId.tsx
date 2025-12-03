@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getTable,
@@ -56,6 +56,7 @@ import {
   Clock,
   Loader2,
   Utensils,
+  Delete,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 
@@ -129,6 +130,12 @@ function TableDetailContent() {
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [showCart, setShowCart] = useState(false);
+
+  // Miktar girme modalı için state'ler
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [selectedMenuForQuantity, setSelectedMenuForQuantity] = useState<Menu | null>(null);
+  const [quantityInput, setQuantityInput] = useState("");
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -440,6 +447,60 @@ function TableDetailContent() {
     // Sepeti göster
     setShowCart(true);
   }, []);
+
+  // Long press başlat (miktar girme modalı için)
+  const handleLongPressStart = useCallback((menu: Menu) => {
+    longPressTimerRef.current = setTimeout(() => {
+      setSelectedMenuForQuantity(menu);
+      setQuantityInput("");
+      setShowQuantityModal(true);
+    }, 500); // 500ms basılı tutma
+  }, []);
+
+  // Long press iptal
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  // Miktar girme modalından ürün ekle
+  const handleAddWithQuantity = useCallback(() => {
+    if (!selectedMenuForQuantity || !quantityInput) return;
+
+    // Virgülü noktaya çevir
+    const normalizedInput = quantityInput.replace(",", ".");
+    const quantity = parseFloat(normalizedInput);
+
+    if (isNaN(quantity) || quantity <= 0) {
+      alert("Geçerli bir miktar girin");
+      return;
+    }
+
+    setCart((prev) => {
+      const cartItemId = `${selectedMenuForQuantity.id}-${Date.now()}-${Math.random()}`;
+      return [
+        ...prev,
+        {
+          cartItemId,
+          menuId: selectedMenuForQuantity.id!,
+          menuName: selectedMenuForQuantity.name,
+          menuPrice: selectedMenuForQuantity.price,
+          quantity: quantity,
+          subtotal: selectedMenuForQuantity.price * quantity,
+          addedAt: new Date(),
+        },
+      ];
+    });
+
+    // Modal'ı kapat
+    setShowQuantityModal(false);
+    setSelectedMenuForQuantity(null);
+    setQuantityInput("");
+    // Sepeti göster
+    setShowCart(true);
+  }, [selectedMenuForQuantity, quantityInput]);
 
   // Sepetteki ürün miktarını güncelle (cartItemId ile)
   const updateQuantity = useCallback((cartItemId: string, delta: number) => {
@@ -1363,11 +1424,9 @@ function TableDetailContent() {
       setShowCancelItemModal(false);
       setSelectedItem(null);
 
-      // Ana sayfaya yönlendir (alert vermeden)
-      navigateToHome();
+      // Ana sayfaya yönlendirme kaldırıldı - kullanıcı sipariş ekranında kalsın
     } catch (error) {
       alert("Ürün iptal edilirken bir hata oluştu");
-      navigateToHome();
     }
   }, [
     order,
@@ -1434,7 +1493,7 @@ function TableDetailContent() {
         }
         setOrder(null);
         setSelectedItems(new Set());
-        navigateToHome();
+        // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
         return;
       }
 
@@ -1485,10 +1544,10 @@ function TableDetailContent() {
       const updatedOrder = await getOrder(order.id!);
       setOrder(updatedOrder);
       setSelectedItems(new Set());
-      navigateToHome();
+      // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
     } catch (error) {
       alert("Ürünler iptal edilirken bir hata oluştu");
-      navigateToHome();
+      // Ana sayfaya yönlendirme KALDIRILDI
     } finally {
       setIsCanceling(false);
     }
@@ -1976,8 +2035,12 @@ function TableDetailContent() {
       {/* Header - Mobile */}
       <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={navigateToHome}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+          <Button 
+            variant="outline" 
+            onClick={navigateToHome}
+            className="h-10 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
             Geri
           </Button>
           <h1 className="text-base font-bold text-gray-900 dark:text-white">
@@ -2000,11 +2063,11 @@ function TableDetailContent() {
       <div className="hidden lg:flex lg:w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col h-full overflow-hidden">
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={navigateToHome}
-            className="w-full justify-start mb-4"
+            className="w-full justify-start mb-4 h-10 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-5 w-5 mr-2" />
             Geri
           </Button>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -2093,6 +2156,12 @@ function TableDetailContent() {
                     key={menu.id}
                     className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer"
                     onClick={() => handleAddToCart(menu)}
+                    onMouseDown={() => handleLongPressStart(menu)}
+                    onMouseUp={handleLongPressEnd}
+                    onMouseLeave={handleLongPressEnd}
+                    onTouchStart={() => handleLongPressStart(menu)}
+                    onTouchEnd={handleLongPressEnd}
+                    onTouchCancel={handleLongPressEnd}
                   >
                     {menu.image && (
                       <div className="aspect-square overflow-hidden">
@@ -4902,6 +4971,120 @@ function TableDetailContent() {
           </div>
         )}
 
+        {/* Miktar Girme Modalı */}
+        {showQuantityModal && selectedMenuForQuantity && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full">
+              <div className="p-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                  Miktar Girin
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  {selectedMenuForQuantity.name}
+                </p>
+                
+                {/* Miktar Girişi */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Miktar (örn: 1, 0.5, 2.5)
+                  </label>
+                  <input
+                    type="text"
+                    value={quantityInput}
+                    onChange={(e) => {
+                      // Sadece rakam, virgül ve nokta kabul et
+                      const value = e.target.value.replace(/[^0-9.,]/g, "");
+                      setQuantityInput(value);
+                    }}
+                    placeholder="0"
+                    className="w-full h-16 px-4 text-3xl font-bold text-center border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                    autoFocus
+                  />
+                  
+                  {/* Hesaplanan Fiyat */}
+                  {quantityInput && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Toplam Fiyat:
+                        </span>
+                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                          ₺{(selectedMenuForQuantity.price * parseFloat(quantityInput.replace(",", ".") || "0")).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span>
+                          {parseFloat(quantityInput.replace(",", ".") || "0")} × ₺{selectedMenuForQuantity.price.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Numerik Klavye */}
+                <div className="mb-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[7, 8, 9, 4, 5, 6, 1, 2, 3].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setQuantityInput((prev) => prev + num.toString())}
+                        className="h-14 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setQuantityInput((prev) => prev + ",")}
+                      className="h-14 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/40 active:bg-blue-300 dark:active:bg-blue-900/50 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
+                    >
+                      ,
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuantityInput((prev) => prev + "0")}
+                      className="h-14 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
+                    >
+                      0
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuantityInput((prev) => prev.slice(0, -1))}
+                      className="h-14 bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg flex items-center justify-center text-white transition-colors"
+                    >
+                      <Delete className="h-6 w-6" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Butonlar */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuantityModal(false);
+                      setSelectedMenuForQuantity(null);
+                      setQuantityInput("");
+                    }}
+                    className="flex-1 h-12 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-900 dark:text-white transition-colors"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddWithQuantity}
+                    disabled={!quantityInput || parseFloat(quantityInput.replace(",", ".") || "0") <= 0}
+                    className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Sepete Ekle
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Ürün Not Ekleme Modalı */}
         {showAddNoteModal && selectedMenuForNote && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -5393,7 +5576,7 @@ function TableDetailContent() {
                             setSelectedItems(new Set());
                             setShowQuantitySelectionModal(false);
                             setSelectedItemForQuantity(null);
-                            navigateToHome();
+                            // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
                             return;
                           }
 
@@ -5424,10 +5607,10 @@ function TableDetailContent() {
                           setPendingCancelItems([]);
                           setCurrentCancelItemIndex(0);
                           setSelectedCancelQuantities(new Map());
-                          navigateToHome();
+                          // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
                         } catch (error) {
                           alert("Ürünler iptal edilirken bir hata oluştu");
-                          navigateToHome();
+                          // Ana sayfaya yönlendirme KALDIRILDI
                         }
                       } else if (quantitySelectionAction === "payment") {
                         // Ödeme işlemi - seçilen miktar kadar ürünün ödemesini al

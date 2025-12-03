@@ -3,6 +3,7 @@ import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { autoUpdater } from "electron-updater";
+import cron from "node-cron";
 
 // ES Module compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +30,12 @@ function registerIpcHandlers() {
   
   try {
     ipcMain.removeHandler("quit-and-install");
+  } catch (e) {
+    // Handler doesn't exist yet, that's fine
+  }
+  
+  try {
+    ipcMain.removeHandler("clear-table-history");
   } catch (e) {
     // Handler doesn't exist yet, that's fine
   }
@@ -88,7 +95,31 @@ function registerIpcHandlers() {
     }
   });
   
-    console.log("IPC handlers registered: quit-app, check-for-updates, quit-and-install at", new Date().toISOString());
+  // Register clear-table-history handler - renderer'dan manuel temizlik isteği için
+  ipcMain.handle("clear-table-history", async () => {
+    console.log("🗑️ Manual table history clear requested");
+    if (mainWindow) {
+      mainWindow.webContents.send("trigger-clear-table-history");
+      return { success: true };
+    }
+    return { success: false, error: "No main window" };
+  });
+  
+    console.log("IPC handlers registered: quit-app, check-for-updates, quit-and-install, clear-table-history at", new Date().toISOString());
+}
+
+// Masa geçmişi temizleme cron job'ı - her gece 03:00'da çalışır
+function setupTableHistoryCleanupCron() {
+  // Cron pattern: "0 3 * * *" = Her gün saat 03:00'da
+  cron.schedule("0 3 * * *", () => {
+    console.log("🗑️ Scheduled table history cleanup triggered at", new Date().toISOString());
+    if (mainWindow) {
+      mainWindow.webContents.send("trigger-clear-table-history");
+    }
+  }, {
+    timezone: "Europe/Istanbul" // Türkiye saat dilimi
+  });
+  console.log("✅ Table history cleanup cron job scheduled for 03:00 daily");
 }
 
 // Auto-updater configuration
@@ -350,6 +381,9 @@ autoUpdater.on("update-downloaded", (info: { version: string; releaseDate: strin
 app.on("ready", () => {
   // Register IPC handlers on app ready
   registerIpcHandlers();
+  
+  // Setup table history cleanup cron job
+  setupTableHistoryCleanupCron();
   
   createWindow();
 

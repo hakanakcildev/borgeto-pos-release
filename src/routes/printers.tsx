@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Printer, RefreshCw, Check, X, AlertCircle } from "lucide-react";
+import { Printer, RefreshCw, Check, X, AlertCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
+import { getCategoriesByCompany } from "@/lib/firebase/menus";
+import type { Category } from "@/lib/firebase/types";
 
 export const Route = createFileRoute("/printers")({
   component: Printers,
@@ -25,12 +27,15 @@ interface PrinterDevice {
   vendorId?: number;
   productId?: number;
   isConnected: boolean;
+  assignedCategories?: string[]; // Kategori ID'leri
 }
 
 function PrintersContent() {
-  const { userData, companyId } = useAuth();
+  const { userData, companyId, branchId } = useAuth();
   const [printers, setPrinters] = useState<PrinterDevice[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
+  const [editingPrinter, setEditingPrinter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showAddNetworkPrinter, setShowAddNetworkPrinter] = useState(false);
@@ -58,6 +63,25 @@ function PrintersContent() {
 
     loadSavedPrinters();
   }, [companyId, userData?.companyId]);
+
+  // Kategorileri yükle
+  useEffect(() => {
+    const loadCategories = async () => {
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      
+      if (!effectiveCompanyId) return;
+      
+      try {
+        const cats = await getCategoriesByCompany(effectiveCompanyId, effectiveBranchId);
+        setCategories(cats);
+      } catch (error) {
+        console.error("Kategoriler yüklenirken hata:", error);
+      }
+    };
+    
+    loadCategories();
+  }, [companyId, branchId, userData?.companyId, userData?.assignedBranchId]);
 
   // Web Serial API ile tüm seri port yazıcıları algıla
   const detectSerialPrinters = useCallback(async (): Promise<PrinterDevice[]> => {
@@ -526,6 +550,36 @@ function PrintersContent() {
     });
   }, [companyId, userData?.companyId, selectedPrinter]);
 
+  // Yazıcıya kategori ata/kaldır
+  const toggleCategoryAssignment = useCallback((printerId: string, categoryId: string) => {
+    setPrinters((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === printerId) {
+          const currentCategories = p.assignedCategories || [];
+          const isAssigned = currentCategories.includes(categoryId);
+          
+          return {
+            ...p,
+            assignedCategories: isAssigned
+              ? currentCategories.filter((id) => id !== categoryId)
+              : [...currentCategories, categoryId],
+          };
+        }
+        return p;
+      });
+      
+      const effectiveCompanyId = companyId || userData?.companyId;
+      if (effectiveCompanyId) {
+        localStorage.setItem(
+          `printers_${effectiveCompanyId}`,
+          JSON.stringify(updated)
+        );
+      }
+      
+      return updated;
+    });
+  }, [companyId, userData?.companyId]);
+
   // Test yazdırma
   const testPrint = useCallback(async () => {
     if (!selectedPrinter) {
@@ -664,27 +718,28 @@ function PrintersContent() {
 
       {/* Yazıcı Listesi */}
       {printers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-4">
           {printers.map((printer) => (
             <div
               key={printer.id}
-              className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 p-2 ${
+              className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 p-4 ${
                 selectedPrinter === printer.id
                   ? "border-blue-500 dark:border-blue-400"
                   : "border-gray-200 dark:border-gray-700"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+              {/* Yazıcı Başlık Bilgisi */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div
-                    className={`p-1.5 rounded-lg flex-shrink-0 ${
+                    className={`p-2 rounded-lg flex-shrink-0 ${
                       printer.isConnected
                         ? "bg-green-100 dark:bg-green-900/20"
                         : "bg-gray-100 dark:bg-gray-700"
                     }`}
                   >
                     <Printer
-                      className={`h-4 w-4 ${
+                      className={`h-5 w-5 ${
                         printer.isConnected
                           ? "text-green-600 dark:text-green-400"
                           : "text-gray-400"
@@ -692,12 +747,12 @@ function PrintersContent() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
                       {printer.name}
                     </h3>
-                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span
-                        className={`text-[10px] px-1 py-0.5 rounded ${
+                        className={`text-xs px-2 py-0.5 rounded ${
                           printer.type === "serial"
                             ? "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                             : printer.type === "usb"
@@ -716,28 +771,33 @@ function PrintersContent() {
                           : "Sistem"}
                       </span>
                       {printer.isConnected ? (
-                        <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-0.5">
-                          <div className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full"></div>
+                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
                           Bağlı
                         </span>
                       ) : (
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
                           Bağlı Değil
+                        </span>
+                      )}
+                      {printer.assignedCategories && printer.assignedCategories.length > 0 && (
+                        <span className="text-xs text-purple-600 dark:text-purple-400">
+                          {printer.assignedCategories.length} Kategori Atanmış
                         </span>
                       )}
                     </div>
                     {printer.port && (
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                         {printer.port}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {selectedPrinter === printer.id && (
-                    <div className="flex items-center gap-0.5 text-blue-600 dark:text-blue-400 text-xs font-medium">
-                      <Check className="h-3 w-3" />
-                      <span className="hidden sm:inline">Seçili</span>
+                    <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
+                      <Check className="h-4 w-4" />
+                      <span>Varsayılan</span>
                     </div>
                   )}
                   {selectedPrinter !== printer.id && (
@@ -745,21 +805,66 @@ function PrintersContent() {
                       onClick={() => selectPrinter(printer.id)}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-7 px-2"
+                      className="text-sm"
                     >
-                      Seç
+                      Varsayılan Yap
                     </Button>
                   )}
+                  <Button
+                    onClick={() => setEditingPrinter(editingPrinter === printer.id ? null : printer.id)}
+                    variant="outline"
+                    size="sm"
+                    className="text-orange-600 dark:text-orange-400"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
                   <Button
                     onClick={() => removePrinter(printer.id)}
                     variant="outline"
                     size="sm"
-                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7 p-0"
+                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
+
+              {/* Kategori Seçimi - Genişletilebilir */}
+              {editingPrinter === printer.id && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                    Yazdırılacak Kategoriler
+                  </h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                    Bu kategorilerdeki ürünler masaya eklendiğinde veya iptal edildiğinde otomatik olarak bu yazıcıya yazdırılacak.
+                  </p>
+                  {categories.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {categories.map((category) => {
+                        const isAssigned = printer.assignedCategories?.includes(category.id || "");
+                        return (
+                          <button
+                            key={category.id}
+                            onClick={() => toggleCategoryAssignment(printer.id, category.id || "")}
+                            className={`px-3 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                              isAssigned
+                                ? "bg-purple-100 dark:bg-purple-900/20 border-purple-500 dark:border-purple-400 text-purple-700 dark:text-purple-300"
+                                : "bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-purple-300 dark:hover:border-purple-600"
+                            }`}
+                          >
+                            {isAssigned && <Check className="h-4 w-4 inline mr-1" />}
+                            {category.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Henüz kategori oluşturulmamış. Önce Ürün Yönetimi'nden kategori ekleyin.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -787,24 +892,6 @@ function PrintersContent() {
           </Button>
         </div>
       )}
-
-      {/* Bilgi Notu */}
-      <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">
-          Yazıcı Algılama Hakkında
-        </h4>
-        <ul className="text-xs text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
-          <li>
-            Seri port ve USB yazıcıları algılamak için tarayıcı izni gereklidir
-          </li>
-          <li>
-            Yazıcı algılama özelliği HTTPS veya localhost bağlantılarında çalışır
-          </li>
-          <li>
-            Sistem yazıcıları için tarayıcının yazdırma dialogu kullanılır
-          </li>
-        </ul>
-      </div>
     </div>
   );
 }

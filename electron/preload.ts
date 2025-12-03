@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onUpdateChecking: (callback: () => void) => {
     ipcRenderer.on("update-checking", () => callback());
   },
+  onTriggerClearTableHistory: (callback: () => void) => {
+    ipcRenderer.on("trigger-clear-table-history", () => callback());
+  },
 });
 
 // Type definitions for TypeScript
@@ -61,6 +64,7 @@ declare global {
       onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
       onUpdateError: (callback: (error: string) => void) => void;
       onUpdateChecking: (callback: () => void) => void;
+      onTriggerClearTableHistory: (callback: () => void) => void;
     };
   }
 }

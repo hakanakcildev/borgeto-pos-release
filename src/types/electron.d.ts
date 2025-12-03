@@ -16,6 +16,7 @@ declare global {
       onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
       onUpdateError: (callback: (error: string) => void) => void;
       onUpdateChecking: (callback: () => void) => void;
+      onTriggerClearTableHistory: (callback: () => void) => void;
     };
   }
 }
