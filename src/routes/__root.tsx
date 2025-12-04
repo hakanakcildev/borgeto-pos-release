@@ -20,6 +20,37 @@ function RootComponent() {
     maxLength,
   } = useTouchKeyboard();
 
+  // Touch event'lerini global olarak dinle (PC klavyesi vs touch ayırımı için)
+  useEffect(() => {
+    const handleTouchStart = () => {
+      (window as any).__lastTouchEvent = true;
+      // Touch event'ten sonra kısa bir süre sonra flag'i temizle
+      setTimeout(() => {
+        (window as any).__lastTouchEvent = false;
+      }, 1000);
+    };
+
+    const handleMouseDown = () => {
+      // Mouse event'i touch event değil
+      (window as any).__lastTouchEvent = false;
+    };
+
+    const handleKeyDown = () => {
+      // Keyboard event'i touch event değil
+      (window as any).__lastTouchEvent = false;
+    };
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   // Sayfa değiştiğinde en üste kaydır
   useEffect(() => {
     window.scrollTo(0, 0);

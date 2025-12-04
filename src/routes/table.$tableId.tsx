@@ -2426,20 +2426,23 @@ function TableDetailContent() {
     ]
   );
 
-  // Not ekleme modalı açıldığında Textarea'ya focus ver ve klavyeyi aç
+  // Not ekleme modalı açıldığında Textarea'ya focus ver (sadece touch event'lerinde klavyeyi aç)
   useEffect(() => {
     if (showAddNoteModal && itemNoteTextareaRef.current) {
       // Kısa bir gecikme ile focus ver (modal render olması için)
       setTimeout(() => {
         if (itemNoteTextareaRef.current) {
           itemNoteTextareaRef.current.focus();
-          // Klavyeyi aç
-          const currentValue = itemNoteTextareaRef.current.value || "";
-          openKeyboard(
-            itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
-            "text",
-            currentValue
-          );
+          // Sadece gerçek touch event'lerinde klavyeyi aç
+          const lastEventWasTouch = (window as any).__lastTouchEvent;
+          if (lastEventWasTouch) {
+            const currentValue = itemNoteTextareaRef.current.value || "";
+            openKeyboard(
+              itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
+              "text",
+              currentValue
+            );
+          }
         }
       }, 100);
     }

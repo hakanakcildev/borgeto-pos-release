@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export const Route = createFileRoute("/auth/login")({
   component: Login,
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/auth/login")({
 function Login() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { resolvedTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +39,11 @@ function Login() {
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
   const [showLatestVersionMessage, setShowLatestVersionMessage] =
     useState(false);
-  const [currentVersion, setCurrentVersion] = useState("1.1.11");
+  const [currentVersion, setCurrentVersion] = useState("1.1.16");
+  const [showSaveCredentialsModal, setShowSaveCredentialsModal] = useState(false);
+  const [savedCredentials, setSavedCredentials] = useState<Array<{ email: string; password: string }>>([]);
+  const [showEmailDropdown, setShowEmailDropdown] = useState(false);
+  const [pendingLoginResult, setPendingLoginResult] = useState<{ result: any } | null>(null);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -56,7 +62,7 @@ function Login() {
             }
           } catch (error) {
             // Hata durumunda package.json'dan versiyonu al
-            setCurrentVersion("1.1.11");
+            setCurrentVersion("1.1.16");
           }
         } else {
           // electronAPI hazır değilse, default versiyonu göster
@@ -67,6 +73,39 @@ function Login() {
 
     loadVersion();
   }, []);
+
+  // Kayıtlı kullanıcıları yükle
+  useEffect(() => {
+    const saved = localStorage.getItem("savedCredentials");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setSavedCredentials(parsed);
+      } catch {
+        setSavedCredentials([]);
+      }
+    }
+  }, []);
+
+  // Dropdown'u dışarı tıklandığında kapat
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        showEmailDropdown &&
+        emailInputRef.current &&
+        !emailInputRef.current.contains(target) &&
+        !target.closest(".saved-credentials-dropdown")
+      ) {
+        setShowEmailDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmailDropdown]);
 
   // Eğer oturum açıksa direkt ana sayfaya yönlendir (güncelleme sonrası yeniden başlatma için)
   useEffect(() => {
@@ -123,6 +162,97 @@ function Login() {
     }
   }, [openKeyboard, email, password]);
 
+  // Kullanıcı adı ve şifreyi kaydet
+  const handleSaveCredentials = useCallback(() => {
+    const existingIndex = savedCredentials.findIndex((c) => c.email === email);
+    let updated: Array<{ email: string; password: string }>;
+    
+    if (existingIndex >= 0) {
+      // Mevcut kullanıcıyı güncelle
+      updated = [...savedCredentials];
+      updated[existingIndex] = { email, password };
+    } else {
+      // Yeni kullanıcı ekle
+      updated = [...savedCredentials, { email, password }];
+    }
+    
+    localStorage.setItem("savedCredentials", JSON.stringify(updated));
+    // Bu kullanıcı için bir daha sorma
+    const dontAskList = JSON.parse(localStorage.getItem("dontAskSaveCredentials") || "[]");
+    if (!dontAskList.includes(email)) {
+      dontAskList.push(email);
+      localStorage.setItem("dontAskSaveCredentials", JSON.stringify(dontAskList));
+    }
+    setSavedCredentials(updated);
+    setShowSaveCredentialsModal(false);
+    
+    // Giriş işlemini tamamla
+    if (pendingLoginResult) {
+      const result = pendingLoginResult.result;
+      localStorage.setItem(
+        "posAuth",
+        JSON.stringify({
+          type: result.type,
+          companyId: result.companyId,
+          branchId: result.branchId,
+          user: result.user,
+          branch: result.branch,
+          company: result.company,
+          timestamp: Date.now(),
+        })
+      );
+
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: localStorage.getItem("posAuth"),
+        })
+      );
+
+      navigate({ to: "/", search: { area: undefined, activeOnly: false } });
+      setPendingLoginResult(null);
+    }
+  }, [email, password, savedCredentials, pendingLoginResult, navigate]);
+
+  // Kullanıcı adı ve şifreyi kaydetme
+  const handleDontSaveCredentials = useCallback(() => {
+    setShowSaveCredentialsModal(false);
+    
+    // Giriş işlemini tamamla
+    if (pendingLoginResult) {
+      const result = pendingLoginResult.result;
+      localStorage.setItem(
+        "posAuth",
+        JSON.stringify({
+          type: result.type,
+          companyId: result.companyId,
+          branchId: result.branchId,
+          user: result.user,
+          branch: result.branch,
+          company: result.company,
+          timestamp: Date.now(),
+        })
+      );
+
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: localStorage.getItem("posAuth"),
+        })
+      );
+
+      navigate({ to: "/", search: { area: undefined, activeOnly: false } });
+      setPendingLoginResult(null);
+    }
+  }, [pendingLoginResult, navigate]);
+
+  // Kayıtlı kullanıcı seçildiğinde şifreyi doldur
+  const handleSelectSavedCredential = useCallback((savedEmail: string, savedPassword: string) => {
+    setEmail(savedEmail);
+    setPassword(savedPassword);
+    setShowEmailDropdown(false);
+  }, []);
+
   // Giriş işlemi
   const handleLogin = useCallback(
     async (e: React.FormEvent) => {
@@ -133,31 +263,40 @@ function Login() {
       try {
         const result = await signInWithCredentials(email, password);
 
-        // Local storage'a kaydet (uygulama kapatılsa bile oturum açık kalır)
-        localStorage.setItem(
-          "posAuth",
-          JSON.stringify({
-            type: result.type,
-            companyId: result.companyId,
-            branchId: result.branchId,
-            user: result.user,
-            branch: result.branch,
-            company: result.company,
-            timestamp: Date.now(),
-          })
-        );
+        // Eğer bu kullanıcı için daha önce "Kaydet" seçildiyse modal gösterme
+        const dontAskList = JSON.parse(localStorage.getItem("dontAskSaveCredentials") || "[]");
+        const shouldNotAsk = dontAskList.includes(email);
 
-        // Storage event tetikle
-        window.dispatchEvent(
-          new StorageEvent("storage", {
-            key: "posAuth",
-            newValue: localStorage.getItem("posAuth"),
-          })
-        );
+        if (shouldNotAsk) {
+          // Direkt giriş yap, modal gösterme
+          localStorage.setItem(
+            "posAuth",
+            JSON.stringify({
+              type: result.type,
+              companyId: result.companyId,
+              branchId: result.branchId,
+              user: result.user,
+              branch: result.branch,
+              company: result.company,
+              timestamp: Date.now(),
+            })
+          );
 
-        // Kısa bir gecikme ile navigate et
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        navigate({ to: "/", search: { area: undefined, activeOnly: false } });
+          window.dispatchEvent(
+            new StorageEvent("storage", {
+              key: "posAuth",
+              newValue: localStorage.getItem("posAuth"),
+            })
+          );
+
+          navigate({ to: "/", search: { area: undefined, activeOnly: false } });
+          setLoading(false);
+        } else {
+          // Modal göster
+          setPendingLoginResult({ result });
+          setShowSaveCredentialsModal(true);
+          setLoading(false);
+        }
       } catch (error: unknown) {
         if (error && typeof error === "object" && "message" in error) {
           setError((error as { message: string }).message);
@@ -175,11 +314,10 @@ function Login() {
         } else {
           setError("Giriş sırasında bir hata oluştu");
         }
-      } finally {
         setLoading(false);
       }
     },
-    [email, password, navigate]
+    [email, password]
   );
 
   // Güncelleme kontrolü
@@ -307,26 +445,26 @@ function Login() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center px-4 py-8">
       {/* Güncelleme indiriliyor ekranı */}
       {downloadingUpdate && (
         <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
-              <RefreshCw className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <RefreshCw className="h-16 w-16 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Güncelleme İndiriliyor
               </h2>
-              <p className="text-gray-600 mb-4">
+              <p className="text-gray-600 dark:text-gray-300 mb-4">
                 Yeni versiyon indiriliyor, lütfen bekleyin...
               </p>
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
                 <div
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                  className="bg-blue-600 dark:bg-blue-500 h-3 rounded-full transition-all duration-300"
                   style={{ width: `${downloadProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {Math.round(downloadProgress)}%
               </p>
             </div>
@@ -337,21 +475,21 @@ function Login() {
       {/* Yeni versiyon mevcut modal */}
       {updateAvailable && !downloadingUpdate && (
         <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <RefreshCw className="h-8 w-8 text-green-600" />
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <RefreshCw className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Yeni Sürüm Mevcut
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 Versiyon {updateVersion} mevcut. Güncellemek ister misiniz?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setUpdateAvailable(false)}
-                  className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
                 >
                   Daha Sonra
                 </button>
@@ -370,22 +508,22 @@ function Login() {
       {/* Güncelleme indirildi modal */}
       {updateDownloaded && (
         <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Güncelleme Hazır
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 Versiyon {updateVersion} indirildi. Güncellemeyi kurmak ve
                 uygulamayı yeniden başlatmak ister misiniz?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setUpdateDownloaded(false)}
-                  className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
                 >
                   Daha Sonra
                 </button>
@@ -404,16 +542,16 @@ function Login() {
 
       {/* Son sürüm mesajı modal */}
       {showLatestVersionMessage && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+        <div className="fixed inset-0 z-[9999] bg-black/20 dark:bg-black/30 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Güncel Sürüm
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 Son sürümü kullanıyorsunuz. Yeni bir güncelleme olduğunda
                 bildirim alacaksınız.
               </p>
@@ -430,18 +568,18 @@ function Login() {
 
       <div className="w-full max-w-md">
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <div className="w-16 h-16 bg-blue-600 dark:bg-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
                 <Lock className="h-10 w-10 text-white" />
               </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
               POS Sistemi
             </h1>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               Sipariş yönetim sistemine giriş yapın
             </p>
           </div>
@@ -450,16 +588,16 @@ function Login() {
           <form onSubmit={handleLogin} className="space-y-6">
             {/* Error Message */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               </div>
             )}
 
             {/* Email/Username Input */}
-            <div>
+            <div className="relative">
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
                 E-posta Adresi veya Kullanıcı Adı
               </label>
@@ -468,21 +606,58 @@ function Login() {
                 ref={emailInputRef}
                 type="text"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (savedCredentials.length > 0) {
+                    setShowEmailDropdown(true);
+                  }
+                }}
+                onFocus={() => {
+                  if (savedCredentials.length > 0) {
+                    setShowEmailDropdown(true);
+                  }
+                }}
                 placeholder="E-posta adresinizi veya kullanıcı adınızı girin"
                 autoCapitalize="none"
                 required
                 autoComplete="username"
                 showKeyboardButton={false}
-                className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+                className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none"
+                style={{ 
+                  backgroundColor: resolvedTheme === 'dark' ? '#374151' : 'white',
+                  borderColor: resolvedTheme === 'dark' ? '#4b5563' : '#e5e7eb',
+                  color: resolvedTheme === 'dark' ? '#ffffff' : '#111827',
+                  borderWidth: '2px'
+                }}
               />
+              {/* Kayıtlı Kullanıcılar Dropdown */}
+              {showEmailDropdown && savedCredentials.length > 0 && (
+                <div className="saved-credentials-dropdown absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  {savedCredentials
+                    .filter((cred) => 
+                      !email || cred.email.toLowerCase().includes(email.toLowerCase())
+                    )
+                    .map((cred, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => {
+                          handleSelectSavedCredential(cred.email, cred.password);
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none border-b border-gray-200 dark:border-gray-700 last:border-b-0"
+                      >
+                        <div className="font-medium text-gray-900 dark:text-white">{cred.email}</div>
+                      </button>
+                    ))}
+                </div>
+              )}
             </div>
 
             {/* Password Input */}
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
                 Şifre
               </label>
@@ -498,11 +673,17 @@ function Login() {
                   required
                   autoComplete="current-password"
                   showKeyboardButton={false}
-                  className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-12"
+                  className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none pr-12"
+                  style={{ 
+                    backgroundColor: resolvedTheme === 'dark' ? '#374151' : 'white',
+                    borderColor: resolvedTheme === 'dark' ? '#4b5563' : '#e5e7eb',
+                    color: resolvedTheme === 'dark' ? '#ffffff' : '#111827',
+                    borderWidth: '2px'
+                  }}
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-gray-100 transition-colors z-10"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors z-10"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     setShowPassword(!showPassword);
@@ -513,9 +694,9 @@ function Login() {
                   }}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400" />
+                    <EyeOff className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400" />
+                    <Eye className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                   )}
                 </button>
               </div>
@@ -544,8 +725,8 @@ function Login() {
                 }}
                 className={`h-12 w-12 rounded-lg transition-colors touch-manipulation flex items-center justify-center ${
                   isOpen
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                 }`}
                 aria-label="Klavyeyi Aç"
                 title="Klavyeyi Aç"
@@ -555,8 +736,36 @@ function Login() {
             </div>
           </form>
 
+          {/* Kayıtlı Kullanıcı Modal */}
+          {showSaveCredentialsModal && (
+            <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white text-center mb-4">
+                  Kullanıcı Bilgilerini Kaydet
+                </h3>
+                <p className="text-gray-700 dark:text-gray-300 text-center mb-6">
+                  Kullanıcı adı ve şifrenizi kaydetmek ister misiniz? Kaydedilen bilgiler daha sonra hızlı giriş için kullanılacaktır.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDontSaveCredentials}
+                    className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                  >
+                    Kaydetme
+                  </button>
+                  <button
+                    onClick={handleSaveCredentials}
+                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Kaydet
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Info Text */}
-          <p className="mt-6 text-center text-sm text-gray-600">
+          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
             QR Menü sistemi ile aynı bilgileri kullanabilirsiniz
           </p>
 
@@ -566,7 +775,7 @@ function Login() {
               type="button"
               onClick={handleCheckUpdates}
               disabled={checkingUpdate}
-              className="w-full h-12 text-sm font-medium border-2 border-gray-400 rounded-lg bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              className="w-full h-12 text-sm font-medium border-2 border-gray-400 dark:border-gray-600 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
             >
               {checkingUpdate ? (
                 <>
@@ -581,8 +790,8 @@ function Login() {
               )}
             </button>
             <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Mevcut Sürüm: <span className="font-semibold text-gray-900">{currentVersion}</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Mevcut Sürüm: <span className="font-semibold text-gray-900 dark:text-white">{currentVersion}</span>
               </p>
             </div>
           </div>
@@ -592,26 +801,26 @@ function Login() {
       {/* Update Notes Modal */}
       {showUpdateNotes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 Güncelleme Notları
               </h2>
               <button
                 onClick={() => setShowUpdateNotes(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <X className="h-6 w-6 text-gray-600" />
+                <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
             <div className="p-6 space-y-6">
               {/* Version Info */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   Versiyon Bilgisi
                 </h3>
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <p className="text-base text-gray-700">
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+                  <p className="text-base text-gray-700 dark:text-gray-300">
                     <span className="font-medium">Mevcut Versiyon:</span>{" "}
                     {currentVersion}
                   </p>
@@ -620,26 +829,26 @@ function Login() {
 
               {/* Update History */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                  <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
-                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800">
+                    <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                       <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded">
                         YENİ
                       </span>
                       v1.1.6 - Güncelleme İşlem Sırası Düzeltmesi
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Versiyon artırma ve güncelleme notları işlem sırası düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Mevcut versiyon bilgisi artık doğru şekilde gösteriliyor
                         </span>
@@ -647,31 +856,31 @@ function Login() {
                     </ul>
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                       v1.1.4 - Güncelleme Kontrolü ve Bildirim Düzeltmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Login sayfasında güncelleme kontrolü butonuna basıldığında sürekli dönme sorunu düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Uygulama açıldığında bekleyen güncelleme varsa hemen bildirim gösteriliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Her durumda (login sayfasında da, oturum açıkta da) güncelleme bildirimleri çalışıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Daha tutarlı ve güvenilir güncelleme bildirimleri
                         </span>
@@ -679,31 +888,31 @@ function Login() {
                     </ul>
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                       v1.1.2 - Otomatik Güncelleme Sistemi İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Oturum açıkken güncelleme bildirimleri artık düzgün çalışıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Periyodik güncelleme kontrolü eklendi (her 30 dakikada bir)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           CHANGELOG.md'den sürüm notları otomatik olarak çekiliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Versiyon bilgisi otomatik olarak güncelleniyor
                         </span>
@@ -711,80 +920,80 @@ function Login() {
                     </ul>
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                       v1.1.1 - Input/Textarea Arka Plan Düzeltmesi
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Input ve Textarea alanlarının arka plan renkleri
                           düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Açık temada beyaz arka plan, koyu temada koyu gri arka
                           plan
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>Yazı renkleri tema uyumlu hale getirildi</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>Daha iyi okunabilirlik ve görsel tutarlılık</span>
                       </li>
                     </ul>
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                       v1.1.0 - Major Update: UI/UX İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Gelişmiş klavye sistemi: 3 durumlu shift tuşu (Normal
                           → Shift → Caps Lock)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Login sayfası hariç tüm input'larda otomatik shift
                           açılışı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Dolu masalar yeşil, boş masalar kırmızı arka plan
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>Dolu masaların yazıları beyaz renkte</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Tüm masa kartlarına 1px beyaz border eklendi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Yazıcı çıktısındaki çizgiler tek satırda ve yazı ile
                           aynı genişlikte
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
                         <span>
                           Sidebar logo ve yazı boyutları açık/kapalı durumda
                           sabit
@@ -793,92 +1002,92 @@ function Login() {
                     </ul>
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.80 - Kağıt Boyutu Otomatik Tespiti
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">📏</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">📏</span>
                         <span>
                           <strong>Kağıt Boyutu Tespiti:</strong> Yazıcıların
                           kağıt boyutu otomatik olarak tespit ediliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           80mm, 58mm, 110mm ve diğer boyutlar otomatik
                           algılanıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Yazıcı sayfasında kağıt boyutu bilgisi gösteriliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Yazdırma formatı yazıcının kağıt genişliğine göre
                           otomatik ayarlanıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>Tam sayfa genişliğinde yazdırma</span>
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.77 - Yazdırma Formatı İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">🖨️</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">🖨️</span>
                         <span>
                           <strong>Yazdırma Formatı:</strong> Yazdırma formatı
                           tam sayfa genişliğinde ve düzgün formatlanmış
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           ESC/POS komutları ile font, hizalama ve kalın yazı
                           desteği
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Başlık ortalanmış ve büyük font, toplam tutar sağa
                           hizalı ve kalın
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Yazdırma çıktısında kare karakterler sorunu düzeltildi
                           (ASCII encoding)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Yazıcı sayfasına örnek çıktı önizlemesi eklendi
                         </span>
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.74 - Güncelleme Kontrolü İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">🔄</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">🔄</span>
                         <span>
                           <strong>Güncelleme Kontrolü:</strong> Güncelleme
                           kontrolü butonuna basıldığında son sürüm ise "Son
@@ -886,33 +1095,33 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Yeni sürüm varsa "İndir ve Kur" modalı açılıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           "Güncelleme kontrolü şu anda kullanılamıyor" hatası
                           düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Güncelleme kontrolü kullanıcı deneyimi iyileştirildi
                         </span>
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.73 - Yazdır Butonu İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">🖨️</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">🖨️</span>
                         <span>
                           <strong>Yazdır Butonu Konumlandırması:</strong> Yazdır
                           butonu artık ödeme al butonunun yanında, daha kompakt
@@ -920,35 +1129,35 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Masa sayfasında yazdır butonu ödeme al butonunun
                           yanında, daha küçük ve kullanışlı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Ödeme ekranında iskonto butonunun altına yazdır butonu
                           eklendi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Yazdır butonu genişliği artırıldı, daha kullanışlı
                           hale getirildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Yazdırma çıktısında Türkçe karakterlerin düzgün
                           görüntülenmesi sağlandı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Yazdırma formatı basitleştirildi ve okunabilirliği
                           artırıldı
@@ -956,20 +1165,20 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.56 - Ödeme Ekranı UI/UX İyileştirmeleri
                     </h4>
-                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                    <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">🎨</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">🎨</span>
                         <span>
                           <strong>Dinamik Etiket Sistemi:</strong> Ödeme
                           ekranında akıllı etiket gösterimi
                         </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Sol tarafta ürün seçilmediğinde '
                           <strong>Alınacak Ödeme</strong>' (yeşil renk ile
@@ -977,7 +1186,7 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600 dark:text-green-400">✓</span>
                         <span>
                           Sağ tarafta (kısmi ödeme) ürün seçildiğinde '
                           <strong>Alınacak Ödeme</strong>' (yeşil renk ile
@@ -985,35 +1194,35 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">📱</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">📱</span>
                         <span>
                           <strong>İki Panel Sistemi:</strong> Sol panel (tüm
                           ürünler), Sağ panel (kısmi ödeme alanı)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✨</span>
+                        <span className="text-green-600 dark:text-green-400">✨</span>
                         <span>Daha anlaşılır ödeme akışı ve görsel ayrım</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✨</span>
+                        <span className="text-green-600 dark:text-green-400">✨</span>
                         <span>Yeşil renk ile alınacak ödeme vurgusu</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600">✨</span>
+                        <span className="text-green-600 dark:text-green-400">✨</span>
                         <span>
                           Kısmi ödeme seçimlerinde net görsel geri bildirim
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
                         <span>
                           Dinamik CSS sınıfları ve state bazlı etiket değişimi
                         </span>
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.55 - Ödeme Ekranı Dinamik Etiket Sistemi
                     </h4>
@@ -1025,7 +1234,7 @@ function Login() {
                       <li>✅ Kısmi ödeme ve tam ödeme ayrımı netleştirildi</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.53 - Klavye Delete Butonu Düzeltmesi
                     </h4>
@@ -1050,7 +1259,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.52 - Otomatik Güncelleme ve Kurulum Sonrası Başlatma
                     </h4>
@@ -1077,7 +1286,7 @@ function Login() {
                       <li>🎯 ÖZELLİK: Kurulum sonrası otomatik başlatma</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.51 - File Protocol Routing Fix (GERÇEK ÇÖZÜM!)
                     </h4>
@@ -1103,7 +1312,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.50 - 404 Sorunu KESİN ÇÖZÜM! (Son Güncelleme)
                     </h4>
@@ -1140,7 +1349,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.49 - Güncelleme Hatası ve 404 Sayfası Düzeltmesi
                     </h4>
@@ -1167,7 +1376,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.48 - NotFound Sayfası Sorunu Kesin Çözüm
                     </h4>
@@ -1190,7 +1399,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.47 - Kritik: Oturum Temizleme ve Route Yönlendirme
                       Düzeltildi
@@ -1214,7 +1423,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.46 - Program Kapanınca Oturum Temizleme ve Route
                       Düzeltmesi
@@ -1238,7 +1447,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.45 - İlk Açılışta Route Eşleşmesi Sorunu Düzeltildi
                     </h4>
@@ -1261,7 +1470,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.44 - 404 Sayfası Kaldırıldı, Route Kontrolü Tamamen
                       Düzeltildi
@@ -1285,7 +1494,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.43 - 404 Sorunu, Klavye ve Logout Düzeltmeleri
                     </h4>
@@ -1308,7 +1517,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.42 - Kritik Düzeltmeler: Input Focus ve Güncelleme
                       Sistemi
@@ -1337,7 +1546,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.41 - İlk Açılışta Input Focus Sorunu Düzeltildi
                     </h4>
@@ -1360,7 +1569,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.40 - Input Cursor ve Şifre Input Sorunları Düzeltildi
                     </h4>
@@ -1383,7 +1592,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.39 - NSIS Installer x64 Mimari Düzeltmesi
                     </h4>
@@ -1406,7 +1615,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.38 - NSIS Installer Kritik Düzeltme - files Listesi
                       Kaldırıldı
@@ -1426,7 +1635,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.37 - NSIS Installer ve Login Input Sorunları
                       Düzeltildi
@@ -1450,7 +1659,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.36 - Input Tıklama ve Güncelleme Sorunları Düzeltildi
                     </h4>
@@ -1470,7 +1679,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.35 - NSIS Installer Kritik Düzeltme
                     </h4>
@@ -1488,7 +1697,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.34 - NSIS Installer Dosya Kurulum Sorunu Düzeltildi
                     </h4>
@@ -1502,7 +1711,7 @@ function Login() {
                       <li>Gereksiz dosyalar exclude edildi</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.33 - NSIS Installer Düzeltmesi
                     </h4>
@@ -1513,7 +1722,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.32 - Güncelleme Mekanizması Geri Alındı
                     </h4>
@@ -1524,7 +1733,7 @@ function Login() {
                       <li>autoInstallOnAppQuit tekrar aktif edildi</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.31 - Güncelleme Mekanizması Düzeltmesi
                     </h4>
@@ -1547,7 +1756,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.30 - Login Yönlendirme ve Input Tıklama Sorunları
                       Düzeltmesi
@@ -1570,7 +1779,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.29 - Input Seçim Sorunu Düzeltmesi
                     </h4>
@@ -1584,7 +1793,7 @@ function Login() {
                       <li>Label tıklamaları düzeltildi</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.28 - Otomatik Versiyon Kontrolü ve Oturum Kalıcılığı
                     </h4>
@@ -1607,7 +1816,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.27 - TouchKeyboardProvider Hata Düzeltmesi
                     </h4>
@@ -1622,7 +1831,7 @@ function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.26 - Login Sayfası ve Klavye İyileştirmeleri
                     </h4>
@@ -1635,7 +1844,7 @@ function Login() {
                       <li>Focus yönetimi iyileştirildi</li>
                     </ul>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.0 - İlk Sürüm
                     </h4>

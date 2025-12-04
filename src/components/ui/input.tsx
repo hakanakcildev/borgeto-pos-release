@@ -46,10 +46,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       return inputRef;
     }, []);
 
-    // Dokunmatik ekran kontrolü
-    // Dokunmatik ekran kontrolü - her zaman true (POS sistemleri için)
+    // Dokunmatik ekran kontrolü - gerçek touch event'leri kontrol et
     const isTouchDevice = React.useMemo(() => {
-      return true; // POS sistemleri için her zaman dokunmatik klavye göster
+      // PC klavyesi kullanıldığında touch keyboard'u otomatik açma
+      // Sadece gerçek touch event'lerinde veya manuel açıldığında çalış
+      return "ontouchstart" in window || navigator.maxTouchPoints > 0;
     }, []);
 
     const handleOpenKeyboard = React.useCallback(() => {
@@ -90,14 +91,19 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         }
 
         if (currentInput) {
-          // Dokunmatik cihazlarda ve showTouchKeyboard true ise klavyeyi aç
+          // Sadece touch device'larda ve showTouchKeyboard true ise otomatik klavyeyi aç
+          // PC klavyesi kullanıldığında otomatik açma (sadece manuel buton ile açılabilir)
           if (isTouchDevice && showTouchKeyboard) {
-            // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
-            setTimeout(() => {
-              if (currentInput === document.activeElement) {
-                handleOpenKeyboard();
-              }
-            }, 50);
+            // Touch event kontrolü - eğer son event touch ise klavyeyi aç
+            const lastEventWasTouch = (window as any).__lastTouchEvent;
+            if (lastEventWasTouch) {
+              // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
+              setTimeout(() => {
+                if (currentInput === document.activeElement) {
+                  handleOpenKeyboard();
+                }
+              }, 50);
+            }
           } else if (isOpen) {
             // Klavye zaten açıksa (örneğin klavye butonu ile açıldıysa), klavyeyi güncelle
             handleOpenKeyboard();

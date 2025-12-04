@@ -66,9 +66,9 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
     []
   );
 
-  // Input değeri değiştiğinde currentValue'yu güncelle
+  // Input değeri değiştiğinde currentValue'yu güncelle (sadece touch keyboard açıkken)
   useEffect(() => {
-    if (inputRef.current?.current) {
+    if (inputRef.current?.current && isOpen) {
       const input = inputRef.current.current;
       const handleInputChange = () => {
         if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
@@ -100,6 +100,11 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
 
   const handleInput = useCallback(
     (value: string) => {
+      // Sadece touch keyboard açıkken çalış
+      if (!isOpen) {
+        return;
+      }
+
       if (inputRef.current?.current) {
         const input = inputRef.current.current;
         
@@ -171,7 +176,7 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         setCurrentValue(newValue);
       }
     },
-    [maxLength]
+    [maxLength, isOpen]
   );
 
   const handleBackspace = useCallback(() => {
