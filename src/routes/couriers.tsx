@@ -26,6 +26,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/couriers")({
   component: CouriersManagement,
@@ -72,7 +73,7 @@ function CouriersManagementContent() {
         );
         setCouriers(couriersData);
       } catch (error) {
-        alert("Kuryeler yüklenirken bir hata oluştu");
+        customAlert("Kuryeler yüklenirken bir hata oluştu", "Hata", "error");
       } finally {
         setLoading(false);
       }
@@ -118,13 +119,13 @@ function CouriersManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
 
     if (!effectiveCompanyId || !newCourier.name.trim() || !newCourier.pricePerPackage) {
-      alert("Kurye adı ve paket başı fiyat gereklidir");
+      customAlert("Kurye adı ve paket başı fiyat gereklidir", "Uyarı", "warning");
       return;
     }
 
     const price = parseFloat(newCourier.pricePerPackage);
     if (isNaN(price) || price < 0) {
-      alert("Geçerli bir fiyat girin");
+      customAlert("Geçerli bir fiyat girin", "Uyarı", "warning");
       return;
     }
 
@@ -147,7 +148,7 @@ function CouriersManagementContent() {
       setNewCourier({ name: "", pricePerPackage: "" });
       setIsAddingCourier(false);
     } catch (error) {
-      alert("Kurye eklenirken bir hata oluştu");
+      customAlert("Kurye eklenirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -157,7 +158,7 @@ function CouriersManagementContent() {
 
     const price = parseFloat(editingCourier.pricePerPackage.toString());
     if (isNaN(price) || price < 0) {
-      alert("Geçerli bir fiyat girin");
+      customAlert("Geçerli bir fiyat girin", "Uyarı", "warning");
       return;
     }
 
@@ -181,7 +182,7 @@ function CouriersManagementContent() {
 
       setEditingCourier(null);
     } catch (error) {
-      alert("Kurye güncellenirken bir hata oluştu");
+      customAlert("Kurye güncellenirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -205,7 +206,7 @@ function CouriersManagementContent() {
         setCouriers(couriersData);
       }
     } catch (error) {
-      alert("Kurye silinirken bir hata oluştu");
+      customAlert("Kurye silinirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -579,7 +580,7 @@ function CouriersManagementContent() {
                             const effectiveBranchId = branchId || userData?.assignedBranchId;
 
                             if (!effectiveCompanyId) {
-                              alert("Şirket bilgisi bulunamadı");
+                              customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
                               return;
                             }
 
@@ -606,9 +607,9 @@ function CouriersManagementContent() {
                               );
                               setAssignments(assignmentsData);
 
-                              alert(`${courier.name} için ödemeler başarıyla sıfırlandı`);
+                              customAlert(`${courier.name} için ödemeler başarıyla sıfırlandı`, "Başarılı", "success");
                             } catch (error) {
-                              alert("Ödemeler sıfırlanırken bir hata oluştu");
+                              customAlert("Ödemeler sıfırlanırken bir hata oluştu", "Hata", "error");
                             }
                           }}
                           className="w-full bg-green-600 hover:bg-green-700 text-white h-9 text-xs"

@@ -14,6 +14,7 @@ import { db } from "./firebase";
 import type { Order, OrderItem, OrderStatus, PaymentStatus, Payment } from "./types";
 import { updateTableStatus } from "./tables";
 import { updateStatsOnOrderClose } from "./statistics";
+import { decreaseStockOnOrderClose } from "./stocks";
 
 const COLLECTION_NAME = "orders";
 
@@ -419,6 +420,43 @@ export const updateOrderStatus = async (
       await updateStatsOnOrderClose(order.companyId, updatedOrder, order.branchId).catch(() => {
         // İstatistik hatası sipariş kapatmayı engellemesin
       });
+
+      // Stok düşümü yap (ödenen tüm ürünler için)
+      const paidItemsMap = new Map<string, number>();
+      
+      // Önce payments içindeki paidItems'ları topla (kısmi ödemeler için)
+      if (order.payments && order.payments.length > 0) {
+        order.payments.forEach((payment) => {
+          if (payment.paidItems && payment.paidItems.length > 0) {
+            payment.paidItems.forEach((paidItem) => {
+              const current = paidItemsMap.get(paidItem.menuId) || 0;
+              paidItemsMap.set(paidItem.menuId, current + paidItem.quantity);
+            });
+          }
+        });
+      }
+      
+      // Eğer paidItems yoksa, order.items içindeki tüm ürünler ödenmiş demektir
+      // (Çünkü sipariş kapatılmış ve ödenen ürünler items'tan çıkarılmış olabilir)
+      // Eğer paidItems varsa, order.items içindeki kalan ürünler de ödenmiş demektir
+      if (order.items && order.items.length > 0) {
+        order.items.forEach((item) => {
+          const current = paidItemsMap.get(item.menuId) || 0;
+          paidItemsMap.set(item.menuId, current + item.quantity);
+        });
+      }
+      
+      // Tüm ödenen ürünleri stok düşümü için hazırla
+      if (paidItemsMap.size > 0) {
+        const orderItems = Array.from(paidItemsMap.entries()).map(([menuId, quantity]) => ({
+          menuId,
+          quantity,
+        }));
+        
+        await decreaseStockOnOrderClose(order.companyId, orderItems, order.branchId, order.createdBy).catch(() => {
+          // Stok hatası sipariş kapatmayı engellemesin
+        });
+      }
     } else {
       await updateOrder(id, updates);
     }

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TablesRouteImport } from './routes/tables'
 import { Route as TableHistoryRouteImport } from './routes/table-history'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as StocksRouteImport } from './routes/stocks'
 import { Route as StatisticsRouteImport } from './routes/statistics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PrintersRouteImport } from './routes/printers'
@@ -39,6 +40,11 @@ const TableHistoryRoute = TableHistoryRouteImport.update({
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StocksRoute = StocksRouteImport.update({
+  id: '/stocks',
+  path: '/stocks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StatisticsRoute = StatisticsRouteImport.update({
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
@@ -173,6 +182,7 @@ export interface FileRouteTypes {
     | '/printers'
     | '/settings'
     | '/statistics'
+    | '/stocks'
     | '/support'
     | '/table-history'
     | '/tables'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/printers'
     | '/settings'
     | '/statistics'
+    | '/stocks'
     | '/support'
     | '/table-history'
     | '/tables'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/printers'
     | '/settings'
     | '/statistics'
+    | '/stocks'
     | '/support'
     | '/table-history'
     | '/tables'
@@ -227,6 +239,7 @@ export interface RootRouteChildren {
   PrintersRoute: typeof PrintersRoute
   SettingsRoute: typeof SettingsRoute
   StatisticsRoute: typeof StatisticsRoute
+  StocksRoute: typeof StocksRoute
   SupportRoute: typeof SupportRoute
   TableHistoryRoute: typeof TableHistoryRoute
   TablesRoute: typeof TablesRoute
@@ -255,6 +268,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stocks': {
+      id: '/stocks'
+      path: '/stocks'
+      fullPath: '/stocks'
+      preLoaderRoute: typeof StocksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/statistics': {
@@ -373,6 +393,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrintersRoute: PrintersRoute,
   SettingsRoute: SettingsRoute,
   StatisticsRoute: StatisticsRoute,
+  StocksRoute: StocksRoute,
   SupportRoute: SupportRoute,
   TableHistoryRoute: TableHistoryRoute,
   TablesRoute: TablesRoute,

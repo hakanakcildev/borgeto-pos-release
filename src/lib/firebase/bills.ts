@@ -243,7 +243,6 @@ export const getBillsByTable = async (
     // Client-side sorting by createdAt (descending)
     return bills.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
-    console.error("getBillsByTable hatası:", error);
     throw error;
   }
 };

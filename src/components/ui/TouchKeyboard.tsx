@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, Delete, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLocation } from "@tanstack/react-router";
 
 export type KeyboardType = "text" | "number" | "email" | "password" | "tel";
+
+type ShiftMode = "normal" | "shift" | "caps";
 
 interface TouchKeyboardProps {
   isOpen: boolean;
@@ -25,8 +28,24 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
   value,
   maxLength,
 }) => {
-  const [isShift, setIsShift] = useState(false);
+  const location = useLocation();
+  const [shiftMode, setShiftMode] = useState<ShiftMode>("normal");
   const keyboardRef = useRef<HTMLDivElement>(null);
+  
+  // Login sayfası hariç, klavye açıldığında shift otomatik açık olsun
+  useEffect(() => {
+    if (isOpen && type === "text") {
+      const isLoginPage = location.pathname === "/auth/login";
+      if (!isLoginPage) {
+        setShiftMode("shift");
+      } else {
+        setShiftMode("normal");
+      }
+    } else if (!isOpen) {
+      // Klavye kapandığında shift modunu sıfırla
+      setShiftMode("normal");
+    }
+  }, [isOpen, type, location.pathname]);
 
   // Klavye dışına tıklandığında kapat
   useEffect(() => {
@@ -65,14 +84,57 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
       if (maxLength && value.length >= maxLength) {
         return;
       }
-      onInput(key);
-      // Shift modunu otomatik kapat
-      if (isShift) {
-        setIsShift(false);
+      
+      // Shift moduna göre harfi büyük/küçük yap
+      let outputKey = key;
+      if (key.match(/[a-zığüşöç]/i)) {
+        if (shiftMode === "shift") {
+          // İlk harf büyük
+          const turkishMap: Record<string, string> = {
+            "ı": "I",
+            "i": "İ",
+            "ğ": "Ğ",
+            "ü": "Ü",
+            "ş": "Ş",
+            "ö": "Ö",
+            "ç": "Ç",
+          };
+          outputKey = turkishMap[key.toLowerCase()] || key.toUpperCase();
+          // Shift modunu normal'e çevir (tek harf yazıldıktan sonra kapanır)
+          setShiftMode("normal");
+        } else if (shiftMode === "caps") {
+          // Tüm harfler büyük (Caps Lock açık)
+          const turkishMap: Record<string, string> = {
+            "ı": "I",
+            "i": "İ",
+            "ğ": "Ğ",
+            "ü": "Ü",
+            "ş": "Ş",
+            "ö": "Ö",
+            "ç": "Ç",
+          };
+          outputKey = turkishMap[key.toLowerCase()] || key.toUpperCase();
+        } else {
+          // Normal mod - küçük harf
+          outputKey = key.toLowerCase();
       }
+      }
+      
+      onInput(outputKey);
     },
-    [onInput, value, maxLength, isShift]
+    [onInput, value, maxLength, shiftMode]
   );
+  
+  const handleShiftClick = useCallback(() => {
+    // Shift tuşu davranışı: normal → shift → caps → normal
+    if (shiftMode === "normal") {
+      setShiftMode("shift");
+    } else if (shiftMode === "shift") {
+      setShiftMode("caps");
+    } else {
+      setShiftMode("normal");
+    }
+  }, [shiftMode]);
 
   const handleBackspace = useCallback(() => {
     onBackspace();
@@ -256,9 +318,9 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
   ];
   const zeroKey = "0";
 
-  // Shift ile büyük harfler (Türkçe karakterler için özel dönüşüm)
+  // Shift moduna göre harfleri göster (görsel için)
   const getDisplayLetter = (letter: string) => {
-    if (!isShift) return letter;
+    if (shiftMode === "normal") return letter;
     
     // Türkçe karakterler için özel dönüşüm
     const turkishMap: Record<string, string> = {
@@ -515,7 +577,7 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsShift(!isShift);
+              handleShiftClick();
             }}
             onTouchStart={(e) => {
               e.preventDefault();
@@ -524,16 +586,18 @@ const TouchKeyboard: React.FC<TouchKeyboardProps> = ({
             onTouchEnd={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsShift(!isShift);
+              handleShiftClick();
             }}
             className={cn(
-              "h-10 px-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 rounded-md text-sm font-medium transition-colors touch-manipulation",
-              isShift
+              "h-10 px-3 rounded-md text-sm font-medium transition-colors touch-manipulation",
+              shiftMode === "shift"
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                : "text-gray-900 dark:text-white"
+                : shiftMode === "caps"
+                ? "bg-blue-600 dark:bg-blue-700 text-white"
+                : "bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500 text-gray-900 dark:text-white"
             )}
           >
-            ⇧
+            {shiftMode === "caps" ? "⇧⇧" : "⇧"}
           </button>
             <button
               type="button"

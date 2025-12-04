@@ -18,6 +18,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/tables")({
   component: TablesManagement,
@@ -178,7 +179,7 @@ function TablesManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
     
     if (!effectiveCompanyId || !newAreaName.trim()) {
-      alert("Alan adı gereklidir");
+      customAlert("Alan adı gereklidir", "Uyarı", "warning");
       return;
     }
 
@@ -186,7 +187,7 @@ function TablesManagementContent() {
     
     // Alan zaten var mı kontrol et
     if (areas.includes(areaName)) {
-      alert("Bu alan zaten mevcut");
+      customAlert("Bu alan zaten mevcut", "Uyarı", "warning");
       setNewAreaName("");
       setIsAddingArea(false);
       return;
@@ -232,7 +233,7 @@ function TablesManagementContent() {
       setNewAreaName("");
       setIsAddingArea(false);
     } catch (error) {
-      alert("Alan eklenirken bir hata oluştu");
+      customAlert("Alan eklenirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -242,7 +243,7 @@ function TablesManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
     
     if (!effectiveCompanyId || !selectedArea) {
-      alert("Lütfen önce bir alan seçin");
+      customAlert("Lütfen önce bir alan seçin", "Uyarı", "warning");
       return;
     }
 
@@ -287,7 +288,7 @@ function TablesManagementContent() {
       const uniqueTables = removeDuplicateTables(tablesData);
       setTables(uniqueTables);
     } catch (error) {
-      alert("Masa eklenirken bir hata oluştu");
+      customAlert("Masa eklenirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -305,7 +306,7 @@ function TablesManagementContent() {
       const tablesData = await getTablesByCompany(effectiveCompanyId!, effectiveBranchId || undefined);
       setTables(tablesData);
     } catch (error) {
-      alert("Masa silinirken bir hata oluştu");
+      customAlert("Masa silinirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -337,7 +338,7 @@ function TablesManagementContent() {
         setSelectedArea("");
       }
     } catch (error) {
-      alert("Alan silinirken bir hata oluştu");
+      customAlert("Alan silinirken bir hata oluştu", "Hata", "error");
     }
   };
 

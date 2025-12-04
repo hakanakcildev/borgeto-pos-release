@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { getCategoriesByCompany } from "@/lib/firebase/menus";
 import type { Category } from "@/lib/firebase/types";
+import { formatPrintContent, getExamplePrintOutput } from "@/lib/print";
+import { getCompany } from "@/lib/firebase/companies";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/printers")({
   component: Printers,
@@ -28,6 +31,8 @@ interface PrinterDevice {
   productId?: number;
   isConnected: boolean;
   assignedCategories?: string[]; // Kategori ID'leri
+  paperWidth?: number; // Kağıt genişliği (karakter sayısı)
+  paperType?: string; // Kağıt tipi (örn: "80mm", "58mm", "110mm")
 }
 
 function PrintersContent() {
@@ -36,6 +41,7 @@ function PrintersContent() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState<string | null>(null);
   const [editingPrinter, setEditingPrinter] = useState<string | null>(null);
+  const [editingPrinterName, setEditingPrinterName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showAddNetworkPrinter, setShowAddNetworkPrinter] = useState(false);
@@ -64,6 +70,85 @@ function PrintersContent() {
     loadSavedPrinters();
   }, [companyId, userData?.companyId]);
 
+  // Sistem yazıcılarını otomatik tara (sayfa yüklendikten sonra)
+  useEffect(() => {
+    // Electron ortamında sistem yazıcılarını otomatik tara
+    const electronAPI = window.electronAPI;
+    if (electronAPI?.getSystemPrinters) {
+      const autoScanSystemPrinters = async () => {
+        try {
+          const result = await electronAPI.getSystemPrinters();
+          if (result.success && result.printers) {
+            const systemPrinters: PrinterDevice[] = result.printers.map((printer) => {
+              // Yazıcı tipini belirle (description veya name'e göre)
+              let printerType: "serial" | "usb" | "network" | "system" = "system";
+              const nameLower = printer.name.toLowerCase();
+              const descLower = printer.description.toLowerCase();
+              
+              // Network yazıcıları genellikle IP adresi veya network kelimesi içerir
+              if (nameLower.includes("network") || nameLower.includes("ip") || 
+                  descLower.includes("network") || descLower.includes("tcp") ||
+                  printer.options?.printerLocation?.includes("network")) {
+                printerType = "network";
+              }
+              // USB yazıcıları genellikle USB kelimesi içerir
+              else if (nameLower.includes("usb") || descLower.includes("usb") ||
+                       printer.options?.printerLocation?.includes("usb")) {
+                printerType = "usb";
+              }
+              // Seri port yazıcıları genellikle COM veya serial kelimesi içerir
+              else if (nameLower.includes("com") || nameLower.includes("serial") ||
+                       descLower.includes("com") || descLower.includes("serial")) {
+                printerType = "serial";
+              }
+              
+              return {
+                id: printer.id,
+                name: printer.name,
+                type: printerType,
+                port: printer.description || undefined,
+                isConnected: printer.status === 0 || printer.status === 1, // idle veya printing durumunda bağlı
+                paperWidth: printer.options?.paperWidth || 48, // Kağıt genişliği (karakter sayısı)
+                paperType: printer.options?.paperType || "80mm", // Kağıt tipi
+              };
+            });
+
+            if (systemPrinters.length > 0) {
+              setPrinters((prev) => {
+                const merged = [...prev];
+                systemPrinters.forEach((newPrinter) => {
+                  const exists = merged.find((p) => p.id === newPrinter.id);
+                  if (!exists) {
+                    merged.push(newPrinter);
+                  } else {
+                    // Mevcut yazıcının bağlantı durumunu güncelle
+                    exists.isConnected = newPrinter.isConnected;
+                    exists.name = newPrinter.name;
+                  }
+                });
+                
+                // Kaydet
+                const effectiveCompanyId = companyId || userData?.companyId;
+                if (effectiveCompanyId) {
+                  localStorage.setItem(
+                    `printers_${effectiveCompanyId}`,
+                    JSON.stringify(merged)
+                  );
+                }
+                
+                return merged;
+              });
+            }
+          }
+        } catch (error) {
+        }
+      };
+      
+      // Kısa bir gecikme ile tarama yap (sayfa yüklendikten sonra)
+      setTimeout(autoScanSystemPrinters, 1000);
+    }
+  }, [companyId, userData?.companyId]);
+
   // Kategorileri yükle
   useEffect(() => {
     const loadCategories = async () => {
@@ -76,7 +161,6 @@ function PrintersContent() {
         const cats = await getCategoriesByCompany(effectiveCompanyId, effectiveBranchId);
         setCategories(cats);
       } catch (error) {
-        console.error("Kategoriler yüklenirken hata:", error);
       }
     };
     
@@ -166,21 +250,59 @@ function PrintersContent() {
     return detected;
   }, []);
 
-  // Sistem yazıcılarını algıla (tarayıcı yazdırma API'si)
+  // Sistem yazıcılarını algıla (Electron API ile)
   const detectSystemPrinters = useCallback(async (): Promise<PrinterDevice[]> => {
     const detected: PrinterDevice[] = [];
 
-    // Tarayıcı yazdırma API'si ile sistem yazıcılarını göster
-    // Not: Web API'leri güvenlik nedeniyle sistem yazıcı listesini direkt alamaz
-    // Ancak yazdırma dialogu üzerinden erişilebilir
+    // Electron API'sini kullanarak tüm sistem yazıcılarını al
+    if (window.electronAPI?.getSystemPrinters) {
+      try {
+        const result = await window.electronAPI.getSystemPrinters();
+        if (result.success && result.printers) {
+          result.printers.forEach((printer) => {
+            // Yazıcı tipini belirle (description veya name'e göre)
+            let printerType: "serial" | "usb" | "network" | "system" = "system";
+            const nameLower = printer.name.toLowerCase();
+            const descLower = printer.description.toLowerCase();
+            
+            // Network yazıcıları genellikle IP adresi veya network kelimesi içerir
+            if (nameLower.includes("network") || nameLower.includes("ip") || 
+                descLower.includes("network") || descLower.includes("tcp") ||
+                printer.options?.printerLocation?.includes("network")) {
+              printerType = "network";
+            }
+            // USB yazıcıları genellikle USB kelimesi içerir
+            else if (nameLower.includes("usb") || descLower.includes("usb") ||
+                     printer.options?.printerLocation?.includes("usb")) {
+              printerType = "usb";
+            }
+            // Seri port yazıcıları genellikle COM veya serial kelimesi içerir
+            else if (nameLower.includes("com") || nameLower.includes("serial") ||
+                     descLower.includes("com") || descLower.includes("serial")) {
+              printerType = "serial";
+            }
+            
+            detected.push({
+              id: printer.id,
+              name: printer.name,
+              type: printerType,
+              port: printer.description || undefined,
+              isConnected: printer.status === 0 || printer.status === 1, // idle veya printing durumunda bağlı
+            });
+          });
+        }
+      } catch (error) {
+      }
+    } else {
+      // Electron API yoksa fallback (web ortamı)
     if (window.matchMedia && window.matchMedia("print").media !== "print") {
-      // Yazdırma desteği var
       detected.push({
         id: "system_default",
         name: "Sistem Varsayılan Yazıcısı",
         type: "system",
         isConnected: true,
       });
+      }
     }
 
     return detected;
@@ -580,6 +702,39 @@ function PrintersContent() {
     });
   }, [companyId, userData?.companyId]);
 
+  // Yazıcı ismini düzenle
+  const updatePrinterName = useCallback((printerId: string, newName: string) => {
+    if (!newName || newName.trim() === "") {
+      setError("Yazıcı adı boş olamaz");
+      return;
+    }
+
+    setPrinters((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === printerId) {
+          return {
+            ...p,
+            name: newName.trim(),
+          };
+        }
+        return p;
+      });
+      
+      const effectiveCompanyId = companyId || userData?.companyId;
+      if (effectiveCompanyId) {
+        localStorage.setItem(
+          `printers_${effectiveCompanyId}`,
+          JSON.stringify(updated)
+        );
+      }
+      
+      return updated;
+    });
+
+    setEditingPrinter(null);
+    setEditingPrinterName("");
+  }, [companyId, userData?.companyId]);
+
   // Test yazdırma
   const testPrint = useCallback(async () => {
     if (!selectedPrinter) {
@@ -594,17 +749,71 @@ function PrintersContent() {
     }
 
     try {
-      if (printer.type === "system") {
-        // Sistem yazıcısı için tarayıcı yazdırma dialogunu aç
-        window.print();
+      // Örnek sipariş verisi oluştur
+      const exampleItems = [
+        {
+          menuId: "test1",
+          menuName: "SIRIN KAHVALTI",
+          quantity: 1,
+          menuPrice: 1050,
+          subtotal: 1050,
+          notes: "",
+          selectedExtras: [],
+        },
+        {
+          menuId: "test2",
+          menuName: "CAY",
+          quantity: 2,
+          menuPrice: 10,
+          subtotal: 20,
+          notes: "",
+          selectedExtras: [],
+        },
+      ];
+
+      // Firma adını al
+      let companyName = "";
+      if (companyId) {
+        try {
+          const company = await getCompany(companyId);
+          companyName = company?.name || "";
+        } catch (err) {
+        }
+      }
+
+      // Yazdırma içeriğini oluştur (yazıcının kağıt genişliğini kullan)
+      const printContent = formatPrintContent(
+        "order",
+        exampleItems,
+        "5",
+        undefined,
+        {
+          companyName: companyName || "Firma Adi",
+          total: 1070,
+        }
+      );
+
+      // Electron API ile yazdır
+      if (window.electronAPI?.print) {
+        const result = await window.electronAPI.print({
+          printerName: printer.name,
+          content: printContent,
+          type: "order",
+        });
+
+        if (result.success) {
+          setError(null);
+          customAlert("Test yazdırma başarılı!", "Başarılı", "success");
       } else {
-        // Seri port veya USB yazıcı için test yazdırma
-        setError("Seri port ve USB yazıcılar için yazdırma özelliği yakında eklenecek");
+          setError(result.error || "Yazdırma sırasında bir hata oluştu");
+        }
+      } else {
+        setError("Yazdırma API'si kullanılamıyor");
       }
     } catch (error: any) {
       setError(error.message || "Yazdırma sırasında bir hata oluştu");
     }
-  }, [selectedPrinter, printers]);
+  }, [selectedPrinter, printers, companyId]);
 
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 overflow-y-auto">
@@ -747,9 +956,53 @@ function PrintersContent() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                    {editingPrinter === printer.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingPrinterName}
+                          onChange={(e) => setEditingPrinterName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              updatePrinterName(printer.id, editingPrinterName);
+                            } else if (e.key === "Escape") {
+                              setEditingPrinter(null);
+                              setEditingPrinterName("");
+                            }
+                          }}
+                          className="flex-1 px-2 py-1 text-base font-semibold border border-blue-500 dark:border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => updatePrinterName(printer.id, editingPrinterName)}
+                          className="p-1 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                          title="Kaydet"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingPrinter(null);
+                            setEditingPrinterName("");
+                          }}
+                          className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          title="İptal"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <h3 
+                        className="text-base font-semibold text-gray-900 dark:text-white truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        onClick={() => {
+                          setEditingPrinter(printer.id);
+                          setEditingPrinterName(printer.name);
+                        }}
+                        title="İsmi düzenlemek için tıklayın"
+                      >
                       {printer.name}
                     </h3>
+                    )}
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span
                         className={`text-xs px-2 py-0.5 rounded ${
@@ -785,6 +1038,11 @@ function PrintersContent() {
                           {printer.assignedCategories.length} Kategori Atanmış
                         </span>
                       )}
+                      {printer.paperType && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400">
+                          Kağıt: {printer.paperType} ({printer.paperWidth} karakter)
+                        </span>
+                      )}
                     </div>
                     {printer.port && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
@@ -811,10 +1069,19 @@ function PrintersContent() {
                     </Button>
                   )}
                   <Button
-                    onClick={() => setEditingPrinter(editingPrinter === printer.id ? null : printer.id)}
+                    onClick={() => {
+                      if (editingPrinter === printer.id) {
+                        setEditingPrinter(null);
+                        setEditingPrinterName("");
+                      } else {
+                        setEditingPrinter(printer.id);
+                        setEditingPrinterName(printer.name);
+                      }
+                    }}
                     variant="outline"
                     size="sm"
                     className="text-orange-600 dark:text-orange-400"
+                    title="Kategori ayarları"
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -880,9 +1147,34 @@ function PrintersContent() {
         </div>
       )}
 
+      {/* Örnek Çıktı Önizlemesi - Her zaman görünür */}
+      <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+          Örnek Çıktı Önizlemesi
+        </h3>
+        <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded border border-gray-300 dark:border-gray-600 font-mono text-sm whitespace-pre overflow-x-auto">
+          <div className="min-w-max">
+            {(() => {
+              let companyName = "";
+              if (companyId) {
+                // Firma adını al (async olmadan, sadece gösterim için)
+                try {
+                  // Burada sadece örnek gösteriyoruz, gerçek firma adı test yazdırmada alınacak
+                  companyName = "Firma Adi";
+                } catch {}
+              }
+              return getExamplePrintOutput(companyName || "Firma Adi");
+            })()}
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          Bu örnek çıktı yazıcıdan nasıl görüneceğini gösterir. Türkçe karakterler ASCII karşılıklarına çevrilir.
+        </p>
+      </div>
+
       {/* Test Yazdırma Butonu */}
       {selectedPrinter && (
-        <div className="mt-6">
+        <div className="mt-4">
           <Button
             onClick={testPrint}
             className="w-full bg-green-600 hover:bg-green-700 text-white"

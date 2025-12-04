@@ -42,6 +42,13 @@ export interface Branch {
   updatedAt: Date;
 }
 
+export interface MenuExtra {
+  id: string; // Unique ID for the extra
+  name: string; // Extra name (e.g., "Ekstra Peynir", "Ekstra Sos")
+  price: number; // Extra price
+  isRequired?: boolean; // Is this extra required?
+}
+
 export interface Menu {
   id?: string;
   companyId: string;
@@ -67,6 +74,7 @@ export interface Menu {
   ingredients?: string[];
   allergens?: string[];
   calories?: number;
+  extras?: MenuExtra[]; // Ekstra malzemeler listesi
   createdAt: Date;
   updatedAt: Date;
 }
@@ -125,6 +133,12 @@ export interface Table {
   updatedAt: Date;
 }
 
+export interface SelectedExtra {
+  id: string; // MenuExtra.id
+  name: string; // MenuExtra.name (snapshot)
+  price: number; // MenuExtra.price (snapshot)
+}
+
 export interface OrderItem {
   id?: string;
   cartItemId?: string; // Sepetteki unique ID (yeni eklenen ürünleri ayırt etmek için)
@@ -133,7 +147,8 @@ export interface OrderItem {
   menuPrice: number; // Menü öğesi fiyatı (snapshot)
   quantity: number;
   notes?: string; // Özel notlar (örn: "az baharatlı", "ekstra peynir")
-  subtotal: number; // quantity * menuPrice
+  selectedExtras?: SelectedExtra[]; // Seçilen ekstra malzemeler
+  subtotal: number; // quantity * (menuPrice + selectedExtras toplam fiyatı)
   addedAt?: Date; // Ürünün eklendiği zaman
   canceledAt?: Date; // Ürünün iptal edildiği zaman (sadece iptal edilen ürünler için)
   movedAt?: Date; // Ürünün taşındığı zaman (sadece taşınan ürünler için)
@@ -306,5 +321,43 @@ export interface Bill {
   createdBy: string; // Kullanıcı ID'si
   createdAt: Date;
   closedAt: Date; // Ödeme alındığında
+}
+
+// Stok Yönetimi
+export type StockMovementType = "in" | "out" | "adjustment"; // Giriş, Çıkış, Düzeltme
+
+export interface StockMovement {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  stockId: string; // Hangi stok kalemine ait
+  type: StockMovementType; // Giriş, çıkış veya düzeltme
+  quantity: number; // Miktar (pozitif değer)
+  unitType: "package" | "item"; // Koli/paket veya adet
+  reason?: string; // Sebep (örn: "Satış", "Alış", "Sayım düzeltmesi")
+  notes?: string; // Notlar
+  createdBy: string; // Kullanıcı ID'si
+  createdAt: Date;
+}
+
+export interface Stock {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  name: string; // Stok adı (örn: "Domates", "Peynir")
+  description?: string; // Açıklama
+  packageType: "koli" | "paket"; // Koli veya paket
+  itemsPerPackage: number; // 1 kolide/pakette kaç adet ürün var
+  currentQuantity: number; // Mevcut miktar (adet cinsinden)
+  minQuantity: number; // Minimum stok seviyesi (adet cinsinden, uyarı için)
+  maxQuantity?: number; // Maksimum stok seviyesi (adet cinsinden, opsiyonel)
+  category?: string; // Kategori (opsiyonel, menü kategorileriyle ilişkilendirilebilir)
+  menuId: string; // İlişkili menü ID'si (zorunlu, hangi menü ürünüyle eşleştiği)
+  menuName?: string; // İlişkili menü adı (snapshot)
+  cost?: number; // Birim maliyet (opsiyonel)
+  location?: string; // Depo konumu (opsiyonel)
+  isActive: boolean; // Aktif mi?
+  createdAt: Date;
+  updatedAt: Date;
 }
 

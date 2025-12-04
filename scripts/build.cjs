@@ -5,6 +5,43 @@ const path = require("path");
 const fs = require("fs");
 const args = process.argv.slice(2);
 
+// Versiyon artırma fonksiyonu
+function incrementVersion(version, type = "patch") {
+  const parts = version.split(".").map(Number);
+  
+  if (type === "major") {
+    parts[0]++;
+    parts[1] = 0;
+    parts[2] = 0;
+  } else if (type === "minor") {
+    parts[1]++;
+    parts[2] = 0;
+  } else {
+    // patch (default)
+    parts[2]++;
+  }
+  
+  return parts.join(".");
+}
+
+// package.json'dan versiyonu oku ve güncelle
+function updateVersion(type = "patch") {
+  const packageJsonPath = path.join(__dirname, "..", "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+  const oldVersion = packageJson.version;
+  const newVersion = incrementVersion(oldVersion, type);
+  
+  packageJson.version = newVersion;
+  fs.writeFileSync(
+    packageJsonPath,
+    JSON.stringify(packageJson, null, 2) + "\n",
+    "utf-8"
+  );
+  
+  console.log(`✅ Versiyon güncellendi: ${oldVersion} → ${newVersion}`);
+  return newVersion;
+}
+
 // Load .env file if it exists
 const envPath = path.join(__dirname, "..", ".env");
 if (fs.existsSync(envPath)) {
@@ -31,6 +68,17 @@ if (fs.existsSync(envPath)) {
   });
 }
 
+// Versiyon artırma parametrelerini kontrol et
+const versionType = args.find((arg) => 
+  arg === "--major" || arg === "--minor" || arg === "--patch"
+);
+const versionIncrementType = versionType 
+  ? versionType.replace("--", "") 
+  : "patch";
+
+// Versiyonu artır
+updateVersion(versionIncrementType);
+
 // Check if --win, --mac, or --linux parameter is provided
 const platformMap = {
   "--win": "make:win",
@@ -50,7 +98,7 @@ execSync("tsc -b && vite build", {
 
 // If platform is specified, run electron-builder
 if (npmScript) {
-  console.log(`Building Electron app...`);
+  console.log(`\n🚀 Electron uygulaması build ediliyor...`);
   // Use electron-builder instead of electron-forge
   const platformMap2 = {
     "--win": "win",
@@ -73,20 +121,79 @@ if (npmScript) {
       delete env.WIN_CSC_KEY_PASSWORD;
     }
     
-    execSync(`npx electron-builder --${platform} --x64 --publish never`, {
+    console.log("📦 Windows NSIS installer oluşturuluyor...");
+    
+    // GitHub token kontrolü
+    if (!env.GH_TOKEN && !env.GITHUB_TOKEN && !env.VITE_GITHUB_TOKEN) {
+      console.log("⚠️  GitHub token bulunamadı! GitHub'a publish edilemeyecek.");
+      console.log("💡 GitHub'a publish etmek için .env dosyasına GH_TOKEN ekleyin.");
+      console.log("📦 Sadece local build alınıyor...");
+      
+      try {
+        execSync(`npx electron-builder --${platform} --x64 --publish never --config.win.target=nsis`, {
+          stdio: "inherit",
+          cwd: path.join(__dirname, ".."),
+          env: env,
+        });
+        console.log("\n✅ Build başarıyla tamamlandı! Setup dosyası release klasöründe oluşturuldu.");
+      } catch (error) {
+        console.error("\n❌ Build hatası:", error.message);
+        process.exit(1);
+      }
+    } else {
+      console.log("🚀 GitHub'a publish ediliyor...");
+      try {
+        execSync(`npx electron-builder --${platform} --x64 --publish always --config.win.target=nsis`, {
       stdio: "inherit",
       cwd: path.join(__dirname, ".."),
       env: env,
     });
+        console.log("\n✅ Build başarıyla tamamlandı ve GitHub'a yüklendi!");
+        console.log("🔗 Release: https://github.com/hakanakcildev/borgeto-pos-release/releases");
+      } catch (error) {
+        console.error("\n❌ Build/Publish hatası:", error.message);
+        process.exit(1);
+      }
+    }
   } else {
+    // GitHub token kontrolü
+    if (!env.GH_TOKEN && !env.GITHUB_TOKEN && !env.VITE_GITHUB_TOKEN) {
+      console.log("⚠️  GitHub token bulunamadı! GitHub'a publish edilemeyecek.");
+      console.log("💡 GitHub'a publish etmek için .env dosyasına GH_TOKEN ekleyin.");
+      console.log("📦 Sadece local build alınıyor...");
+      
+      try {
     execSync(`npx electron-builder --${platform} --publish never`, {
       stdio: "inherit",
       cwd: path.join(__dirname, ".."),
       env: env,
     });
+        console.log("\n✅ Build başarıyla tamamlandı!");
+      } catch (error) {
+        console.error("\n❌ Build hatası:", error.message);
+        process.exit(1);
+      }
+    } else {
+      console.log("🚀 GitHub'a publish ediliyor...");
+      try {
+        execSync(`npx electron-builder --${platform} --publish always`, {
+          stdio: "inherit",
+          cwd: path.join(__dirname, ".."),
+          env: env,
+        });
+        console.log("\n✅ Build başarıyla tamamlandı ve GitHub'a yüklendi!");
+        console.log("🔗 Release: https://github.com/hakanakcildev/borgeto-pos-release/releases");
+      } catch (error) {
+        console.error("\n❌ Build/Publish hatası:", error.message);
+        process.exit(1);
+      }
+    }
   }
 } else {
   console.log(
-    "Build complete. Use --win, --mac, or --linux to create installers."
+    "\n⚠️  Build tamamlandı ancak installer oluşturulmadı."
+  );
+  console.log(
+    "💡 Installer oluşturmak için: npm run build -- --win (veya --mac, --linux)"
   );
 }

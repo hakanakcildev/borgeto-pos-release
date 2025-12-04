@@ -2,10 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getBillsByCompany } from "@/lib/firebase/bills";
-import type { Bill } from "@/lib/firebase/types";
+import type { Bill, OrderItem } from "@/lib/firebase/types";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { History, Clock, Receipt, X, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  formatPrintContent,
+  printToPrinter,
+  getDefaultPrinter,
+} from "@/lib/print";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/table-history")({
   component: TableHistory,
@@ -20,10 +26,47 @@ function TableHistory() {
 }
 
 function TableHistoryContent() {
-  const { userData, companyId, branchId } = useAuth();
+  const { userData, companyId, branchId, companyData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [bills, setBills] = useState<Bill[]>([]);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  
+  // Yazıcılar için state
+  const [printers, setPrinters] = useState<Array<{
+    id: string;
+    name: string;
+    type: "serial" | "usb" | "network" | "system";
+    port?: string;
+    vendorId?: number;
+    productId?: number;
+    isConnected: boolean;
+    assignedCategories?: string[];
+  }>>([]);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
+
+  // Yazıcı ayarlarını yükle
+  useEffect(() => {
+    const loadPrinters = () => {
+      try {
+        const effectiveCompanyId = companyId || userData?.companyId;
+        if (effectiveCompanyId) {
+          const saved = localStorage.getItem(`printers_${effectiveCompanyId}`);
+          if (saved) {
+            const savedPrinters = JSON.parse(saved);
+            setPrinters(savedPrinters);
+            
+            const selected = localStorage.getItem(`selectedPrinter_${effectiveCompanyId}`);
+            if (selected) {
+              setSelectedPrinterId(selected);
+            }
+          }
+        }
+      } catch (error) {
+      }
+    };
+
+    loadPrinters();
+  }, [companyId, userData?.companyId]);
 
   // Tüm adisyonları yükle
   useEffect(() => {
@@ -84,12 +127,28 @@ function TableHistoryContent() {
     });
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!selectedBill) return;
     
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
+    if (!defaultPrinter) {
+      customAlert("Varsayılan yazıcı bulunamadı.\nLütfen yazıcı ayarlarından varsayılan yazıcı seçin.", "Uyarı", "warning");
+      return;
+    }
 
+    try {
+      // Bill'deki items'ı OrderItem formatına çevir
+      const orderItems: OrderItem[] = selectedBill.items.map(item => ({
+        menuId: item.menuId,
+        menuName: item.menuName,
+        quantity: item.quantity,
+        menuPrice: item.subtotal / item.quantity,
+        subtotal: item.subtotal,
+        notes: item.notes || "",
+        selectedExtras: [],
+      }));
+
+      // Ödeme yöntemi bilgisini al
     const paymentMethodName = (method: string) => {
       return method === "cash" ? "Nakit" : 
              method === "card" ? "Kart" : 
@@ -97,177 +156,29 @@ function TableHistoryContent() {
              method;
     };
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Adisyon - ${selectedBill.billNumber}</title>
-          <style>
-            @media print {
-              @page {
-                size: A4;
-                margin: 1cm;
-              }
-            }
-            body {
-              font-family: Arial, sans-serif;
-              max-width: 80mm;
-              margin: 0 auto;
-              padding: 20px;
-              font-size: 12px;
-            }
-            .header {
-              text-align: center;
-              border-bottom: 2px solid #000;
-              padding-bottom: 10px;
-              margin-bottom: 15px;
-            }
-            .header h1 {
-              margin: 0;
-              font-size: 18px;
-              font-weight: bold;
-            }
-            .info {
-              margin-bottom: 15px;
-            }
-            .info-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 5px;
-            }
-            .items {
-              border-top: 1px solid #ccc;
-              border-bottom: 1px solid #ccc;
-              padding: 10px 0;
-              margin: 15px 0;
-            }
-            .item {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 8px;
-            }
-            .item-name {
-              flex: 1;
-            }
-            .item-quantity {
-              margin: 0 10px;
-            }
-            .totals {
-              margin-top: 15px;
-            }
-            .total-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 5px;
-              font-weight: bold;
-            }
-            .payments {
-              margin-top: 15px;
-              border-top: 1px solid #ccc;
-              padding-top: 10px;
-            }
-            .payment-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 5px;
-            }
-            .footer {
-              text-align: center;
-              margin-top: 20px;
-              padding-top: 10px;
-              border-top: 1px solid #ccc;
-              font-size: 10px;
-              color: #666;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>ADİSYON</h1>
-            <p>${selectedBill.billNumber}</p>
-          </div>
-          
-          <div class="info">
-            <div class="info-row">
-              <span>Masa:</span>
-              <span><strong>${selectedBill.tableNumber}</strong></span>
-            </div>
-            <div class="info-row">
-              <span>Tarih:</span>
-              <span>${formatFullDate(selectedBill.createdAt)}</span>
-            </div>
-            ${selectedBill.customerName ? `
-            <div class="info-row">
-              <span>Müşteri:</span>
-              <span>${selectedBill.customerName}</span>
-            </div>
-            ` : ''}
-            ${selectedBill.customerPhone ? `
-            <div class="info-row">
-              <span>Telefon:</span>
-              <span>${selectedBill.customerPhone}</span>
-            </div>
-            ` : ''}
-          </div>
+      // Tüm ödemeleri birleştir
+      const paymentMethods = selectedBill.payments.map(p => paymentMethodName(p.method)).join(", ");
 
-          <div class="items">
-            ${selectedBill.items.map(item => `
-              <div class="item">
-                <span class="item-name">${item.menuName}</span>
-                <span class="item-quantity">x${item.quantity}</span>
-                <span>₺${item.subtotal.toFixed(2)}</span>
-              </div>
-            `).join('')}
-          </div>
+      // Yazdırma içeriğini oluştur
+      const content = formatPrintContent(
+        "payment",
+        orderItems,
+        selectedBill.tableNumber.toString(),
+        selectedBill.billNumber,
+        {
+          total: selectedBill.total,
+          paymentMethod: paymentMethods,
+          subtotal: selectedBill.subtotal,
+          discount: selectedBill.discount || 0,
+          companyName: companyData?.name || "",
+        }
+      );
 
-          <div class="totals">
-            <div class="info-row">
-              <span>Ara Toplam:</span>
-              <span>₺${selectedBill.subtotal.toFixed(2)}</span>
-            </div>
-            ${selectedBill.discount && selectedBill.discount > 0 ? `
-            <div class="info-row">
-              <span>İndirim:</span>
-              <span>-₺${selectedBill.discount.toFixed(2)}</span>
-            </div>
-            ` : ''}
-            <div class="total-row">
-              <span>TOPLAM:</span>
-              <span>₺${selectedBill.total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div class="payments">
-            <strong>Ödemeler:</strong>
-            ${selectedBill.payments.map(payment => `
-              <div class="payment-row">
-                <span>${paymentMethodName(payment.method)}</span>
-                <span>₺${payment.amount.toFixed(2)}</span>
-              </div>
-            `).join('')}
-          </div>
-
-          ${selectedBill.notes ? `
-          <div class="info" style="margin-top: 15px;">
-            <strong>Notlar:</strong>
-            <p>${selectedBill.notes}</p>
-          </div>
-          ` : ''}
-
-          <div class="footer">
-            <p>Teşekkür ederiz!</p>
-            <p>${formatFullDate(selectedBill.createdAt)}</p>
-          </div>
-        </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+      // Yazdır
+      await printToPrinter(defaultPrinter.name, content, "payment");
+    } catch (error) {
+      customAlert("Yazdırma sırasında bir hata oluştu.", "Hata", "error");
+    }
   };
 
 

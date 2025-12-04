@@ -182,13 +182,20 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       [onBlur, closeKeyboard, showTouchKeyboard, getInputRef]
     );
 
+    // autoCapitalize: Login sayfası hariç tüm input'larda "sentences" (ilk harf büyük)
+    // Eğer props'ta autoCapitalize belirtilmişse onu kullan, yoksa varsayılan olarak "sentences"
+    const autoCapitalizeValue = props.autoCapitalize !== undefined 
+      ? props.autoCapitalize 
+      : (type === "password" || type === "email" ? "none" : "sentences");
+
     return (
       <div className="relative w-full">
         <input
           type={type}
           className={cn(
-            "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            "cursor-text selection:bg-blue-200 selection:text-blue-900",
+            "flex h-[2rem] w-full rounded-[0.24rem] border border-input bg-white dark:bg-gray-800 px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background file:border-0 file:bg-transparent file:text-[0.7rem] file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            "cursor-text selection:bg-blue-200 dark:selection:bg-blue-800 selection:text-blue-900 dark:selection:text-blue-100",
+            "text-gray-900 dark:text-white",
             "select-text touch-manipulation",
             showKeyboardButton &&
               isTouchDevice &&
@@ -206,6 +213,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           onClick={handleClick}
           maxLength={maxLength}
           tabIndex={0}
+          autoCapitalize={autoCapitalizeValue}
           {...props}
         />
         {showKeyboardButton && isTouchDevice && (

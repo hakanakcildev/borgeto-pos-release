@@ -46,30 +46,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const loadSessionAuth = () => {
       try {
         const posAuthStr = localStorage.getItem("posAuth");
-        console.log("🔑 Loading auth from localStorage:", posAuthStr ? "Found" : "Not found");
         if (posAuthStr) {
           const posAuth = JSON.parse(posAuthStr);
-          console.log("✅ Auth data loaded:", {
-            type: posAuth.type,
-            hasUser: !!posAuth.user,
-            hasBranch: !!posAuth.branch,
-            hasCompany: !!posAuth.company
-          });
           setAuthType(posAuth.type);
           setCompanyId(posAuth.companyId);
           setBranchId(posAuth.branchId);
           setUserData(posAuth.user || null);
           setBranchData(posAuth.branch || null);
           setCompanyData(posAuth.company || null);
-        } else {
-          console.log("ℹ️ No auth data in localStorage");
         }
       } catch (error) {
-        console.error("❌ Error loading auth from localStorage:", error);
       } finally {
         // Always set loading to false after initial load
         setLoading(false);
-        console.log("✅ Auth loading complete");
       }
     };
 
@@ -91,7 +80,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setCompanyData(posAuth.company || null);
           } else {
             // Cleared
-            console.log("posAuth removed from localStorage, clearing auth state");
             setCurrentUser(null);
             setUserData(null);
             setBranchData(null);
@@ -101,7 +89,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setAuthType(null);
           }
         } catch (error) {
-          console.error("Error handling storage change:", error);
         }
       }
     };
@@ -159,22 +146,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Masa geçmişi temizleme dinleyicisi (Electron IPC event)
   useEffect(() => {
     if (typeof window !== "undefined" && window.electronAPI?.onTriggerClearTableHistory) {
-      console.log("🗑️ Setting up table history cleanup listener");
-      
       window.electronAPI.onTriggerClearTableHistory(async () => {
-        console.log("🗑️ Table history cleanup triggered");
-        
         // Eğer authenticated ise companyId ve branchId'yi al
         if (companyId) {
           try {
-            console.log("🗑️ Clearing table history for company:", companyId, "branch:", branchId);
             await clearAllTableHistory(companyId, branchId || undefined);
-            console.log("✅ Table history cleared successfully");
           } catch (error) {
-            console.error("❌ Error clearing table history:", error);
           }
-        } else {
-          console.log("⚠️ Cannot clear table history: no company ID");
         }
       });
     }

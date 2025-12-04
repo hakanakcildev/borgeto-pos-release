@@ -106,15 +106,21 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         // Input'un gerçek değerini al (state yerine)
         const inputValue = input.value || "";
         
-        // Cursor pozisyonunu al (focus olmadan önce)
-        const cursorStart = input.selectionStart ?? inputValue.length;
-        const cursorEnd = input.selectionEnd ?? inputValue.length;
-        
-        // Cursor pozisyonuna göre yeni değeri oluştur
-        const newValue = 
-          inputValue.slice(0, cursorStart) + 
-          value + 
-          inputValue.slice(cursorEnd);
+        // Number input'larda cursor pozisyonu yok, sadece sonuna ekle
+        let newValue: string;
+        if (input instanceof HTMLInputElement && input.type === "number") {
+          newValue = inputValue + value;
+        } else {
+          // Cursor pozisyonunu al (text input'larda)
+          const cursorStart = input.selectionStart ?? inputValue.length;
+          const cursorEnd = input.selectionEnd ?? inputValue.length;
+          
+          // Cursor pozisyonuna göre yeni değeri oluştur
+          newValue = 
+            inputValue.slice(0, cursorStart) + 
+            value + 
+            inputValue.slice(cursorEnd);
+        }
         
         if (maxLength && newValue.length > maxLength) {
           return;
@@ -136,15 +142,23 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
           nativeTextAreaValueSetter.call(input, newValue);
         }
 
-        // Cursor pozisyonunu yeni eklenen karakterin sonuna ayarla
-        const newCursorPosition = cursorStart + value.length;
-        // Focus'u koru ve cursor pozisyonunu ayarla
+        // Focus'u koru
         if (document.activeElement !== input) {
           input.focus();
         }
-        requestAnimationFrame(() => {
-          input.setSelectionRange(newCursorPosition, newCursorPosition);
-        });
+        // Number tipindeki input'larda setSelectionRange çalışmaz
+        if (input instanceof HTMLInputElement && input.type !== "number") {
+          // Cursor pozisyonunu yeni eklenen karakterin sonuna ayarla
+          const cursorStart = input.selectionStart ?? inputValue.length;
+          const newCursorPosition = cursorStart + value.length;
+          requestAnimationFrame(() => {
+            try {
+              input.setSelectionRange(newCursorPosition, newCursorPosition);
+            } catch (error) {
+              // setSelectionRange hatası görmezden gelinir
+            }
+          });
+        }
 
         // Event tetikle
         const inputEvent = new Event("input", { bubbles: true });
@@ -171,26 +185,32 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         return;
       }
       
-      // Cursor pozisyonunu al (focus olmadan önce)
-      const cursorStart = input.selectionStart ?? inputValue.length;
-      const cursorEnd = input.selectionEnd ?? inputValue.length;
-      
-      // Eğer seçili metin varsa, seçili metni sil
-      // Yoksa cursor'un solundaki karakteri sil
+      // Number input'larda sadece son karakteri sil
       let newValue: string;
       let newCursorPosition: number;
       
-      if (cursorStart !== cursorEnd) {
-        // Seçili metin varsa, seçili metni sil
-        newValue = inputValue.slice(0, cursorStart) + inputValue.slice(cursorEnd);
-        newCursorPosition = cursorStart;
-      } else if (cursorStart > 0) {
-        // Cursor'un solundaki karakteri sil
-        newValue = inputValue.slice(0, cursorStart - 1) + inputValue.slice(cursorStart);
-        newCursorPosition = cursorStart - 1;
+      if (input instanceof HTMLInputElement && input.type === "number") {
+        newValue = inputValue.slice(0, -1);
+        newCursorPosition = newValue.length;
       } else {
-        // Cursor başta, silinecek bir şey yok
-        return;
+        // Text input'larda cursor pozisyonunu al
+        const cursorStart = input.selectionStart ?? inputValue.length;
+        const cursorEnd = input.selectionEnd ?? inputValue.length;
+        
+        // Eğer seçili metin varsa, seçili metni sil
+        // Yoksa cursor'un solundaki karakteri sil
+        if (cursorStart !== cursorEnd) {
+          // Seçili metin varsa, seçili metni sil
+          newValue = inputValue.slice(0, cursorStart) + inputValue.slice(cursorEnd);
+          newCursorPosition = cursorStart;
+        } else if (cursorStart > 0) {
+          // Cursor'un solundaki karakteri sil
+          newValue = inputValue.slice(0, cursorStart - 1) + inputValue.slice(cursorStart);
+          newCursorPosition = cursorStart - 1;
+        } else {
+          // Cursor başta, silinecek bir şey yok
+          return;
+        }
       }
 
       // Input değerini güncelle
@@ -213,9 +233,16 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
       if (document.activeElement !== input) {
         input.focus();
       }
-      requestAnimationFrame(() => {
-        input.setSelectionRange(newCursorPosition, newCursorPosition);
-      });
+      // Number tipindeki input'larda setSelectionRange çalışmaz
+      if (input instanceof HTMLInputElement && input.type !== "number") {
+        requestAnimationFrame(() => {
+          try {
+            input.setSelectionRange(newCursorPosition, newCursorPosition);
+          } catch (error) {
+            // setSelectionRange hatası görmezden gelinir
+          }
+        });
+      }
 
       // Event tetikle
       const event = new Event("input", { bubbles: true });

@@ -8,6 +8,8 @@ import { routeTree } from "./routeTree.gen";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TouchKeyboardProvider } from "./contexts/TouchKeyboardContext";
+import { AlertDialogProvider } from "./components/AlertDialogProvider";
+import { NetworkStatus } from "./components/NetworkStatus";
 
 // Create a new router instance
 const router = createRouter({
@@ -31,22 +33,14 @@ if (typeof window !== "undefined") {
       const posAuthStr = localStorage.getItem("posAuth");
       const isAuthenticated = !!posAuthStr;
       
-      console.log("🚀 Initial load check:", {
-        isAuthenticated,
-        pathname: window.location.pathname,
-        hash: window.location.hash,
-        href: window.location.href,
-      });
       
       // Eğer authenticated ise ve pathname "/" değilse veya file:// protokolü kullanılıyorsa
       if (isAuthenticated && (window.location.pathname !== "/" || window.location.protocol === "file:")) {
-        console.log("🔄 Redirecting to home via replaceState");
         // History API ile "/" path'ine yönlendir
         window.history.replaceState(null, "", "/");
         // Router'ı manuel olarak navigate et
         router.navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
       } else if (!isAuthenticated && window.location.pathname !== "/auth/login") {
-        console.log("🔄 Redirecting to login via replaceState");
         window.history.replaceState(null, "", "/auth/login");
         router.navigate({ to: "/auth/login", replace: true });
       }
@@ -62,9 +56,12 @@ if (!rootElement.innerHTML) {
     <StrictMode>
       <ThemeProvider>
         <AuthProvider>
+          <AlertDialogProvider>
           <TouchKeyboardProvider>
+              <NetworkStatus />
             <RouterProvider router={router} />
           </TouchKeyboardProvider>
+          </AlertDialogProvider>
         </AuthProvider>
       </ThemeProvider>
     </StrictMode>

@@ -22,8 +22,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     console.log("Preload: checkForUpdates called, invoking check-for-updates IPC");
     return ipcRenderer.invoke("check-for-updates");
   },
-  onUpdateAvailable: (callback: (version: string) => void) => {
-    ipcRenderer.on("update-available", (_event, version: string) => callback(version));
+  startDownloadUpdate: () => {
+    console.log("Preload: startDownloadUpdate called, invoking start-download-update IPC");
+    return ipcRenderer.invoke("start-download-update");
+  },
+  enableAutoDownload: () => {
+    console.log("Preload: enableAutoDownload called, invoking enable-auto-download IPC");
+    return ipcRenderer.invoke("enable-auto-download");
+  },
+  onUpdateAvailable: (callback: (version: string, releaseNotes?: string) => void) => {
+    ipcRenderer.on("update-available", (_event, version: string, releaseNotes?: string) => callback(version, releaseNotes));
   },
   onUpdateNotAvailable: (callback: (info?: { currentVersion?: string; latestVersion?: string }) => void) => {
     ipcRenderer.on("update-not-available", (_event, info?: { currentVersion?: string; latestVersion?: string }) => callback(info));
@@ -42,6 +50,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   onTriggerClearTableHistory: (callback: () => void) => {
     ipcRenderer.on("trigger-clear-table-history", () => callback());
+  },
+  getAppVersion: () => {
+    console.log("Preload: getAppVersion called, invoking get-app-version IPC");
+    return ipcRenderer.invoke("get-app-version");
+  },
+  getChangelog: () => {
+    console.log("Preload: getChangelog called, invoking get-changelog IPC");
+    return ipcRenderer.invoke("get-changelog");
+  },
+  getSystemPrinters: () => {
+    console.log("Preload: getSystemPrinters called, invoking get-system-printers IPC");
+    return ipcRenderer.invoke("get-system-printers");
+  },
+  print: (data: {
+    printerName: string;
+    content: string;
+    type?: "order" | "cancel" | "payment";
+  }) => {
+    console.log("Preload: print called, invoking print IPC");
+    return ipcRenderer.invoke("print", data);
   },
 });
 
@@ -65,6 +93,26 @@ declare global {
       onUpdateError: (callback: (error: string) => void) => void;
       onUpdateChecking: (callback: () => void) => void;
       onTriggerClearTableHistory: (callback: () => void) => void;
+      getSystemPrinters: () => Promise<{
+        success: boolean;
+        error?: string;
+        printers: Array<{
+          id: string;
+          name: string;
+          description: string;
+          status: number;
+          isDefault: boolean;
+          options: Record<string, any>;
+        }>;
+      }>;
+      print: (data: {
+        printerName: string;
+        content: string;
+        type?: "order" | "cancel" | "payment";
+      }) => Promise<{
+        success: boolean;
+        error?: string;
+      }>;
     };
   }
 }

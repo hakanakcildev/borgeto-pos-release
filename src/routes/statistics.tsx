@@ -487,7 +487,7 @@ function StatisticsContent() {
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Toplam Ürün</p>
-              <p className="text-base font-bold text-green-600 dark:text-green-400">{stats.totalOrders}</p>
+              <p className="text-base font-bold text-green-600 dark:text-green-400">{Math.round(stats.totalOrders)}</p>
             </div>
             <Package className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
           </div>
@@ -507,7 +507,7 @@ function StatisticsContent() {
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">İptal</p>
-              <p className="text-base font-bold text-red-600 dark:text-red-400">{stats.cancelledOrders}</p>
+              <p className="text-base font-bold text-red-600 dark:text-red-400">{Math.round(stats.cancelledOrders)}</p>
             </div>
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
           </div>
@@ -528,7 +528,7 @@ function StatisticsContent() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Paket</p>
               <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">
-                {stats.totalCourierPackages}
+                {Math.round(stats.totalCourierPackages)}
               </p>
               <p className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 mt-0.5 truncate">
                 ₺{stats.totalCourierPackageAmount.toFixed(2)}
@@ -554,7 +554,7 @@ function StatisticsContent() {
               >
                 <div className="flex items-center justify-between mb-1">
                   <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{method.methodName}</p>
-                  <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">{method.count}</span>
+                  <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">{Math.round(method.count)}</span>
                 </div>
                 <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                   ₺{method.total.toFixed(2)}
@@ -587,7 +587,7 @@ function StatisticsContent() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{product.menuName}</p>
                     <p className="text-[10px] text-gray-600 dark:text-gray-400">
-                      {product.quantity}x • ₺{product.revenue.toFixed(2)}
+                      {Math.round(product.quantity)}x • ₺{product.revenue.toFixed(2)}
                     </p>
                   </div>
                 </div>

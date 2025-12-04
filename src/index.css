@@ -3,6 +3,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Subtle pulse animation for occupied tables */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -116,6 +130,37 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* Responsive scaling for smaller screens */
+  @media (max-width: 1366px) {
+    html {
+      font-size: 14px;
+    }
+  }
+  
+  @media (max-width: 1280px) {
+    html {
+      font-size: 13px;
+    }
+  }
+  
+  @media (max-width: 1024px) {
+    html {
+      font-size: 12px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    html {
+      font-size: 11px;
+    }
+  }
+  
+  @media (min-width: 1920px) {
+    html {
+      font-size: 16px;
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import { getTablesByCompany, updateTableStatus, getTable, createDefaultTables } 
 import { getOrdersByCompany, updateOrder, addOrder, updateOrderStatus } from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
+import { customAlert } from "@/components/ui/alert-dialog";
 import { Utensils, Clock, X, Loader2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { signOutUser } from "@/lib/firebase/auth";
@@ -23,6 +24,7 @@ import {
   Table as TableIcon,
   Printer,
   Bike,
+  Package,
 } from "lucide-react";
 import { useCallback } from "react";
 import { getCompany } from "@/lib/firebase/companies";
@@ -90,7 +92,6 @@ function POSLayoutWithTables() {
       // Login sayfasına yönlendir
       navigate({ to: "/auth/login", replace: true });
     } catch (error) {
-      console.error("Logout error:", error);
       // Hata olsa bile temizle ve yönlendir
       localStorage.removeItem("posAuth");
       window.dispatchEvent(new StorageEvent("storage", {
@@ -105,6 +106,7 @@ function POSLayoutWithTables() {
     { title: "Masalar", icon: Home, href: "/" },
     { title: "Masa Yönetimi", icon: TableIcon, href: "/tables" },
     { title: "Ürün Yönetimi", icon: UtensilsIcon, href: "/menus" },
+    { title: "Stok Yönetimi", icon: Package, href: "/stocks" },
     {
       title: "Ödeme Yöntemleri",
       icon: CreditCard,
@@ -152,6 +154,11 @@ function POSLayoutWithTables() {
           currentPath === "/menus" || currentPath.startsWith("/menus/")
         );
       }
+      if (href === "/stocks") {
+        return (
+          currentPath === "/stocks" || currentPath.startsWith("/stocks/")
+        );
+      }
       if (href === "/statistics") {
         return (
           currentPath === "/statistics" || currentPath.startsWith("/statistics/")
@@ -167,21 +174,21 @@ function POSLayoutWithTables() {
       {/* Sidebar - Collapsed/Expanded */}
       <div
         className={`fixed lg:relative top-0 left-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
-          isSidebarExpanded ? "w-72" : "w-24"
+          isSidebarExpanded 
+            ? "w-64 xl:w-72" 
+            : "w-16 xl:w-24"
         } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="h-full flex flex-col overflow-y-auto shadow-lg">
           {/* Header */}
           <div
             className={`border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 ${
-              isSidebarExpanded ? "px-4 py-6" : "px-3 py-4"
+              isSidebarExpanded ? "px-3 xl:px-4 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
             }`}
           >
             <div className="flex flex-col items-center">
               <p
-                className={`font-semibold text-gray-900 dark:text-white text-center mb-2 whitespace-nowrap ${
-                  isSidebarExpanded ? "text-sm" : "text-xs"
-                }`}
+                className="font-semibold text-gray-900 dark:text-white text-center mb-2 whitespace-nowrap text-xs xl:text-sm"
               >
                 Borgeto POS
               </p>
@@ -189,20 +196,14 @@ function POSLayoutWithTables() {
                 <img
                   src={company.logo}
                   alt={company.name}
-                  className={`rounded-xl object-cover shadow-sm ${
-                    isSidebarExpanded ? "w-12 h-12" : "w-10 h-10"
-                  }`}
+                  className="rounded-xl object-cover shadow-sm w-10 h-10 xl:w-12 xl:h-12"
                 />
               ) : (
                 <div
-                  className={`bg-blue-600 rounded-xl flex items-center justify-center shadow-sm ${
-                    isSidebarExpanded ? "w-12 h-12" : "w-10 h-10"
-                  }`}
+                  className="bg-blue-600 rounded-xl flex items-center justify-center shadow-sm w-10 h-10 xl:w-12 xl:h-12"
                 >
                   <span
-                    className={`text-white font-bold ${
-                      isSidebarExpanded ? "text-lg" : "text-sm"
-                    }`}
+                    className="text-white font-bold text-sm xl:text-lg"
                   >
                     {company?.name?.charAt(0).toUpperCase() || "P"}
                   </span>
@@ -213,30 +214,30 @@ function POSLayoutWithTables() {
 
           <div
             className={`flex-1 transition-all duration-300 ${
-              isSidebarExpanded ? "px-6 py-6" : "px-3 py-4"
+              isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
             }`}
           >
             <div className="mb-2">
               <button
                 onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-                className={`w-full flex items-center transition-all duration-200 h-[44px] ${
+                className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
                   isSidebarExpanded
-                    ? "gap-4 px-4 text-sm rounded-xl"
+                    ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
                     : "justify-center px-2 rounded-lg"
                 } text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white`}
                 title={!isSidebarExpanded ? "Menü" : undefined}
               >
                 {isSidebarExpanded ? (
-                  <X className="h-5 w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                  <X className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                 ) : (
-                  <Menu className="h-5 w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                  <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                 )}
                 {isSidebarExpanded && (
-                  <span className="font-medium">Menüyü Kapat</span>
+                  <span className="font-medium text-xs xl:text-sm">Menüyü Kapat</span>
                 )}
               </button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5 xl:space-y-2">
               {menuItems.map((item, index) => {
                 const isActive = getIsActive(item.href);
                 return (
@@ -246,9 +247,9 @@ function POSLayoutWithTables() {
                     onClick={() => {
                       setIsSidebarExpanded(false);
                     }}
-                    className={`flex items-center transition-all duration-200 h-[44px] ${
+                    className={`flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
                       isSidebarExpanded
-                        ? "gap-4 px-4 text-sm rounded-xl"
+                        ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
                         : "justify-center px-2 rounded-lg"
                     } ${
                       isActive
@@ -260,7 +261,7 @@ function POSLayoutWithTables() {
                     title={!isSidebarExpanded ? item.title : undefined}
                   >
                     <item.icon
-                      className={`h-5 w-5 flex-shrink-0 ${
+                      className={`h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 ${
                         isActive
                           ? "text-blue-600 dark:text-blue-400"
                           : "text-gray-500 dark:text-gray-400"
@@ -268,7 +269,7 @@ function POSLayoutWithTables() {
                     />
                     {isSidebarExpanded && (
                       <span
-                        className={isActive ? "font-semibold" : "font-medium"}
+                        className={`${isActive ? "font-semibold" : "font-medium"} text-xs xl:text-sm`}
                       >
                         {item.title}
                       </span>
@@ -281,7 +282,7 @@ function POSLayoutWithTables() {
 
           <div
             className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 ${
-              isSidebarExpanded ? "px-6 py-6" : "px-3 py-4"
+              isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
             }`}
           >
             {isSidebarExpanded ? (
@@ -290,9 +291,9 @@ function POSLayoutWithTables() {
                   setIsSidebarExpanded(false);
                   handleLogout();
                 }}
-                className="w-full py-3 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-center"
+                className="w-full py-2 xl:py-3 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs xl:text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-center"
               >
-                <LogOut className="h-4 w-4 mr-2" />
+                <LogOut className="h-3 w-3 xl:h-4 xl:w-4 mr-1.5 xl:mr-2" />
                 Çıkış Yap
               </button>
             ) : (
@@ -301,10 +302,10 @@ function POSLayoutWithTables() {
                   setIsSidebarExpanded(false);
                   handleLogout();
                 }}
-                className="w-full p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 flex items-center justify-center"
+                className="w-full p-2 xl:p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 flex items-center justify-center"
                 title="Çıkış Yap"
               >
-                <LogOut className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                <LogOut className="h-4 w-4 xl:h-5 xl:w-5 text-gray-600 dark:text-gray-300" />
               </button>
             )}
           </div>
@@ -540,7 +541,7 @@ function TablesView() {
     try {
       const targetTable = await getTable(targetTableId);
       if (!targetTable) {
-        alert("Hedef masa bulunamadı");
+        customAlert("Hedef masa bulunamadı", "Hata", "error");
         return;
       }
 
@@ -597,7 +598,7 @@ function TablesView() {
       setSourceOrder(null);
       setMoveModalArea("");
     } catch (error) {
-      alert("Ürünler taşınırken bir hata oluştu");
+      customAlert("Ürünler taşınırken bir hata oluştu", "Hata", "error");
     } finally {
       setIsMovingTable(false);
     }
@@ -630,9 +631,9 @@ function TablesView() {
     if (isDark) {
       switch (status) {
         case "available":
-          return "bg-green-900/20";
+          return "bg-red-900/40"; // Boş masalar kırmızı
         case "occupied":
-          return "bg-blue-900/20";
+          return "bg-green-900/40"; // Dolu masalar yeşil
         case "reserved":
           return "bg-yellow-900/20";
         case "cleaning":
@@ -643,9 +644,9 @@ function TablesView() {
     } else {
       switch (status) {
         case "available":
-          return "bg-green-50";
+          return "bg-red-100"; // Boş masalar kırmızı
         case "occupied":
-          return "bg-blue-50";
+          return "bg-green-100"; // Dolu masalar yeşil
         case "reserved":
           return "bg-yellow-50";
         case "cleaning":
@@ -656,34 +657,12 @@ function TablesView() {
     }
   };
 
-  const getBorderColor = (status: Table["status"], isDark: boolean) => {
-    if (isDark) {
-      switch (status) {
-        case "available":
-          return "#059669";
-        case "occupied":
-          return "#2563eb";
-        case "reserved":
-          return "#d97706";
-        case "cleaning":
-          return "#ea580c";
-        default:
-          return "#4b5563";
-      }
-    } else {
-      switch (status) {
-        case "available":
-          return "#10b981";
-        case "occupied":
-          return "#3b82f6";
-        case "reserved":
-          return "#f59e0b";
-        case "cleaning":
-          return "#f97316";
-        default:
-          return "#6b7280";
-      }
+
+  const getShadowEffect = (status: Table["status"], order: Order | undefined) => {
+    if (status === "occupied" && order && order.total > 0) {
+      return "shadow-lg"; // Daha belirgin gölge
     }
+    return "shadow-sm";
   };
 
   // Otomatik güncelleme için timer
@@ -859,18 +838,18 @@ function TablesView() {
 
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
-      <div className="mb-4 px-4 lg:px-6 pt-3 lg:pt-4 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-3 xl:mb-4 px-3 xl:px-4 lg:px-6 pt-2 xl:pt-3 lg:pt-4 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 xl:gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-xl xl:text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
               Masalar
             </h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-xs xl:text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 xl:mt-1">
               {filteredTables.length} masa • {activeTableCount} aktif masa
             </p>
           </div>
           
-          <div className="flex gap-2 overflow-x-auto pb-2">
+          <div className="flex gap-1.5 xl:gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => {
                 setSelectedArea("");
@@ -881,7 +860,7 @@ function TablesView() {
                   replace: true,
                 });
               }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                 !selectedArea && !showActiveOnly
                   ? "bg-blue-600 text-white shadow-md"
                   : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -906,7 +885,7 @@ function TablesView() {
                         replace: true,
                       });
                     }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                       selectedArea === area && !showActiveOnly
                         ? "bg-blue-600 text-white shadow-md"
                         : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -927,7 +906,7 @@ function TablesView() {
                   replace: true,
                 });
               }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                 showActiveOnly
                   ? "bg-green-600 text-white shadow-md"
                   : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -949,7 +928,7 @@ function TablesView() {
                       replace: true,
                     });
                   }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                  className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                     selectedArea === "Hızlı Satış" && !showActiveOnly
                       ? "bg-blue-600 text-white shadow-md"
                       : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -973,7 +952,7 @@ function TablesView() {
                       replace: true,
                     });
                   }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                  className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                     selectedArea === "Paket" && !showActiveOnly
                       ? "bg-blue-600 text-white shadow-md"
                       : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
@@ -1038,21 +1017,32 @@ function TablesView() {
                   to="/table/$tableId"
                   params={{ tableId: table.id! }}
                   search={(prev) => ({ area: prev?.area || undefined, activeOnly: prev?.activeOnly || false })}
-                  className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} rounded-lg p-3 shadow-sm border-2 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center`}
-                  style={{
-                    borderColor: getBorderColor(table.status, resolvedTheme === "dark"),
-                  }}
+                  className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} ${getShadowEffect(table.status, order)} rounded-lg p-2 xl:p-3 border border-white hover:shadow-xl transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center ${
+                    table.status === "occupied" && order && order.total > 0
+                      ? "animate-pulse-subtle"
+                      : ""
+                  }`}
                 >
-                  <div className="text-center space-y-2">
-                    <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                  <div className="text-center space-y-1 xl:space-y-2">
+                    <div className={`text-lg xl:text-xl sm:text-2xl font-bold ${
+                      table.status === "occupied" && order && order.total > 0
+                        ? "text-white"
+                        : "text-gray-900 dark:text-white"
+                    }`}>
                       {table.tableNumber}
                     </div>
                     
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Toplam</span>
-                      <span className={`text-sm sm:text-base font-bold ${
+                    <div className="flex flex-col items-center gap-0.5 xl:gap-1">
+                      <span className={`text-[10px] xl:text-xs font-medium ${
+                        table.status === "occupied" && order && order.total > 0
+                          ? "text-white"
+                          : "text-gray-700 dark:text-gray-300"
+                      }`}>Toplam</span>
+                      <span className={`text-xs xl:text-sm sm:text-base font-bold ${
                         order && order.total > 0
-                          ? "text-blue-600 dark:text-blue-400"
+                          ? table.status === "occupied"
+                            ? "text-white text-base xl:text-lg sm:text-xl"
+                            : "text-blue-600 dark:text-blue-400"
                           : "text-gray-400 dark:text-gray-500"
                       }`}>
                         {order && order.total > 0
@@ -1064,8 +1054,16 @@ function TablesView() {
                     {(() => {
                       const firstItem = getFirstAddedItem(order);
                       return firstItem?.addedAt ? (
-                        <div className="flex items-center justify-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          <Clock className="h-3 w-3" />
+                        <div className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
+                          table.status === "occupied" && order && order.total > 0
+                            ? "text-white font-medium"
+                            : "text-gray-500 dark:text-gray-400"
+                        }`}>
+                          <Clock className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
+                            table.status === "occupied" && order && order.total > 0
+                              ? "text-white"
+                              : ""
+                          }`} />
                           <span className="truncate">{getTimeAgo(firstItem.addedAt)}</span>
                         </div>
                       ) : null;

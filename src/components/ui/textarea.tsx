@@ -107,11 +107,18 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       [onBlur, closeKeyboard]
     );
 
+    // autoCapitalize: Tüm textarea'larda "sentences" (ilk harf büyük)
+    // Eğer props'ta autoCapitalize belirtilmişse onu kullan, yoksa varsayılan olarak "sentences"
+    const autoCapitalizeValue = props.autoCapitalize !== undefined 
+      ? props.autoCapitalize 
+      : "sentences";
+
     return (
       <div className="relative w-full">
         <textarea
           className={cn(
-            "flex min-h-[5rem] w-full rounded-[0.24rem] border border-input bg-background px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+            "flex min-h-[5rem] w-full rounded-[0.24rem] border border-input bg-white dark:bg-gray-800 px-[0.6rem] py-[0.4rem] text-[0.7rem] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+            "text-gray-900 dark:text-white",
             showKeyboardButton && isTouchDevice && "pr-[2.5rem]",
             className
           )}
@@ -119,6 +126,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           onFocus={handleFocus}
           onBlur={handleBlur}
           maxLength={maxLength}
+          autoCapitalize={autoCapitalizeValue}
           {...props}
         />
         {showKeyboardButton && isTouchDevice && (

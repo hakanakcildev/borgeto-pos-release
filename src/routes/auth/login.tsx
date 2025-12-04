@@ -8,11 +8,13 @@ import {
   EyeOff,
   Lock,
   RefreshCw,
-  FileText,
   X,
   Keyboard,
+  CheckCircle,
+  Download,
 } from "lucide-react";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Route = createFileRoute("/auth/login")({
   component: Login,
@@ -20,6 +22,7 @@ export const Route = createFileRoute("/auth/login")({
 
 function Login() {
   const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -31,10 +34,50 @@ function Login() {
   const [updateVersion, setUpdateVersion] = useState("");
   const [downloadingUpdate, setDownloadingUpdate] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateDownloaded, setUpdateDownloaded] = useState(false);
+  const [showLatestVersionMessage, setShowLatestVersionMessage] =
+    useState(false);
+  const [currentVersion, setCurrentVersion] = useState("1.1.11");
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const { openKeyboard, isOpen } = useTouchKeyboard();
+
+  // Mevcut versiyonu yükle
+  useEffect(() => {
+    const loadVersion = async () => {
+      // Önce bir süre bekle, electronAPI hazır olsun
+      setTimeout(async () => {
+        if (window.electronAPI?.getAppVersion) {
+          try {
+            const versionResult = await window.electronAPI.getAppVersion();
+            if (versionResult?.version) {
+              setCurrentVersion(versionResult.version);
+            }
+          } catch (error) {
+            // Hata durumunda package.json'dan versiyonu al
+            setCurrentVersion("1.1.11");
+          }
+        } else {
+          // electronAPI hazır değilse, default versiyonu göster
+          setCurrentVersion("1.1.11");
+        }
+      }, 500);
+    };
+
+    loadVersion();
+  }, []);
+
+  // Eğer oturum açıksa direkt ana sayfaya yönlendir (güncelleme sonrası yeniden başlatma için)
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate({
+        to: "/",
+        search: { area: undefined, activeOnly: false },
+        replace: true,
+      });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   // Klavye butonu tıklandığında aktif input'a focus ver ve klavyeyi aç
   const handleKeyboardButtonClick = useCallback(() => {
@@ -143,11 +186,12 @@ function Login() {
   const handleCheckUpdates = useCallback(async () => {
     setCheckingUpdate(true);
     setError("");
+    setShowLatestVersionMessage(false);
+    setUpdateAvailable(false);
     try {
       if (window.electronAPI?.checkForUpdates) {
         // checkForUpdates çağrısı yap - event'ler ile sonuç bildirimi yapılacak
         const result = await window.electronAPI.checkForUpdates();
-        console.log("Update check result:", result);
         // Eğer hata varsa göster
         if (result && !result.success && result.error) {
           setError(result.error);
@@ -155,9 +199,14 @@ function Login() {
         }
         // Başarılıysa event'lerden gelecek sonucu bekle
         // setCheckingUpdate event handler'larda false yapılacak
+        // Eğer dev mode ise, son sürüm mesajı göster
+        if (result && result.devMode) {
+          setCheckingUpdate(false);
+          setShowLatestVersionMessage(true);
+        }
       } else {
         setCheckingUpdate(false);
-        alert("Güncelleme kontrolü şu anda kullanılamıyor.");
+        setError("Güncelleme kontrolü şu anda kullanılamıyor.");
       }
     } catch (error) {
       const errorMessage =
@@ -173,34 +222,44 @@ function Login() {
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    const handleUpdateAvailable = (version: string) => {
+    const handleUpdateAvailable = (version: string, releaseNotes?: string) => {
       setError("");
       setUpdateAvailable(true);
       setUpdateVersion(version);
       setCheckingUpdate(false);
+      setDownloadingUpdate(false);
+      setDownloadProgress(0);
+
+      // Release notes'u localStorage'a kaydet
+      if (releaseNotes) {
+        localStorage.setItem("updateReleaseNotes", releaseNotes);
+      }
+
+      // Login sayfasında otomatik indirme yapma, kullanıcı butona tıklayınca başlat
     };
 
     const handleUpdateNotAvailable = () => {
       setError("");
       setUpdateAvailable(false);
       setCheckingUpdate(false);
-      // Güncel versiyonsa hiçbir mesaj gösterme
+      // Güncel versiyonsa "Son sürümü kullanıyorsunuz" mesajı göster
+      setShowLatestVersionMessage(true);
     };
 
     const handleDownloadProgress = (progress: { percent: number }) => {
       setDownloadProgress(progress.percent);
+      setDownloadingUpdate(true);
     };
 
-    const handleUpdateDownloaded = () => {
+    const handleUpdateDownloaded = (version: string) => {
       setError("");
       setDownloadingUpdate(false);
       setDownloadProgress(100);
-      // Güncelleme indirildi, uygulamayı yeniden başlat
-      setTimeout(() => {
-        if (window.electronAPI?.quitApp) {
-          window.electronAPI.quitApp();
-        }
-      }, 1000);
+      setUpdateAvailable(false);
+      setUpdateDownloaded(true);
+      setUpdateVersion(version);
+      // Güncelleme indirildi, modal göster
+      // Kullanıcı "Şimdi Kur" butonuna tıklayınca kurulum yapılacak
     };
 
     const handleUpdateError = (error: string) => {
@@ -219,11 +278,32 @@ function Login() {
   }, []);
 
   // Güncellemeyi indir
-  const handleDownloadUpdate = useCallback(() => {
+  const handleDownloadUpdate = useCallback(async () => {
     setDownloadingUpdate(true);
     setDownloadProgress(0);
     setUpdateAvailable(false);
-    // Güncelleme zaten otomatik indiriliyor, sadece UI'ı güncelliyoruz
+    setError("");
+
+    // Manuel olarak indirmeyi başlat
+    if (window.electronAPI?.startDownloadUpdate) {
+      try {
+        await window.electronAPI.startDownloadUpdate();
+      } catch (error) {
+        setError("Güncelleme indirilirken bir hata oluştu");
+        setDownloadingUpdate(false);
+      }
+    }
+  }, []);
+
+  // Güncellemeyi kur ve yeniden başlat
+  const handleInstallUpdate = useCallback(async () => {
+    if (window.electronAPI?.quitAndInstall) {
+      try {
+        await window.electronAPI.quitAndInstall();
+      } catch (error) {
+        setError("Güncelleme kurulurken bir hata oluştu");
+      }
+    }
   }, []);
 
   return (
@@ -255,7 +335,7 @@ function Login() {
       )}
 
       {/* Yeni versiyon mevcut modal */}
-      {updateAvailable && (
+      {updateAvailable && !downloadingUpdate && (
         <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
@@ -282,6 +362,67 @@ function Login() {
                   İndir ve Kur
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Güncelleme indirildi modal */}
+      {updateDownloaded && (
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Güncelleme Hazır
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Versiyon {updateVersion} indirildi. Güncellemeyi kurmak ve
+                uygulamayı yeniden başlatmak ister misiniz?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setUpdateDownloaded(false)}
+                  className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Daha Sonra
+                </button>
+                <button
+                  onClick={handleInstallUpdate}
+                  className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Şimdi Kur ve Yeniden Başlat
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Son sürüm mesajı modal */}
+      {showLatestVersionMessage && (
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Güncel Sürüm
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Son sürümü kullanıyorsunuz. Yeni bir güncelleme olduğunda
+                bildirim alacaksınız.
+              </p>
+              <button
+                onClick={() => setShowLatestVersionMessage(false)}
+                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Tamam
+              </button>
             </div>
           </div>
         </div>
@@ -329,8 +470,10 @@ function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="E-posta adresinizi veya kullanıcı adınızı girin"
+                autoCapitalize="none"
                 required
                 autoComplete="username"
+                showKeyboardButton={false}
                 className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -351,9 +494,11 @@ function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Şifrenizi girin"
+                  autoCapitalize="none"
                   required
                   autoComplete="current-password"
-                  className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-24"
+                  showKeyboardButton={false}
+                  className="h-12 text-base bg-gray-50 text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:outline-none pr-12"
                 />
                 <button
                   type="button"
@@ -416,12 +561,12 @@ function Login() {
           </p>
 
           {/* Update Buttons */}
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 space-y-3">
             <button
               type="button"
               onClick={handleCheckUpdates}
               disabled={checkingUpdate}
-              className="flex-1 h-12 text-sm font-medium border-2 border-gray-400 rounded-lg bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              className="w-full h-12 text-sm font-medium border-2 border-gray-400 rounded-lg bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
             >
               {checkingUpdate ? (
                 <>
@@ -435,14 +580,11 @@ function Login() {
                 </>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowUpdateNotes(true)}
-              className="flex-1 h-12 text-sm font-medium border-2 border-gray-400 rounded-lg bg-gray-200 text-gray-900 hover:bg-gray-300 flex items-center justify-center transition-colors"
-            >
-              <FileText className="h-5 w-5 mr-2" />
-              Sürüm Notları
-            </button>
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                Mevcut Sürüm: <span className="font-semibold text-gray-900">{currentVersion}</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -470,15 +612,8 @@ function Login() {
                 </h3>
                 <div className="bg-blue-50 rounded-xl p-4">
                   <p className="text-base text-gray-700">
-                    <span className="font-medium">Mevcut Versiyon:</span> 1.0.56
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Son Güncelleme:{" "}
-                    {new Date().toLocaleDateString("tr-TR", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    <span className="font-medium">Mevcut Versiyon:</span>{" "}
+                    {currentVersion}
                   </p>
                 </div>
               </div>
@@ -489,27 +624,372 @@ function Login() {
                   Yapılan Geliştirmeler
                 </h3>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border-2 border-blue-300">
-                    <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center gap-2">
-                      <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-md">YENİ</span>
+                  <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
+                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded">
+                        YENİ
+                      </span>
+                      v1.1.6 - Güncelleme İşlem Sırası Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Versiyon artırma ve güncelleme notları işlem sırası düzeltildi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Mevcut versiyon bilgisi artık doğru şekilde gösteriliyor
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                      v1.1.4 - Güncelleme Kontrolü ve Bildirim Düzeltmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Login sayfasında güncelleme kontrolü butonuna basıldığında sürekli dönme sorunu düzeltildi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Uygulama açıldığında bekleyen güncelleme varsa hemen bildirim gösteriliyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Her durumda (login sayfasında da, oturum açıkta da) güncelleme bildirimleri çalışıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Daha tutarlı ve güvenilir güncelleme bildirimleri
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                      v1.1.2 - Otomatik Güncelleme Sistemi İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Oturum açıkken güncelleme bildirimleri artık düzgün çalışıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Periyodik güncelleme kontrolü eklendi (her 30 dakikada bir)
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          CHANGELOG.md'den sürüm notları otomatik olarak çekiliyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Versiyon bilgisi otomatik olarak güncelleniyor
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                      v1.1.1 - Input/Textarea Arka Plan Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Input ve Textarea alanlarının arka plan renkleri
+                          düzeltildi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Açık temada beyaz arka plan, koyu temada koyu gri arka
+                          plan
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>Yazı renkleri tema uyumlu hale getirildi</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>Daha iyi okunabilirlik ve görsel tutarlılık</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2 flex items-center gap-2">
+                      v1.1.0 - Major Update: UI/UX İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Gelişmiş klavye sistemi: 3 durumlu shift tuşu (Normal
+                          → Shift → Caps Lock)
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Login sayfası hariç tüm input'larda otomatik shift
+                          açılışı
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Dolu masalar yeşil, boş masalar kırmızı arka plan
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>Dolu masaların yazıları beyaz renkte</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Tüm masa kartlarına 1px beyaz border eklendi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Yazıcı çıktısındaki çizgiler tek satırda ve yazı ile
+                          aynı genişlikte
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">✓</span>
+                        <span>
+                          Sidebar logo ve yazı boyutları açık/kapalı durumda
+                          sabit
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.80 - Kağıt Boyutu Otomatik Tespiti
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">📏</span>
+                        <span>
+                          <strong>Kağıt Boyutu Tespiti:</strong> Yazıcıların
+                          kağıt boyutu otomatik olarak tespit ediliyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          80mm, 58mm, 110mm ve diğer boyutlar otomatik
+                          algılanıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Yazıcı sayfasında kağıt boyutu bilgisi gösteriliyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Yazdırma formatı yazıcının kağıt genişliğine göre
+                          otomatik ayarlanıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>Tam sayfa genişliğinde yazdırma</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.77 - Yazdırma Formatı İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">🖨️</span>
+                        <span>
+                          <strong>Yazdırma Formatı:</strong> Yazdırma formatı
+                          tam sayfa genişliğinde ve düzgün formatlanmış
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          ESC/POS komutları ile font, hizalama ve kalın yazı
+                          desteği
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Başlık ortalanmış ve büyük font, toplam tutar sağa
+                          hizalı ve kalın
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Yazdırma çıktısında kare karakterler sorunu düzeltildi
+                          (ASCII encoding)
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Yazıcı sayfasına örnek çıktı önizlemesi eklendi
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.74 - Güncelleme Kontrolü İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">🔄</span>
+                        <span>
+                          <strong>Güncelleme Kontrolü:</strong> Güncelleme
+                          kontrolü butonuna basıldığında son sürüm ise "Son
+                          sürümü kullanıyorsunuz" mesajı gösteriliyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Yeni sürüm varsa "İndir ve Kur" modalı açılıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          "Güncelleme kontrolü şu anda kullanılamıyor" hatası
+                          düzeltildi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Güncelleme kontrolü kullanıcı deneyimi iyileştirildi
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.73 - Yazdır Butonu İyileştirmeleri
+                    </h4>
+                    <ul className="text-sm text-gray-800 space-y-2 list-none">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">🖨️</span>
+                        <span>
+                          <strong>Yazdır Butonu Konumlandırması:</strong> Yazdır
+                          butonu artık ödeme al butonunun yanında, daha kompakt
+                          bir tasarımla yer alıyor
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Masa sayfasında yazdır butonu ödeme al butonunun
+                          yanında, daha küçük ve kullanışlı
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Ödeme ekranında iskonto butonunun altına yazdır butonu
+                          eklendi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>
+                          Yazdır butonu genişliği artırıldı, daha kullanışlı
+                          hale getirildi
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Yazdırma çıktısında Türkçe karakterlerin düzgün
+                          görüntülenmesi sağlandı
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-purple-600">🔧</span>
+                        <span>
+                          Yazdırma formatı basitleştirildi ve okunabilirliği
+                          artırıldı
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
                       v1.0.56 - Ödeme Ekranı UI/UX İyileştirmeleri
                     </h4>
                     <ul className="text-sm text-gray-800 space-y-2 list-none">
                       <li className="flex items-start gap-2">
                         <span className="text-blue-600 font-bold">🎨</span>
-                        <span><strong>Dinamik Etiket Sistemi:</strong> Ödeme ekranında akıllı etiket gösterimi</span>
+                        <span>
+                          <strong>Dinamik Etiket Sistemi:</strong> Ödeme
+                          ekranında akıllı etiket gösterimi
+                        </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
                         <span className="text-green-600">✓</span>
-                        <span>Sol tarafta ürün seçilmediğinde '<strong>Alınacak Ödeme</strong>' (yeşil renk ile vurgulanmış)</span>
+                        <span>
+                          Sol tarafta ürün seçilmediğinde '
+                          <strong>Alınacak Ödeme</strong>' (yeşil renk ile
+                          vurgulanmış)
+                        </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
                         <span className="text-green-600">✓</span>
-                        <span>Sağ tarafta (kısmi ödeme) ürün seçildiğinde '<strong>Alınacak Ödeme</strong>' (yeşil renk ile vurgulanmış)</span>
+                        <span>
+                          Sağ tarafta (kısmi ödeme) ürün seçildiğinde '
+                          <strong>Alınacak Ödeme</strong>' (yeşil renk ile
+                          vurgulanmış)
+                        </span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-blue-600 font-bold">📱</span>
-                        <span><strong>İki Panel Sistemi:</strong> Sol panel (tüm ürünler), Sağ panel (kısmi ödeme alanı)</span>
+                        <span>
+                          <strong>İki Panel Sistemi:</strong> Sol panel (tüm
+                          ürünler), Sağ panel (kısmi ödeme alanı)
+                        </span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-green-600">✨</span>
@@ -521,11 +1001,15 @@ function Login() {
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-green-600">✨</span>
-                        <span>Kısmi ödeme seçimlerinde net görsel geri bildirim</span>
+                        <span>
+                          Kısmi ödeme seçimlerinde net görsel geri bildirim
+                        </span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-purple-600">🔧</span>
-                        <span>Dinamik CSS sınıfları ve state bazlı etiket değişimi</span>
+                        <span>
+                          Dinamik CSS sınıfları ve state bazlı etiket değişimi
+                        </span>
                       </li>
                     </ul>
                   </div>
@@ -537,12 +1021,8 @@ function Login() {
                       <li>
                         ✅ Ödeme ekranında dinamik etiket gösterimi eklendi
                       </li>
-                      <li>
-                        ✅ Yeşil renk ile alınacak ödeme vurgusu
-                      </li>
-                      <li>
-                        ✅ Kısmi ödeme ve tam ödeme ayrımı netleştirildi
-                      </li>
+                      <li>✅ Yeşil renk ile alınacak ödeme vurgusu</li>
+                      <li>✅ Kısmi ödeme ve tam ödeme ayrımı netleştirildi</li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -551,19 +1031,22 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        ✅ Klavyede ç harfinin yanındaki delete butonu düzeltildi
+                        ✅ Klavyede ç harfinin yanındaki delete butonu
+                        düzeltildi
                       </li>
                       <li>
                         ✅ Delete butonu artık karakter silme işlevi görüyor
                       </li>
                       <li>
-                        ✅ Kırmızı renk ve Delete ikonu ile görsel olarak ayırt ediliyor
+                        ✅ Kırmızı renk ve Delete ikonu ile görsel olarak ayırt
+                        ediliyor
                       </li>
                       <li>
                         🎯 SORUN: ç yanındaki buton harf gibi davranıyordu
                       </li>
                       <li>
-                        🎯 ÇÖZÜM: Delete butonu handleBackspace fonksiyonunu çağırıyor
+                        🎯 ÇÖZÜM: Delete butonu handleBackspace fonksiyonunu
+                        çağırıyor
                       </li>
                     </ul>
                   </div>
@@ -573,23 +1056,25 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        ✅ Otomatik güncelleme kontrolü eklendi - Program açıldığında 3 saniye sonra kontrol
+                        ✅ Otomatik güncelleme kontrolü eklendi - Program
+                        açıldığında 3 saniye sonra kontrol
                       </li>
                       <li>
-                        ✅ Yeni versiyon varsa otomatik olarak "İndir ve Kur" modalı gösteriliyor
+                        ✅ Yeni versiyon varsa otomatik olarak "İndir ve Kur"
+                        modalı gösteriliyor
                       </li>
                       <li>
-                        ✅ runAfterFinish: true - Kurulum sonrası program otomatik başlatılıyor
+                        ✅ runAfterFinish: true - Kurulum sonrası program
+                        otomatik başlatılıyor
                       </li>
                       <li>
-                        ✅ Güncelleme indirildikten sonra otomatik yeniden başlatma
+                        ✅ Güncelleme indirildikten sonra otomatik yeniden
+                        başlatma
                       </li>
                       <li>
                         🎯 ÖZELLİK: İlk açılışta otomatik güncelleme kontrolü
                       </li>
-                      <li>
-                        🎯 ÖZELLİK: Kurulum sonrası otomatik başlatma
-                      </li>
+                      <li>🎯 ÖZELLİK: Kurulum sonrası otomatik başlatma</li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -598,23 +1083,21 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        🔥 FILE PROTOCOL SORUNU ÇÖZÜLDÜ - Electron file:// protokolü ile yüklendiğinde router çalışmıyordu
+                        🔥 FILE PROTOCOL SORUNU ÇÖZÜLDÜ - Electron file://
+                        protokolü ile yüklendiğinde router çalışmıyordu
                       </li>
                       <li>
                         ✅ DOMContentLoaded event'inde manuel navigation eklendi
                       </li>
-                      <li>
-                        ✅ History API ile path düzeltme yapılıyor
-                      </li>
+                      <li>✅ History API ile path düzeltme yapılıyor</li>
                       <li>
                         ✅ Authenticated kullanıcılar için otomatik "/" redirect
                       </li>
                       <li>
-                        ✅ 100ms gecikme ile router state güvenli şekilde kontrol ediliyor
+                        ✅ 100ms gecikme ile router state güvenli şekilde
+                        kontrol ediliyor
                       </li>
-                      <li>
-                        🎯 SORUN: file:// protokolü router'ı bozuyordu
-                      </li>
+                      <li>🎯 SORUN: file:// protokolü router'ı bozuyordu</li>
                       <li>
                         🎯 ÇÖZÜM: Manuel navigation ve history API ile düzeltme
                       </li>
@@ -626,28 +1109,34 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        ✅ Electron before-quit event'i devre dışı - oturum artık kalıcı
+                        ✅ Electron before-quit event'i devre dışı - oturum
+                        artık kalıcı
                       </li>
                       <li>
                         ✅ localStorage artık uygulama kapanınca temizlenmiyor
                       </li>
                       <li>
-                        ✅ 404 sayfası tamamen kaldırıldı - direkt yönlendirme yapılıyor
+                        ✅ 404 sayfası tamamen kaldırıldı - direkt yönlendirme
+                        yapılıyor
                       </li>
                       <li>
-                        ✅ Agresif route kontrolü - authenticated kullanıcılar her zaman masalar sayfasında
+                        ✅ Agresif route kontrolü - authenticated kullanıcılar
+                        her zaman masalar sayfasında
                       </li>
                       <li>
-                        ✅ Detaylı console log'lar - sorunları kolayca takip edebilirsiniz
+                        ✅ Detaylı console log'lar - sorunları kolayca takip
+                        edebilirsiniz
                       </li>
                       <li>
-                        ✅ AuthContext geliştirildi - daha güvenilir auth yükleme
+                        ✅ AuthContext geliştirildi - daha güvenilir auth
+                        yükleme
                       </li>
                       <li>
                         🎯 SORUN: Program açıldığında 404 sayfası gösteriyordu
                       </li>
                       <li>
-                        🎯 ÇÖZÜM: Oturum artık kalıcı ve her durumda doğru sayfaya yönlendiriliyor
+                        🎯 ÇÖZÜM: Oturum artık kalıcı ve her durumda doğru
+                        sayfaya yönlendiriliyor
                       </li>
                     </ul>
                   </div>
@@ -657,19 +1146,24 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        "Object could not be cloned" hatası düzeltildi - güncelleme kontrolü sorunsuz çalışıyor
+                        "Object could not be cloned" hatası düzeltildi -
+                        güncelleme kontrolü sorunsuz çalışıyor
                       </li>
                       <li>
-                        IPC serialization problemi çözüldü - sadece basit objeler gönderiliyor
+                        IPC serialization problemi çözüldü - sadece basit
+                        objeler gönderiliyor
                       </li>
                       <li>
-                        404 sayfası kullanıcı dostu hale getirildi - "Verileri Eşitle" mesajı gösteriliyor
+                        404 sayfası kullanıcı dostu hale getirildi - "Verileri
+                        Eşitle" mesajı gösteriliyor
                       </li>
                       <li>
-                        "Masalar Sayfasına Git" butonu eklendi - tek tıkla masalar sayfasına dönüş
+                        "Masalar Sayfasına Git" butonu eklendi - tek tıkla
+                        masalar sayfasına dönüş
                       </li>
                       <li>
-                        Güncelleme akışı iyileştirildi - yeni sürüm varsa direkt "İndir ve Kur" modalı gösteriliyor
+                        Güncelleme akışı iyileştirildi - yeni sürüm varsa direkt
+                        "İndir ve Kur" modalı gösteriliyor
                       </li>
                     </ul>
                   </div>
@@ -679,54 +1173,68 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        notFoundMode: "root" eklendi - router notFound durumunda root component gösteriyor
+                        notFoundMode: "root" eklendi - router notFound durumunda
+                        root component gösteriyor
                       </li>
                       <li>
-                        Root path kontrolü eklendi - root path'te ise route'lar yüklenene kadar bekliyor
+                        Root path kontrolü eklendi - root path'te ise route'lar
+                        yüklenene kadar bekliyor
                       </li>
                       <li>
-                        200ms timeout ile kontrol - route match hala yoksa masalar sayfasına yönlendirme
+                        200ms timeout ile kontrol - route match hala yoksa
+                        masalar sayfasına yönlendirme
                       </li>
                       <li>
-                        Root path dışında route match yoksa anında yönlendirme - hızlı çözüm
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.47 - Kritik: Oturum Temizleme ve Route Yönlendirme Düzeltildi
-                    </h4>
-                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                      <li>
-                        deleteAppDataOnUninstall: true yapıldı - program kaldırılınca localStorage temizleniyor
-                      </li>
-                      <li>
-                        Route yönlendirmesi setTimeout kaldırıldı - direkt yönlendirme yapılıyor
-                      </li>
-                      <li>
-                        Storage change event'inde console.log eklendi - oturum temizleme izlenebiliyor
-                      </li>
-                      <li>
-                        Authenticated kullanıcılar için route match yoksa anında masalar sayfasına yönlendirme
+                        Root path dışında route match yoksa anında yönlendirme -
+                        hızlı çözüm
                       </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.46 - Program Kapanınca Oturum Temizleme ve Route Düzeltmesi
+                      v1.0.47 - Kritik: Oturum Temizleme ve Route Yönlendirme
+                      Düzeltildi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        Program kapandığında localStorage otomatik temizleniyor - oturum kapatılıyor
+                        deleteAppDataOnUninstall: true yapıldı - program
+                        kaldırılınca localStorage temizleniyor
                       </li>
                       <li>
-                        before-quit event'inde posAuth localStorage'dan siliniyor
+                        Route yönlendirmesi setTimeout kaldırıldı - direkt
+                        yönlendirme yapılıyor
                       </li>
                       <li>
-                        Route kontrolüne detaylı console log eklendi - sorunları izlemek kolay
+                        Storage change event'inde console.log eklendi - oturum
+                        temizleme izlenebiliyor
                       </li>
                       <li>
-                        Route match yoksa 100ms gecikme ile yönlendirme - route'ların yüklenmesini bekliyor
+                        Authenticated kullanıcılar için route match yoksa anında
+                        masalar sayfasına yönlendirme
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-2">
+                      v1.0.46 - Program Kapanınca Oturum Temizleme ve Route
+                      Düzeltmesi
+                    </h4>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      <li>
+                        Program kapandığında localStorage otomatik temizleniyor
+                        - oturum kapatılıyor
+                      </li>
+                      <li>
+                        before-quit event'inde posAuth localStorage'dan
+                        siliniyor
+                      </li>
+                      <li>
+                        Route kontrolüne detaylı console log eklendi - sorunları
+                        izlemek kolay
+                      </li>
+                      <li>
+                        Route match yoksa 100ms gecikme ile yönlendirme -
+                        route'ların yüklenmesini bekliyor
                       </li>
                     </ul>
                   </div>
@@ -736,35 +1244,44 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        İlk açılışta route match olmasa bile authenticated kullanıcılar masalar sayfasına yönlendiriliyor
+                        İlk açılışta route match olmasa bile authenticated
+                        kullanıcılar masalar sayfasına yönlendiriliyor
                       </li>
                       <li>
-                        router.state.matches.length === 0 kontrolü her durumda çalışıyor
+                        router.state.matches.length === 0 kontrolü her durumda
+                        çalışıyor
                       </li>
                       <li>
-                        Console log eklendi - route eşleşme sorunlarını izlemek için
+                        Console log eklendi - route eşleşme sorunlarını izlemek
+                        için
                       </li>
                       <li>
-                        Oturum açıkken program açıldığında kesinlikle masalar sayfası açılıyor
+                        Oturum açıkken program açıldığında kesinlikle masalar
+                        sayfası açılıyor
                       </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.44 - 404 Sayfası Kaldırıldı, Route Kontrolü Tamamen Düzeltildi
+                      v1.0.44 - 404 Sayfası Kaldırıldı, Route Kontrolü Tamamen
+                      Düzeltildi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        404 sayfası tamamen kaldırıldı - artık hiç 404 sayfası gösterilmiyor
+                        404 sayfası tamamen kaldırıldı - artık hiç 404 sayfası
+                        gösterilmiyor
                       </li>
                       <li>
-                        Oturum açıkken program açıldığında direkt masalar sayfası açılıyor
+                        Oturum açıkken program açıldığında direkt masalar
+                        sayfası açılıyor
                       </li>
                       <li>
-                        Route kontrolü basitleştirildi - authenticated ise ana sayfa, değilse login
+                        Route kontrolü basitleştirildi - authenticated ise ana
+                        sayfa, değilse login
                       </li>
                       <li>
-                        Geçersiz route'larda authenticated kullanıcılar masalar sayfasına yönlendiriliyor
+                        Geçersiz route'larda authenticated kullanıcılar masalar
+                        sayfasına yönlendiriliyor
                       </li>
                     </ul>
                   </div>
@@ -774,38 +1291,49 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        404 sayfa sorunu düzeltildi - oturum açıksa direkt masalar sayfasına yönlendiriliyor
+                        404 sayfa sorunu düzeltildi - oturum açıksa direkt
+                        masalar sayfasına yönlendiriliyor
                       </li>
                       <li>
-                        Klavye silme tuşu ç harfinin yanına taşındı - daha kolay erişim
+                        Klavye silme tuşu ç harfinin yanına taşındı - daha kolay
+                        erişim
                       </li>
                       <li>
-                        Logout çıkış butonu düzeltildi - storage event tetikleniyor, sorunsuz çıkış yapılıyor
+                        Logout çıkış butonu düzeltildi - storage event
+                        tetikleniyor, sorunsuz çıkış yapılıyor
                       </li>
                       <li>
-                        Route kontrolü iyileştirildi - authenticated kullanıcılar için 404 yerine ana sayfa
+                        Route kontrolü iyileştirildi - authenticated
+                        kullanıcılar için 404 yerine ana sayfa
                       </li>
                     </ul>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-2">
-                      v1.0.42 - Kritik Düzeltmeler: Input Focus ve Güncelleme Sistemi
+                      v1.0.42 - Kritik Düzeltmeler: Input Focus ve Güncelleme
+                      Sistemi
                     </h4>
                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                       <li>
-                        İlk açılışta input focus sorunu tamamen düzeltildi - 3 kez focus veriliyor (100ms, 300ms, 500ms)
+                        İlk açılışta input focus sorunu tamamen düzeltildi - 3
+                        kez focus veriliyor (100ms, 300ms, 500ms)
                       </li>
                       <li>
-                        Otomatik güncelleme kontrolü kaldırıldı - artık güncel versiyonsa hiçbir mesaj gösterilmiyor
+                        Otomatik güncelleme kontrolü kaldırıldı - artık güncel
+                        versiyonsa hiçbir mesaj gösterilmiyor
                       </li>
                       <li>
-                        Yeni güncelleme sistemi: Yeni versiyon varsa modal gösteriliyor, "İndir ve Kur" butonu ile manuel güncelleme
+                        Yeni güncelleme sistemi: Yeni versiyon varsa modal
+                        gösteriliyor, "İndir ve Kur" butonu ile manuel
+                        güncelleme
                       </li>
                       <li>
-                        Güncelleme indirme progress bar'ı eklendi - indirme durumu görünüyor
+                        Güncelleme indirme progress bar'ı eklendi - indirme
+                        durumu görünüyor
                       </li>
                       <li>
-                        Güncelleme indirildikten sonra otomatik yeniden başlatma - sorunsuz güncelleme
+                        Güncelleme indirildikten sonra otomatik yeniden başlatma
+                        - sorunsuz güncelleme
                       </li>
                     </ul>
                   </div>
@@ -827,8 +1355,8 @@ function Login() {
                         webContents.focus() çağrılıyor
                       </li>
                       <li>
-                        Window restore, focus, blur event'leri dinleniyor -
-                        her durumda çalışıyor
+                        Window restore, focus, blur event'leri dinleniyor - her
+                        durumda çalışıyor
                       </li>
                     </ul>
                   </div>

@@ -11,7 +11,7 @@ import {
   updateCategory,
   deleteCategory,
 } from "@/lib/firebase/menus";
-import type { Menu, Category } from "@/lib/firebase/types";
+import type { Menu, Category, MenuExtra } from "@/lib/firebase/types";
 import {
   Plus,
   Edit,
@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { POSLayout } from "@/components/layouts/POSLayout";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/menus")({
   component: MenuManagement,
@@ -58,6 +59,16 @@ function MenuManagementContent() {
     price: "",
     category: "",
     isAvailable: true,
+    extras: [] as MenuExtra[],
+  });
+  
+  // Extra form states
+  const [showExtraForm, setShowExtraForm] = useState(false);
+  const [editingExtraIndex, setEditingExtraIndex] = useState<number | null>(null);
+  const [extraForm, setExtraForm] = useState({
+    name: "",
+    price: "",
+    isRequired: false,
   });
 
   // Category form states
@@ -99,7 +110,7 @@ function MenuManagementContent() {
         setMenus(menusData);
         setCategories(categoriesData);
       } catch (error) {
-        alert("Veriler yüklenirken bir hata oluştu");
+        customAlert("Veriler yüklenirken bir hata oluştu", "Hata", "error");
       } finally {
         setLoading(false);
       }
@@ -170,6 +181,7 @@ function MenuManagementContent() {
       price: "",
       category: displayCategories[0]?.name || "",
       isAvailable: true,
+      extras: [],
     });
     setShowMenuForm(true);
   };
@@ -179,7 +191,7 @@ function MenuManagementContent() {
     
     // Sadece aynı şubeye ait ürünleri düzenleyebilir
     if (effectiveBranchId && menu.branchId && menu.branchId !== effectiveBranchId) {
-      alert("Bu ürün başka bir şubeye ait. Sadece kendi şubenizin ürünlerini düzenleyebilirsiniz.");
+      customAlert("Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini düzenleyebilirsiniz.", "Uyarı", "warning");
       return;
     }
     
@@ -190,6 +202,7 @@ function MenuManagementContent() {
       price: menu.price.toString(),
       category: menu.category,
       isAvailable: menu.isAvailable,
+      extras: menu.extras || [],
     });
     setShowMenuForm(true);
   };
@@ -199,7 +212,7 @@ function MenuManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
     
     if (!effectiveCompanyId || !menuForm.name || !menuForm.price || !menuForm.category) {
-      alert("Lütfen tüm gerekli alanları doldurun");
+      customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
       return;
     }
 
@@ -212,6 +225,7 @@ function MenuManagementContent() {
         price: parseFloat(menuForm.price),
         category: menuForm.category,
         isAvailable: menuForm.isAvailable,
+        extras: menuForm.extras.length > 0 ? menuForm.extras : undefined,
       };
 
       if (editingMenu) {
@@ -237,8 +251,62 @@ function MenuManagementContent() {
       setShowMenuForm(false);
       setEditingMenu(null);
     } catch (error) {
-      alert("Ürün kaydedilirken bir hata oluştu");
+      customAlert("Ürün kaydedilirken bir hata oluştu", "Hata", "error");
     }
+  };
+
+  // Extra handlers
+  const handleAddExtra = () => {
+    setEditingExtraIndex(null);
+    setExtraForm({
+      name: "",
+      price: "",
+      isRequired: false,
+    });
+    setShowExtraForm(true);
+  };
+
+  const handleEditExtra = (index: number) => {
+    const extra = menuForm.extras[index];
+    setEditingExtraIndex(index);
+    setExtraForm({
+      name: extra.name,
+      price: extra.price.toString(),
+      isRequired: extra.isRequired || false,
+    });
+    setShowExtraForm(true);
+  };
+
+  const handleSaveExtra = () => {
+    if (!extraForm.name || !extraForm.price) {
+      customAlert("Lütfen ekstra malzeme adı ve fiyatını girin", "Uyarı", "warning");
+      return;
+    }
+
+    const newExtra: MenuExtra = {
+      id: editingExtraIndex !== null 
+        ? menuForm.extras[editingExtraIndex].id 
+        : `extra-${Date.now()}`,
+      name: extraForm.name,
+      price: parseFloat(extraForm.price),
+      isRequired: extraForm.isRequired,
+    };
+
+    const updatedExtras = [...menuForm.extras];
+    if (editingExtraIndex !== null) {
+      updatedExtras[editingExtraIndex] = newExtra;
+    } else {
+      updatedExtras.push(newExtra);
+    }
+
+    setMenuForm({ ...menuForm, extras: updatedExtras });
+    setShowExtraForm(false);
+    setEditingExtraIndex(null);
+  };
+
+  const handleDeleteExtra = (index: number) => {
+    const updatedExtras = menuForm.extras.filter((_, i) => i !== index);
+    setMenuForm({ ...menuForm, extras: updatedExtras });
   };
 
   const handleDeleteMenu = async (menu: Menu) => {
@@ -246,7 +314,7 @@ function MenuManagementContent() {
     
     // Sadece aynı şubeye ait ürünleri silebilir
     if (effectiveBranchId && menu.branchId && menu.branchId !== effectiveBranchId) {
-      alert("Bu ürün başka bir şubeye ait. Sadece kendi şubenizin ürünlerini silebilirsiniz.");
+      customAlert("Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini silebilirsiniz.", "Uyarı", "warning");
       return;
     }
     
@@ -264,7 +332,7 @@ function MenuManagementContent() {
       );
       setMenus(menusData);
     } catch (error) {
-      alert("Ürün silinirken bir hata oluştu");
+      customAlert("Ürün silinirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -285,7 +353,7 @@ function MenuManagementContent() {
     
     // Sadece aynı şubeye ait kategorileri düzenleyebilir
     if (effectiveBranchId && category.branchId && category.branchId !== effectiveBranchId) {
-      alert("Bu kategori başka bir şubeye ait. Sadece kendi şubenizin kategorilerini düzenleyebilirsiniz.");
+      customAlert("Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini düzenleyebilirsiniz.", "Uyarı", "warning");
       return;
     }
     
@@ -304,7 +372,7 @@ function MenuManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
     
     if (!effectiveCompanyId || !categoryForm.name) {
-      alert("Lütfen kategori adını girin");
+      customAlert("Lütfen kategori adını girin", "Uyarı", "warning");
       return;
     }
 
@@ -341,7 +409,7 @@ function MenuManagementContent() {
       setShowCategoryForm(false);
       setEditingCategory(null);
     } catch (error) {
-      alert("Kategori kaydedilirken bir hata oluştu");
+      customAlert("Kategori kaydedilirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -350,18 +418,18 @@ function MenuManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
     
     if (!effectiveCompanyId) {
-      alert("Firma bilgisi bulunamadı");
+      customAlert("Firma bilgisi bulunamadı", "Hata", "error");
       return;
     }
 
     const value = parseFloat(bulkPriceForm.value);
     if (isNaN(value) || value === 0) {
-      alert("Lütfen geçerli bir değer girin");
+      customAlert("Lütfen geçerli bir değer girin", "Uyarı", "warning");
       return;
     }
 
     if (bulkPriceForm.type === "percentage" && (value < -100 || value > 1000)) {
-      alert("Yüzde değeri -100 ile 1000 arasında olmalıdır");
+      customAlert("Yüzde değeri -100 ile 1000 arasında olmalıdır", "Uyarı", "warning");
       return;
     }
 
@@ -384,7 +452,7 @@ function MenuManagementContent() {
       });
 
       if (menusToUpdate.length === 0) {
-        alert("Güncellenecek ürün bulunamadı");
+        customAlert("Güncellenecek ürün bulunamadı", "Uyarı", "warning");
         setIsUpdatingPrices(false);
         return;
       }
@@ -427,9 +495,9 @@ function MenuManagementContent() {
       setCategories(categoriesData);
       setShowBulkPriceForm(false);
       setBulkPriceForm({ type: "percentage", value: "" });
-      alert(`${menusToUpdate.length} ürünün fiyatı başarıyla güncellendi`);
+      customAlert(`${menusToUpdate.length} ürünün fiyatı başarıyla güncellendi`, "Başarılı", "success");
     } catch (error) {
-      alert("Fiyatlar güncellenirken bir hata oluştu");
+      customAlert("Fiyatlar güncellenirken bir hata oluştu", "Hata", "error");
     } finally {
       setIsUpdatingPrices(false);
     }
@@ -440,15 +508,17 @@ function MenuManagementContent() {
     
     // Sadece aynı şubeye ait kategorileri silebilir
     if (effectiveBranchId && category.branchId && category.branchId !== effectiveBranchId) {
-      alert("Bu kategori başka bir şubeye ait. Sadece kendi şubenizin kategorilerini silebilirsiniz.");
+      customAlert("Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini silebilirsiniz.", "Uyarı", "warning");
       return;
     }
     
     // Check if category has menus
     const categoryMenus = menus.filter((m) => m.category === category.name);
     if (categoryMenus.length > 0) {
-      alert(
-        "Bu kategoride ürünler bulunmaktadır. Önce ürünleri silin veya başka bir kategoriye taşıyın."
+      customAlert(
+        "Bu kategoride ürünler bulunmaktadır.\nÖnce ürünleri silin veya başka bir kategoriye taşıyın.",
+        "Uyarı",
+        "warning"
       );
       return;
     }
@@ -467,7 +537,7 @@ function MenuManagementContent() {
       );
       setCategories(categoriesData);
     } catch (error) {
-      alert("Kategori silinirken bir hata oluştu");
+      customAlert("Kategori silinirken bir hata oluştu", "Hata", "error");
     }
   };
 
@@ -814,6 +884,75 @@ function MenuManagementContent() {
                 </label>
               </div>
 
+              {/* Ekstra Malzemeler */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Ekstra Malzemeler
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddExtra}
+                    className="text-xs"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Ekstra Ekle
+                  </Button>
+                </div>
+                {menuForm.extras.length > 0 ? (
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+                    {menuForm.extras.map((extra, index) => (
+                      <div
+                        key={extra.id}
+                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded p-2"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                              {extra.name}
+                            </span>
+                            {extra.isRequired && (
+                              <span className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 rounded">
+                                Zorunlu
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            ₺{extra.price.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditExtra(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteExtra(index)}
+                            className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                    Henüz ekstra malzeme eklenmemiş
+                  </p>
+                )}
+              </div>
+
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
@@ -1077,6 +1216,94 @@ function MenuManagementContent() {
                       Uygula
                     </>
                   )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extra Form Modal */}
+      {showExtraForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {editingExtraIndex !== null ? "Ekstra Malzeme Düzenle" : "Yeni Ekstra Malzeme Ekle"}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowExtraForm(false);
+                  setEditingExtraIndex(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Ekstra Malzeme Adı *
+                </label>
+                <Input
+                  value={extraForm.name}
+                  onChange={(e) =>
+                    setExtraForm({ ...extraForm, name: e.target.value })
+                  }
+                  placeholder="Örn: Ekstra Peynir, Ekstra Sos"
+                  className="bg-white dark:bg-gray-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Fiyat (₺) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={extraForm.price}
+                  onChange={(e) =>
+                    setExtraForm({ ...extraForm, price: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className="bg-white dark:bg-gray-700"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="extraRequired"
+                  checked={extraForm.isRequired}
+                  onChange={(e) =>
+                    setExtraForm({ ...extraForm, isRequired: e.target.checked })
+                  }
+                  className="mr-2"
+                />
+                <label
+                  htmlFor="extraRequired"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Zorunlu (Müşteri seçmek zorunda)
+                </label>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowExtraForm(false);
+                    setEditingExtraIndex(null);
+                  }}
+                >
+                  İptal
+                </Button>
+                <Button onClick={handleSaveExtra} className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  Kaydet
                 </Button>
               </div>
             </div>
