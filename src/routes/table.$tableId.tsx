@@ -5,6 +5,7 @@ import {
   getTable,
   updateTableStatus,
   getTablesByCompany,
+  addTable,
 } from "@/lib/firebase/tables";
 import {
   getOrder,
@@ -28,7 +29,12 @@ import {
   addCourierAssignment,
 } from "@/lib/firebase/couriers";
 import { addBill } from "@/lib/firebase/bills";
-import type { Courier } from "@/lib/firebase/types";
+import {
+  getCustomersByCompany,
+  addCustomer,
+  getCustomer,
+} from "@/lib/firebase/customers";
+import type { Courier, CustomerAccount } from "@/lib/firebase/types";
 import {
   formatPrintContent,
   printToPrinter,
@@ -104,14 +110,21 @@ function TableDetailContent() {
   // Anasayfaya yönlendirirken search params'ı koru
   const search = Route.useSearch();
   const navigateToHome = useCallback(() => {
-    navigate({
-      to: "/",
-      search: {
-        area: search.area,
-        activeOnly: search.activeOnly,
-      },
-    });
-  }, [navigate, search]);
+    // Eğer cari masasıysa, cari masalar sayfasına dön
+    if (currentTable.area === "Cari") {
+      navigate({
+        to: "/customer-tables",
+      });
+    } else {
+      navigate({
+        to: "/",
+        search: {
+          area: search.area,
+          activeOnly: search.activeOnly,
+        },
+      });
+    }
+  }, [navigate, search, currentTable]);
 
   // Zaman farkını hesapla ve "X dakika önce" formatında göster
   const getTimeAgo = useCallback((date: Date | undefined): string => {
@@ -241,6 +254,15 @@ function TableDetailContent() {
   const [paymentScreenChangeAmount, setPaymentScreenChangeAmount] = useState<string>("0");
   const [showPaymentScreenCourierModal, setShowPaymentScreenCourierModal] = useState(false);
   const [showPaymentScreenChangeAmountModal, setShowPaymentScreenChangeAmountModal] = useState(false);
+
+  // Cari yönetimi için state'ler
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [customers, setCustomers] = useState<CustomerAccount[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [newCustomerName, setNewCustomerName] = useState<string>("");
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
 
   // İptal için state'ler (ödeme gibi)
   const [pendingCancelItems, setPendingCancelItems] = useState<
@@ -2165,11 +2187,91 @@ function TableDetailContent() {
             movedItems: movedItems,
           });
 
+          // Hedef masaya ürünleri ekle
+          if (!effectiveCompanyId) {
+            customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
+            setIsMovingItems(false);
+            return;
+          }
+
+          const allOrders = await getOrdersByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchIdForHistory || undefined,
+          });
+          const targetOrder = allOrders.find(
+            (o) => o.tableId === targetTableId && o.status === "active"
+          );
+
+          if (targetOrder) {
+            // Mevcut siparişe ekle - taşınan ürünlere kaynak masa bilgisini ekle
+            const existingItems = targetOrder.items || [];
+            const itemsWithSourceInfo = itemsToMove.map((item) => ({
+              ...item,
+              movedFromTableId: currentTable.id,
+              movedFromTableNumber: currentTable.tableNumber,
+              movedAt: movedAt,
+            }));
+            const mergedItems = [...existingItems, ...itemsWithSourceInfo];
+            const subtotal = mergedItems.reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+            const total = subtotal - (targetOrder.discount || 0);
+
+            await updateOrder(targetOrder.id!, {
+              items: mergedItems,
+              subtotal: subtotal,
+              total: total,
+            });
+          } else {
+            // Yeni sipariş oluştur - taşınan ürünlere kaynak masa bilgisini ekle
+            const itemsWithSourceInfo = itemsToMove.map((item) => ({
+              ...item,
+              movedFromTableId: currentTable.id,
+              movedFromTableNumber: currentTable.tableNumber,
+              movedAt: movedAt,
+            }));
+
+            await addOrder({
+              companyId: effectiveCompanyId,
+              branchId: effectiveBranchIdForHistory || targetTable.branchId,
+              tableId: targetTableId,
+              tableNumber: targetTable.tableNumber,
+              items: itemsWithSourceInfo,
+              sentItems: itemsWithSourceInfo.map((item) => item.menuId),
+              createdBy: userData!.id!,
+              status: "active",
+              paymentStatus: "unpaid",
+            });
+          }
+
           // Siparişi yeniden yükle ve state'i güncelle
           const updatedOrderAfterMove = await getOrder(order.id!);
           if (updatedOrderAfterMove) {
             setOrder(updatedOrderAfterMove);
           }
+
+          // State temizle ve modal kapat
+          setSelectedItems(new Set());
+          setShowMoveModal(false);
+          setPendingMoveItems([]);
+          setCurrentMoveItemIndex(0);
+          setSelectedMoveQuantities(new Map());
+
+          // Navigation ayarını kontrol et
+          const navSettings = localStorage.getItem("navigationSettings");
+          if (navSettings) {
+            try {
+              const settings = JSON.parse(navSettings);
+              if (settings.returnAfterItemMove) {
+                navigateToHome();
+                return;
+              }
+            } catch (error) {
+              // Hata durumunda varsayılan davranış (masalara dön)
+            }
+          }
+          // Ayar yoksa veya returnAfterItemMove false ise burada kal
+          return;
         } else {
           // Normal taşı işlemi - tüm seçili ürünleri taşı
           itemsToMove = order.items.filter((_, index) =>
@@ -2436,17 +2538,236 @@ function TableDetailContent() {
           // Sadece gerçek touch event'lerinde klavyeyi aç
           const lastEventWasTouch = (window as any).__lastTouchEvent;
           if (lastEventWasTouch) {
-            const currentValue = itemNoteTextareaRef.current.value || "";
-            openKeyboard(
-              itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
-              "text",
-              currentValue
-            );
+          const currentValue = itemNoteTextareaRef.current.value || "";
+          openKeyboard(
+            itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
+            "text",
+            currentValue
+          );
           }
         }
       }, 100);
     }
   }, [showAddNoteModal, openKeyboard]);
+
+  // Cari modalı açıldığında carileri yükle
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (!showCustomerModal) return;
+      
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      
+      if (!effectiveCompanyId) return;
+      
+      setIsLoadingCustomers(true);
+      try {
+        const customersData = await getCustomersByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        );
+        setCustomers(customersData);
+      } catch (error) {
+        customAlert("Cariler yüklenirken bir hata oluştu", "Hata", "error");
+      } finally {
+        setIsLoadingCustomers(false);
+      }
+    };
+    
+    loadCustomers();
+  }, [showCustomerModal, companyId, branchId, userData]);
+
+  // Yeni cari ekle ve masa oluştur
+  const handleCreateCustomerAndTable = useCallback(async () => {
+    if (!newCustomerName.trim()) {
+      customAlert("Lütfen müşteri adını girin", "Uyarı", "warning");
+      return;
+    }
+
+    const effectiveCompanyId = companyId || userData?.companyId;
+    const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+    if (!effectiveCompanyId) {
+      customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
+      return;
+    }
+
+    setIsCreatingCustomer(true);
+    try {
+      // Yeni cari oluştur
+      const customerId = await addCustomer({
+        companyId: effectiveCompanyId,
+        branchId: effectiveBranchId || undefined,
+        name: newCustomerName.trim(),
+        balance: 0,
+        isActive: true,
+      });
+
+      // Cari için masa oluştur
+      const tableId = await addTable({
+        companyId: effectiveCompanyId,
+        branchId: effectiveBranchId || undefined,
+        area: "Cari",
+        tableNumber: newCustomerName.trim(),
+        status: "available",
+      });
+
+      // Carileri yeniden yükle
+      const customersData = await getCustomersByCompany(
+        effectiveCompanyId,
+        effectiveBranchId || undefined
+      );
+      setCustomers(customersData);
+
+      // Yeni oluşturulan cariyi seç
+      setSelectedCustomerId(customerId);
+      setNewCustomerName("");
+
+      // Eğer ödeme al ekranındaysa ve mevcut sipariş varsa, siparişi yeni cari masasına taşı
+      if ((showPaymentModal || showFullScreenPayment) && order && order.items.length > 0) {
+        try {
+          // Hedef masayı al
+          const targetTable = await getTable(tableId);
+          if (!targetTable) {
+            throw new Error("Hedef masa bulunamadı");
+          }
+
+          // Hedef masada aktif sipariş var mı kontrol et
+          const allOrders = await getOrdersByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchId || undefined,
+          });
+          const targetOrder = allOrders.find(
+            (o) => o.tableId === tableId && o.status === "active"
+          );
+
+          if (targetOrder) {
+            // Mevcut siparişe ekle
+            const existingItems = targetOrder.items || [];
+            const mergedItems = [...existingItems, ...order.items];
+            const subtotal = mergedItems.reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+            const total = subtotal - (targetOrder.discount || 0);
+
+            await updateOrder(targetOrder.id!, {
+              items: mergedItems,
+              subtotal: subtotal,
+              total: total,
+            });
+          } else {
+            // Yeni sipariş oluştur
+            await addOrder({
+              companyId: effectiveCompanyId,
+              branchId: effectiveBranchId || targetTable.branchId,
+              tableId: tableId,
+              tableNumber: targetTable.tableNumber,
+              items: order.items,
+              sentItems: order.sentItems || order.items.map((item) => item.menuId),
+              createdBy: userData!.id!,
+              status: "active",
+              paymentStatus: "unpaid",
+              discount: order.discount,
+            });
+          }
+
+          // Mevcut masadan siparişi kaldır ve kapat
+          await updateOrder(order.id!, {
+            items: [],
+            subtotal: 0,
+            total: 0,
+          });
+
+          // Masa durumunu güncelle ve siparişi kapat
+          await updateTableStatus(currentTable.id!, "available", undefined);
+          await updateOrderStatus(order.id!, "closed");
+          
+          // Order state'ini güncelle
+          setOrder(null);
+
+          // Modal'ları kapat
+          setShowPaymentModal(false);
+          setShowFullScreenPayment(false);
+          setShowCustomerModal(false);
+
+          customAlert("Cari oluşturuldu ve sipariş cari masasına taşındı", "Başarılı", "success");
+        } catch (error: any) {
+          customAlert(`Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`, "Hata", "error");
+        }
+      } else {
+        customAlert("Cari başarıyla oluşturuldu", "Başarılı", "success");
+      }
+      
+      // Masaya yönlendir
+      navigate({
+        to: "/table/$tableId",
+        params: { tableId },
+      });
+    } catch (error: any) {
+      const errorMessage = error?.message || "Bilinmeyen bir hata oluştu";
+      customAlert(`Cari oluşturulurken bir hata oluştu: ${errorMessage}`, "Hata", "error");
+    } finally {
+      setIsCreatingCustomer(false);
+      setShowNewCustomerModal(false);
+    }
+  }, [newCustomerName, companyId, branchId, userData, navigate, showPaymentModal, showFullScreenPayment, order, currentTable]);
+
+  // Cari seç ve masaya yönlendir
+  const handleSelectCustomer = useCallback(async (customerId: string) => {
+    const effectiveCompanyId = companyId || userData?.companyId;
+    const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+    if (!effectiveCompanyId) {
+      customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
+      return;
+    }
+
+    try {
+      // Cari bilgisini al
+      const customer = await getCustomer(customerId);
+      if (!customer) {
+        customAlert("Cari bulunamadı", "Hata", "error");
+        return;
+      }
+
+      // Cari için masa var mı kontrol et
+      const allTables = await getTablesByCompany(
+        effectiveCompanyId,
+        effectiveBranchId || undefined
+      );
+      
+      let customerTable = allTables.find(
+        (t) => t.area === "Cari" && t.tableNumber === customer.name
+      );
+
+      // Masa yoksa oluştur
+      if (!customerTable) {
+        const tableId = await addTable({
+          companyId: effectiveCompanyId,
+          branchId: effectiveBranchId || undefined,
+          area: "Cari",
+          tableNumber: customer.name,
+          status: "available",
+        });
+        customerTable = await getTable(tableId);
+      }
+
+      if (!customerTable) {
+        customAlert("Masa oluşturulamadı", "Hata", "error");
+        return;
+      }
+
+      // Masaya yönlendir
+      navigate({
+        to: "/table/$tableId",
+        params: { tableId: customerTable.id! },
+      });
+      
+      setShowCustomerModal(false);
+    } catch (error) {
+      customAlert("Cari seçilirken bir hata oluştu", "Hata", "error");
+    }
+  }, [companyId, branchId, userData, navigate]);
 
   // Taşı modalı açıldığında masaları yükle
   useEffect(() => {
@@ -3127,8 +3448,10 @@ function TableDetailContent() {
                   const hasPaidItems = paidItems.length > 0;
                   const hasCanceledItems =
                     order.canceledItems && order.canceledItems.length > 0;
+                  const hasMovedItems =
+                    order.movedItems && order.movedItems.length > 0;
 
-                  if (!hasPaidItems && !hasCanceledItems) {
+                  if (!hasPaidItems && !hasCanceledItems && !hasMovedItems) {
                     return null;
                   }
 
@@ -3268,86 +3591,177 @@ function TableDetailContent() {
                   );
                 })()}
 
-                <div className="space-y-2">
+                <div className={currentTable.area === "Cari" ? "space-y-4" : "space-y-2"}>
                   {(() => {
-                    // Aynı menuId'ye sahip ürünleri birleştir
-                    const mergedItems = new Map<
-                      string,
-                      { item: OrderItem; indices: number[] }
-                    >();
-                    order.items.forEach((item, index) => {
-                      const existing = mergedItems.get(item.menuId);
-                      if (existing) {
-                        existing.item.quantity += item.quantity;
-                        existing.item.subtotal += item.subtotal;
-                        existing.indices.push(index);
-                      } else {
-                        mergedItems.set(item.menuId, {
-                          item: { ...item },
-                          indices: [index],
-                        });
-                      }
-                    });
+                    // Cari masasıysa tarihe göre grupla, değilse normal göster
+                    if (currentTable.area === "Cari") {
+                      // Ürünleri tarihe göre grupla
+                      const itemsByDate = new Map<string, Array<{ item: OrderItem; index: number }>>();
+                      
+                      order.items.forEach((item, index) => {
+                        const dateKey = item.addedAt
+                          ? item.addedAt.toLocaleDateString("tr-TR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })
+                          : "Tarih Yok";
+                        
+                        if (!itemsByDate.has(dateKey)) {
+                          itemsByDate.set(dateKey, []);
+                        }
+                        itemsByDate.get(dateKey)!.push({ item, index });
+                      });
 
-                    return Array.from(mergedItems.values()).map(
-                      ({ item, indices }) => {
-                        const isSelected = indices.some((idx) =>
-                          selectedItems.has(idx)
-                        );
+                      // Tarihleri sırala (en yeni üstte)
+                      const sortedDates = Array.from(itemsByDate.keys()).sort((a, b) => {
+                        if (a === "Tarih Yok") return 1;
+                        if (b === "Tarih Yok") return -1;
+                        const dateA = new Date(a.split(".").reverse().join("-"));
+                        const dateB = new Date(b.split(".").reverse().join("-"));
+                        return dateB.getTime() - dateA.getTime();
+                      });
+
+                      return sortedDates.map((dateKey) => {
+                        const itemsForDate = itemsByDate.get(dateKey)!;
+                        
                         return (
-                          <div
-                            key={item.menuId}
-                            onClick={() => {
-                              // Tüm index'leri seç/seçimi kaldır
-                              indices.forEach((idx) =>
-                                toggleItemSelection(idx)
+                          <div key={dateKey} className="space-y-2">
+                            {/* Tarih Başlığı */}
+                            <div>
+                              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                                {dateKey}
+                              </h3>
+                              <div className="border-t border-gray-300 dark:border-gray-600 mb-2"></div>
+                            </div>
+                            
+                            {/* O tarihteki ürünler */}
+                            {itemsForDate.map(({ item, index }) => {
+                              const isSelected = selectedItems.has(index);
+                              
+                              return (
+                                <div
+                                  key={`${item.menuId}-${index}`}
+                                  onClick={() => {
+                                    toggleItemSelection(index);
+                                  }}
+                                  className={`rounded-lg p-2 border-2 cursor-pointer transition-all w-full ${
+                                    isSelected
+                                      ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
+                                      : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between mb-1.5">
+                                    <div className="flex-1 min-w-0">
+                                      <h4
+                                        className={`font-medium text-xs truncate ${
+                                          isSelected
+                                            ? "text-blue-900 dark:text-blue-200"
+                                            : "text-gray-900 dark:text-white"
+                                        }`}
+                                      >
+                                        {item.quantity}x {item.menuName}
+                                      </h4>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span
+                                        className={`font-bold text-xs ${
+                                          isSelected
+                                            ? "text-blue-900 dark:text-blue-200"
+                                            : "text-gray-900 dark:text-white"
+                                        }`}
+                                      >
+                                        ₺{item.subtotal.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               );
-                            }}
-                            className={`rounded-lg p-2 border-2 cursor-pointer transition-all w-full ${
-                              isSelected
-                                ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
-                                : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <h4
-                                  className={`font-medium text-xs truncate ${
-                                    isSelected
-                                      ? "text-blue-900 dark:text-blue-200"
-                                      : "text-gray-900 dark:text-white"
-                                  }`}
-                                >
-                                  {item.menuName}
-                                </h4>
+                            })}
+                          </div>
+                        );
+                      });
+                    } else {
+                      // Normal masalar için tarih gruplaması olmadan göster
+                      // Aynı menuId'ye sahip ürünleri birleştir
+                      const mergedItems = new Map<
+                        string,
+                        { item: OrderItem; indices: number[] }
+                      >();
+                      order.items.forEach((item, index) => {
+                        const existing = mergedItems.get(item.menuId);
+                        if (existing) {
+                          existing.item.quantity += item.quantity;
+                          existing.item.subtotal += item.subtotal;
+                          existing.indices.push(index);
+                        } else {
+                          mergedItems.set(item.menuId, {
+                            item: { ...item },
+                            indices: [index],
+                          });
+                        }
+                      });
+
+                      return Array.from(mergedItems.values()).map(
+                        ({ item, indices }) => {
+                          const isSelected = indices.some((idx) =>
+                            selectedItems.has(idx)
+                          );
+                          return (
+                            <div
+                              key={item.menuId}
+                              onClick={() => {
+                                // Tüm index'leri seç/seçimi kaldır
+                                indices.forEach((idx) =>
+                                  toggleItemSelection(idx)
+                                );
+                              }}
+                              className={`rounded-lg p-2 border-2 cursor-pointer transition-all w-full ${
+                                isSelected
+                                  ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
+                                  : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-1.5">
+                                <div className="flex-1 min-w-0">
+                                  <h4
+                                    className={`font-medium text-xs truncate ${
+                                      isSelected
+                                        ? "text-blue-900 dark:text-blue-200"
+                                        : "text-gray-900 dark:text-white"
+                                    }`}
+                                  >
+                                    {item.menuName}
+                                  </h4>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span
+                                    className={`font-bold text-xs ${
+                                      isSelected
+                                        ? "text-blue-900 dark:text-blue-200"
+                                        : "text-gray-900 dark:text-white"
+                                    }`}
+                                  >
+                                    ₺{item.subtotal.toFixed(2)}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="flex flex-col items-end gap-1">
-                                <span
-                                  className={`font-bold text-xs ${
-                                    isSelected
-                                      ? "text-blue-900 dark:text-blue-200"
-                                      : "text-gray-900 dark:text-white"
-                                  }`}
-                                >
-                                  ₺{item.subtotal.toFixed(2)}
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                                {item.addedAt && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {getTimeAgo(item.addedAt)}
+                                  </p>
+                                )}
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {item.quantity} adet
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                              {item.addedAt && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {getTimeAgo(item.addedAt)}
-                                </p>
-                              )}
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {item.quantity} adet
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      }
-                    );
+                          );
+                        }
+                      );
+                    }
                   })()}
                 </div>
 
@@ -3909,6 +4323,15 @@ function TableDetailContent() {
                                     }, 0);
 
                                   if (totalQuantity > 1) {
+                                    // Tek ürün durumunda da pendingMoveItems set et
+                                    const singleItemArray = [{
+                                      menuId: singleItem.item.menuId,
+                                      menuName: singleItem.item.menuName,
+                                      totalQuantity: totalQuantity,
+                                      indices: singleItem.indices,
+                                    }];
+                                    setPendingMoveItems(singleItemArray);
+                                    setCurrentMoveItemIndex(0);
                                     setSelectedItemForQuantity({
                                       menuId: singleItem.item.menuId,
                                       menuName: singleItem.item.menuName,
@@ -7208,8 +7631,7 @@ function TableDetailContent() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        // Cari butonu - şimdilik placeholder
-                        customAlert("Cari özelliği yakında eklenecek", "Bilgi", "info");
+                        setShowCustomerModal(true);
                       }}
                       className="flex-1 h-14"
                     >
@@ -8052,6 +8474,138 @@ function TableDetailContent() {
               </div>
             );
           })()}
+
+        {/* Cari Seçme Modalı */}
+        {showCustomerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Cari Seç
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowCustomerModal(false);
+                    setSelectedCustomerId("");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto mb-4">
+                {isLoadingCustomers ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  </div>
+                ) : customers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    Henüz cari bulunmuyor
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {customers.map((customer) => (
+                      <button
+                        key={customer.id}
+                        onClick={() => handleSelectCustomer(customer.id!)}
+                        className="w-full p-3 text-left rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {customer.name}
+                        </div>
+                        {customer.phone && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {customer.phone}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button
+                onClick={() => {
+                  setShowNewCustomerModal(true);
+                }}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Yeni Cari Ekle
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Yeni Cari Ekleme Modalı */}
+        {showNewCustomerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Yeni Cari Ekle
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowNewCustomerModal(false);
+                    setNewCustomerName("");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Müşteri Adı
+                  </label>
+                  <Input
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    placeholder="Müşteri adını girin"
+                    className="w-full"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowNewCustomerModal(false);
+                      setNewCustomerName("");
+                    }}
+                    className="flex-1"
+                  >
+                    İptal
+                  </Button>
+                  <Button
+                    onClick={handleCreateCustomerAndTable}
+                    disabled={isCreatingCustomer || !newCustomerName.trim()}
+                    className="flex-1"
+                  >
+                    {isCreatingCustomer ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Oluşturuluyor...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Oluştur
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

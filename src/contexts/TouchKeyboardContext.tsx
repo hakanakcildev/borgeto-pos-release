@@ -117,14 +117,14 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
           newValue = inputValue + value;
         } else {
           // Cursor pozisyonunu al (text input'larda)
-          const cursorStart = input.selectionStart ?? inputValue.length;
-          const cursorEnd = input.selectionEnd ?? inputValue.length;
-          
-          // Cursor pozisyonuna göre yeni değeri oluştur
+        const cursorStart = input.selectionStart ?? inputValue.length;
+        const cursorEnd = input.selectionEnd ?? inputValue.length;
+        
+        // Cursor pozisyonuna göre yeni değeri oluştur
           newValue = 
-            inputValue.slice(0, cursorStart) + 
-            value + 
-            inputValue.slice(cursorEnd);
+          inputValue.slice(0, cursorStart) + 
+          value + 
+          inputValue.slice(cursorEnd);
         }
         
         if (maxLength && newValue.length > maxLength) {
@@ -156,13 +156,13 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
           // Cursor pozisyonunu yeni eklenen karakterin sonuna ayarla
           const cursorStart = input.selectionStart ?? inputValue.length;
           const newCursorPosition = cursorStart + value.length;
-          requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
             try {
-              input.setSelectionRange(newCursorPosition, newCursorPosition);
+          input.setSelectionRange(newCursorPosition, newCursorPosition);
             } catch (error) {
               // setSelectionRange hatası görmezden gelinir
             }
-          });
+        });
         }
 
         // Event tetikle
@@ -199,22 +199,22 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
         newCursorPosition = newValue.length;
       } else {
         // Text input'larda cursor pozisyonunu al
-        const cursorStart = input.selectionStart ?? inputValue.length;
-        const cursorEnd = input.selectionEnd ?? inputValue.length;
-        
-        // Eğer seçili metin varsa, seçili metni sil
-        // Yoksa cursor'un solundaki karakteri sil
-        if (cursorStart !== cursorEnd) {
-          // Seçili metin varsa, seçili metni sil
-          newValue = inputValue.slice(0, cursorStart) + inputValue.slice(cursorEnd);
-          newCursorPosition = cursorStart;
-        } else if (cursorStart > 0) {
-          // Cursor'un solundaki karakteri sil
-          newValue = inputValue.slice(0, cursorStart - 1) + inputValue.slice(cursorStart);
-          newCursorPosition = cursorStart - 1;
-        } else {
-          // Cursor başta, silinecek bir şey yok
-          return;
+      const cursorStart = input.selectionStart ?? inputValue.length;
+      const cursorEnd = input.selectionEnd ?? inputValue.length;
+      
+      // Eğer seçili metin varsa, seçili metni sil
+      // Yoksa cursor'un solundaki karakteri sil
+      if (cursorStart !== cursorEnd) {
+        // Seçili metin varsa, seçili metni sil
+        newValue = inputValue.slice(0, cursorStart) + inputValue.slice(cursorEnd);
+        newCursorPosition = cursorStart;
+      } else if (cursorStart > 0) {
+        // Cursor'un solundaki karakteri sil
+        newValue = inputValue.slice(0, cursorStart - 1) + inputValue.slice(cursorStart);
+        newCursorPosition = cursorStart - 1;
+      } else {
+        // Cursor başta, silinecek bir şey yok
+        return;
         }
       }
 
@@ -240,13 +240,13 @@ export const TouchKeyboardProvider: React.FC<TouchKeyboardProviderProps> = ({ ch
       }
       // Number tipindeki input'larda setSelectionRange çalışmaz
       if (input instanceof HTMLInputElement && input.type !== "number") {
-        requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
           try {
-            input.setSelectionRange(newCursorPosition, newCursorPosition);
+        input.setSelectionRange(newCursorPosition, newCursorPosition);
           } catch (error) {
             // setSelectionRange hatası görmezden gelinir
           }
-        });
+      });
       }
 
       // Event tetikle

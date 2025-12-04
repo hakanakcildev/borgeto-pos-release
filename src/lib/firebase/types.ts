@@ -323,6 +323,21 @@ export interface Bill {
   closedAt: Date; // Ödeme alındığında
 }
 
+// Cari (Customer Account)
+export interface CustomerAccount {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  name: string; // Müşteri adı
+  phone?: string; // Telefon (opsiyonel)
+  email?: string; // Email (opsiyonel)
+  balance: number; // Bakiye (varsayılan: 0)
+  isActive: boolean; // Aktif mi?
+  createdAt: Date;
+  updatedAt: Date;
+  lastOrderAt?: Date; // Son sipariş tarihi
+}
+
 // Stok Yönetimi
 export type StockMovementType = "in" | "out" | "adjustment"; // Giriş, Çıkış, Düzeltme
 

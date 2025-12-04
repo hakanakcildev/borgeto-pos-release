@@ -40,10 +40,15 @@ function Login() {
   const [showLatestVersionMessage, setShowLatestVersionMessage] =
     useState(false);
   const [currentVersion, setCurrentVersion] = useState("1.1.16");
-  const [showSaveCredentialsModal, setShowSaveCredentialsModal] = useState(false);
-  const [savedCredentials, setSavedCredentials] = useState<Array<{ email: string; password: string }>>([]);
+  const [showSaveCredentialsModal, setShowSaveCredentialsModal] =
+    useState(false);
+  const [savedCredentials, setSavedCredentials] = useState<
+    Array<{ email: string; password: string }>
+  >([]);
   const [showEmailDropdown, setShowEmailDropdown] = useState(false);
-  const [pendingLoginResult, setPendingLoginResult] = useState<{ result: any } | null>(null);
+  const [pendingLoginResult, setPendingLoginResult] = useState<{
+    result: any;
+  } | null>(null);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -166,7 +171,7 @@ function Login() {
   const handleSaveCredentials = useCallback(() => {
     const existingIndex = savedCredentials.findIndex((c) => c.email === email);
     let updated: Array<{ email: string; password: string }>;
-    
+
     if (existingIndex >= 0) {
       // Mevcut kullanıcıyı güncelle
       updated = [...savedCredentials];
@@ -175,17 +180,22 @@ function Login() {
       // Yeni kullanıcı ekle
       updated = [...savedCredentials, { email, password }];
     }
-    
+
     localStorage.setItem("savedCredentials", JSON.stringify(updated));
     // Bu kullanıcı için bir daha sorma
-    const dontAskList = JSON.parse(localStorage.getItem("dontAskSaveCredentials") || "[]");
+    const dontAskList = JSON.parse(
+      localStorage.getItem("dontAskSaveCredentials") || "[]"
+    );
     if (!dontAskList.includes(email)) {
       dontAskList.push(email);
-      localStorage.setItem("dontAskSaveCredentials", JSON.stringify(dontAskList));
+      localStorage.setItem(
+        "dontAskSaveCredentials",
+        JSON.stringify(dontAskList)
+      );
     }
     setSavedCredentials(updated);
     setShowSaveCredentialsModal(false);
-    
+
     // Giriş işlemini tamamla
     if (pendingLoginResult) {
       const result = pendingLoginResult.result;
@@ -217,7 +227,7 @@ function Login() {
   // Kullanıcı adı ve şifreyi kaydetme
   const handleDontSaveCredentials = useCallback(() => {
     setShowSaveCredentialsModal(false);
-    
+
     // Giriş işlemini tamamla
     if (pendingLoginResult) {
       const result = pendingLoginResult.result;
@@ -247,11 +257,14 @@ function Login() {
   }, [pendingLoginResult, navigate]);
 
   // Kayıtlı kullanıcı seçildiğinde şifreyi doldur
-  const handleSelectSavedCredential = useCallback((savedEmail: string, savedPassword: string) => {
-    setEmail(savedEmail);
-    setPassword(savedPassword);
-    setShowEmailDropdown(false);
-  }, []);
+  const handleSelectSavedCredential = useCallback(
+    (savedEmail: string, savedPassword: string) => {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setShowEmailDropdown(false);
+    },
+    []
+  );
 
   // Giriş işlemi
   const handleLogin = useCallback(
@@ -264,7 +277,9 @@ function Login() {
         const result = await signInWithCredentials(email, password);
 
         // Eğer bu kullanıcı için daha önce "Kaydet" seçildiyse modal gösterme
-        const dontAskList = JSON.parse(localStorage.getItem("dontAskSaveCredentials") || "[]");
+        const dontAskList = JSON.parse(
+          localStorage.getItem("dontAskSaveCredentials") || "[]"
+        );
         const shouldNotAsk = dontAskList.includes(email);
 
         if (shouldNotAsk) {
@@ -589,7 +604,9 @@ function Login() {
             {/* Error Message */}
             {error && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {error}
+                </p>
               </div>
             )}
 
@@ -623,30 +640,38 @@ function Login() {
                 autoComplete="username"
                 showKeyboardButton={false}
                 className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none"
-                style={{ 
-                  backgroundColor: resolvedTheme === 'dark' ? '#374151' : 'white',
-                  borderColor: resolvedTheme === 'dark' ? '#4b5563' : '#e5e7eb',
-                  color: resolvedTheme === 'dark' ? '#ffffff' : '#111827',
-                  borderWidth: '2px'
+                style={{
+                  backgroundColor:
+                    resolvedTheme === "dark" ? "#374151" : "white",
+                  borderColor: resolvedTheme === "dark" ? "#4b5563" : "#e5e7eb",
+                  color: resolvedTheme === "dark" ? "#ffffff" : "#111827",
+                  borderWidth: "2px",
                 }}
               />
               {/* Kayıtlı Kullanıcılar Dropdown */}
               {showEmailDropdown && savedCredentials.length > 0 && (
                 <div className="saved-credentials-dropdown absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
                   {savedCredentials
-                    .filter((cred) => 
-                      !email || cred.email.toLowerCase().includes(email.toLowerCase())
+                    .filter(
+                      (cred) =>
+                        !email ||
+                        cred.email.toLowerCase().includes(email.toLowerCase())
                     )
                     .map((cred, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => {
-                          handleSelectSavedCredential(cred.email, cred.password);
+                          handleSelectSavedCredential(
+                            cred.email,
+                            cred.password
+                          );
                         }}
                         className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none border-b border-gray-200 dark:border-gray-700 last:border-b-0"
                       >
-                        <div className="font-medium text-gray-900 dark:text-white">{cred.email}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {cred.email}
+                        </div>
                       </button>
                     ))}
                 </div>
@@ -674,11 +699,13 @@ function Login() {
                   autoComplete="current-password"
                   showKeyboardButton={false}
                   className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none pr-12"
-                  style={{ 
-                    backgroundColor: resolvedTheme === 'dark' ? '#374151' : 'white',
-                    borderColor: resolvedTheme === 'dark' ? '#4b5563' : '#e5e7eb',
-                    color: resolvedTheme === 'dark' ? '#ffffff' : '#111827',
-                    borderWidth: '2px'
+                  style={{
+                    backgroundColor:
+                      resolvedTheme === "dark" ? "#374151" : "white",
+                    borderColor:
+                      resolvedTheme === "dark" ? "#4b5563" : "#e5e7eb",
+                    color: resolvedTheme === "dark" ? "#ffffff" : "#111827",
+                    borderWidth: "2px",
                   }}
                 />
                 <button
@@ -744,7 +771,8 @@ function Login() {
                   Kullanıcı Bilgilerini Kaydet
                 </h3>
                 <p className="text-gray-700 dark:text-gray-300 text-center mb-6">
-                  Kullanıcı adı ve şifrenizi kaydetmek ister misiniz? Kaydedilen bilgiler daha sonra hızlı giriş için kullanılacaktır.
+                  Kullanıcı adı ve şifrenizi kaydetmek ister misiniz? Kaydedilen
+                  bilgiler daha sonra hızlı giriş için kullanılacaktır.
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -791,7 +819,10 @@ function Login() {
             </button>
             <div className="text-center">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Mevcut Sürüm: <span className="font-semibold text-gray-900 dark:text-white">{currentVersion}</span>
+                Mevcut Sürüm:{" "}
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {currentVersion}
+                </span>
               </p>
             </div>
           </div>
@@ -842,15 +873,21 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Versiyon artırma ve güncelleme notları işlem sırası düzeltildi
+                          Versiyon artırma ve güncelleme notları işlem sırası
+                          düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Mevcut versiyon bilgisi artık doğru şekilde gösteriliyor
+                          Mevcut versiyon bilgisi artık doğru şekilde
+                          gösteriliyor
                         </span>
                       </li>
                     </ul>
@@ -862,25 +899,36 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Login sayfasında güncelleme kontrolü butonuna basıldığında sürekli dönme sorunu düzeltildi
+                          Login sayfasında güncelleme kontrolü butonuna
+                          basıldığında sürekli dönme sorunu düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Uygulama açıldığında bekleyen güncelleme varsa hemen bildirim gösteriliyor
+                          Uygulama açıldığında bekleyen güncelleme varsa hemen
+                          bildirim gösteriliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Her durumda (login sayfasında da, oturum açıkta da) güncelleme bildirimleri çalışıyor
+                          Her durumda (login sayfasında da, oturum açıkta da)
+                          güncelleme bildirimleri çalışıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Daha tutarlı ve güvenilir güncelleme bildirimleri
                         </span>
@@ -894,25 +942,36 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Oturum açıkken güncelleme bildirimleri artık düzgün çalışıyor
+                          Oturum açıkken güncelleme bildirimleri artık düzgün
+                          çalışıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          Periyodik güncelleme kontrolü eklendi (her 30 dakikada bir)
+                          Periyodik güncelleme kontrolü eklendi (her 30 dakikada
+                          bir)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
-                          CHANGELOG.md'den sürüm notları otomatik olarak çekiliyor
+                          CHANGELOG.md'den sürüm notları otomatik olarak
+                          çekiliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Versiyon bilgisi otomatik olarak güncelleniyor
                         </span>
@@ -926,25 +985,33 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Input ve Textarea alanlarının arka plan renkleri
                           düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Açık temada beyaz arka plan, koyu temada koyu gri arka
                           plan
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>Yazı renkleri tema uyumlu hale getirildi</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>Daha iyi okunabilirlik ve görsel tutarlılık</span>
                       </li>
                     </ul>
@@ -956,44 +1023,58 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Gelişmiş klavye sistemi: 3 durumlu shift tuşu (Normal
                           → Shift → Caps Lock)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Login sayfası hariç tüm input'larda otomatik shift
                           açılışı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Dolu masalar yeşil, boş masalar kırmızı arka plan
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>Dolu masaların yazıları beyaz renkte</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Tüm masa kartlarına 1px beyaz border eklendi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Yazıcı çıktısındaki çizgiler tek satırda ve yazı ile
                           aynı genişlikte
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                        <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                          ✓
+                        </span>
                         <span>
                           Sidebar logo ve yazı boyutları açık/kapalı durumda
                           sabit
@@ -1008,34 +1089,44 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">📏</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          📏
+                        </span>
                         <span>
                           <strong>Kağıt Boyutu Tespiti:</strong> Yazıcıların
                           kağıt boyutu otomatik olarak tespit ediliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           80mm, 58mm, 110mm ve diğer boyutlar otomatik
                           algılanıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Yazıcı sayfasında kağıt boyutu bilgisi gösteriliyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Yazdırma formatı yazıcının kağıt genişliğine göre
                           otomatik ayarlanıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>Tam sayfa genişliğinde yazdırma</span>
                       </li>
                     </ul>
@@ -1046,35 +1137,45 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">🖨️</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          🖨️
+                        </span>
                         <span>
                           <strong>Yazdırma Formatı:</strong> Yazdırma formatı
                           tam sayfa genişliğinde ve düzgün formatlanmış
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           ESC/POS komutları ile font, hizalama ve kalın yazı
                           desteği
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Başlık ortalanmış ve büyük font, toplam tutar sağa
                           hizalı ve kalın
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Yazdırma çıktısında kare karakterler sorunu düzeltildi
                           (ASCII encoding)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Yazıcı sayfasına örnek çıktı önizlemesi eklendi
                         </span>
@@ -1087,7 +1188,9 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">🔄</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          🔄
+                        </span>
                         <span>
                           <strong>Güncelleme Kontrolü:</strong> Güncelleme
                           kontrolü butonuna basıldığında son sürüm ise "Son
@@ -1095,20 +1198,26 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Yeni sürüm varsa "İndir ve Kur" modalı açılıyor
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           "Güncelleme kontrolü şu anda kullanılamıyor" hatası
                           düzeltildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Güncelleme kontrolü kullanıcı deneyimi iyileştirildi
                         </span>
@@ -1121,7 +1230,9 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">🖨️</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          🖨️
+                        </span>
                         <span>
                           <strong>Yazdır Butonu Konumlandırması:</strong> Yazdır
                           butonu artık ödeme al butonunun yanında, daha kompakt
@@ -1129,35 +1240,45 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Masa sayfasında yazdır butonu ödeme al butonunun
                           yanında, daha küçük ve kullanışlı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Ödeme ekranında iskonto butonunun altına yazdır butonu
                           eklendi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Yazdır butonu genişliği artırıldı, daha kullanışlı
                           hale getirildi
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Yazdırma çıktısında Türkçe karakterlerin düzgün
                           görüntülenmesi sağlandı
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Yazdırma formatı basitleştirildi ve okunabilirliği
                           artırıldı
@@ -1171,14 +1292,18 @@ function Login() {
                     </h4>
                     <ul className="text-sm text-gray-800 dark:text-gray-300 space-y-2 list-none">
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">🎨</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          🎨
+                        </span>
                         <span>
                           <strong>Dinamik Etiket Sistemi:</strong> Ödeme
                           ekranında akıllı etiket gösterimi
                         </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Sol tarafta ürün seçilmediğinde '
                           <strong>Alınacak Ödeme</strong>' (yeşil renk ile
@@ -1186,7 +1311,9 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2 ml-6">
-                        <span className="text-green-600 dark:text-green-400">✓</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓
+                        </span>
                         <span>
                           Sağ tarafta (kısmi ödeme) ürün seçildiğinde '
                           <strong>Alınacak Ödeme</strong>' (yeşil renk ile
@@ -1194,28 +1321,38 @@ function Login() {
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-blue-600 dark:text-blue-400 font-bold">📱</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold">
+                          📱
+                        </span>
                         <span>
                           <strong>İki Panel Sistemi:</strong> Sol panel (tüm
                           ürünler), Sağ panel (kısmi ödeme alanı)
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✨</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✨
+                        </span>
                         <span>Daha anlaşılır ödeme akışı ve görsel ayrım</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✨</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✨
+                        </span>
                         <span>Yeşil renk ile alınacak ödeme vurgusu</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-green-600 dark:text-green-400">✨</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          ✨
+                        </span>
                         <span>
                           Kısmi ödeme seçimlerinde net görsel geri bildirim
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400">🔧</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          🔧
+                        </span>
                         <span>
                           Dinamik CSS sınıfları ve state bazlı etiket değişimi
                         </span>

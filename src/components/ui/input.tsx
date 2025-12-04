@@ -97,12 +97,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             // Touch event kontrolü - eğer son event touch ise klavyeyi aç
             const lastEventWasTouch = (window as any).__lastTouchEvent;
             if (lastEventWasTouch) {
-              // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
-              setTimeout(() => {
-                if (currentInput === document.activeElement) {
-                  handleOpenKeyboard();
-                }
-              }, 50);
+            // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
+            setTimeout(() => {
+              if (currentInput === document.activeElement) {
+                handleOpenKeyboard();
+              }
+            }, 50);
             }
           } else if (isOpen) {
             // Klavye zaten açıksa (örneğin klavye butonu ile açıldıysa), klavyeyi güncelle

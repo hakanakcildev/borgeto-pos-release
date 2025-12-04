@@ -14,13 +14,14 @@ import {
   CreditCard,
   Phone,
   History,
-  Table,
+  Table as TableIcon,
   Printer,
   Bike,
   RefreshCw,
   Download,
   CheckCircle,
   Package,
+  User,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { getCompany } from "@/lib/firebase/companies";
@@ -126,6 +127,7 @@ function MobileMenu({
                 </Link>
               );
             })}
+
           </div>
 
           {/* User Info & Logout */}
@@ -201,6 +203,7 @@ export function POSLayout({ children }: POSLayoutProps) {
     };
     loadCompany();
   }, [userData?.companyId]);
+
 
   // Kullanıcı giriş yaptığında otomatik güncelleme kontrolünü etkinleştir
   useEffect(() => {
@@ -327,7 +330,8 @@ export function POSLayout({ children }: POSLayoutProps) {
 
   const menuItems = [
     { title: "Masalar", icon: Home, href: "/" },
-    { title: "Masa Yönetimi", icon: Table, href: "/tables" },
+    { title: "Masa Yönetimi", icon: TableIcon, href: "/tables" },
+    { title: "Cari Masaları", icon: User, href: "/customer-tables" },
     { title: "Ürün Yönetimi", icon: Utensils, href: "/menus" },
     { title: "Stok Yönetimi", icon: Package, href: "/stocks" },
     {
@@ -380,6 +384,11 @@ export function POSLayout({ children }: POSLayoutProps) {
       if (href === "/stocks") {
         return (
           currentPath === "/stocks" || currentPath.startsWith("/stocks/")
+        );
+      }
+      if (href === "/customer-tables") {
+        return (
+          currentPath === "/customer-tables" || currentPath.startsWith("/customer-tables/")
         );
       }
       if (href === "/statistics") {
@@ -511,6 +520,7 @@ export function POSLayout({ children }: POSLayoutProps) {
                     </Link>
                   );
                 })}
+
               </div>
             </div>
 

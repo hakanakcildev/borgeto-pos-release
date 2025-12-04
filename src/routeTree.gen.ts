@@ -20,6 +20,7 @@ import { Route as PosRouteImport } from './routes/pos'
 import { Route as PaymentMethodsRouteImport } from './routes/payment-methods'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as MenusRouteImport } from './routes/menus'
+import { Route as CustomerTablesRouteImport } from './routes/customer-tables'
 import { Route as CouriersRouteImport } from './routes/couriers'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PosIndexRouteImport } from './routes/pos/index'
@@ -82,6 +83,11 @@ const MenusRoute = MenusRouteImport.update({
   path: '/menus',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CustomerTablesRoute = CustomerTablesRouteImport.update({
+  id: '/customer-tables',
+  path: '/customer-tables',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CouriersRoute = CouriersRouteImport.update({
   id: '/couriers',
   path: '/couriers',
@@ -116,6 +122,7 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/couriers': typeof CouriersRoute
+  '/customer-tables': typeof CustomerTablesRoute
   '/menus': typeof MenusRoute
   '/orders': typeof OrdersRoute
   '/payment-methods': typeof PaymentMethodsRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/couriers': typeof CouriersRoute
+  '/customer-tables': typeof CustomerTablesRoute
   '/menus': typeof MenusRoute
   '/orders': typeof OrdersRoute
   '/payment-methods': typeof PaymentMethodsRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/couriers': typeof CouriersRoute
+  '/customer-tables': typeof CustomerTablesRoute
   '/menus': typeof MenusRoute
   '/orders': typeof OrdersRoute
   '/payment-methods': typeof PaymentMethodsRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/couriers'
+    | '/customer-tables'
     | '/menus'
     | '/orders'
     | '/payment-methods'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/couriers'
+    | '/customer-tables'
     | '/menus'
     | '/orders'
     | '/payment-methods'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/couriers'
+    | '/customer-tables'
     | '/menus'
     | '/orders'
     | '/payment-methods'
@@ -232,6 +244,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CouriersRoute: typeof CouriersRoute
+  CustomerTablesRoute: typeof CustomerTablesRoute
   MenusRoute: typeof MenusRoute
   OrdersRoute: typeof OrdersRoute
   PaymentMethodsRoute: typeof PaymentMethodsRoute
@@ -326,6 +339,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MenusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/customer-tables': {
+      id: '/customer-tables'
+      path: '/customer-tables'
+      fullPath: '/customer-tables'
+      preLoaderRoute: typeof CustomerTablesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/couriers': {
       id: '/couriers'
       path: '/couriers'
@@ -386,6 +406,7 @@ const PosRouteWithChildren = PosRoute._addFileChildren(PosRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CouriersRoute: CouriersRoute,
+  CustomerTablesRoute: CustomerTablesRoute,
   MenusRoute: MenusRoute,
   OrdersRoute: OrdersRoute,
   PaymentMethodsRoute: PaymentMethodsRoute,

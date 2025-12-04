@@ -45,14 +45,14 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             const lastEventWasTouch = (window as any).__lastTouchEvent;
             if (lastEventWasTouch) {
               // Varsayılan klavyeyi engelle (sadece touch event'lerinde)
-              textareaRef.current.setAttribute("readonly", "readonly");
-              setTimeout(() => {
-                if (textareaRef.current) {
-                  textareaRef.current.removeAttribute("readonly");
-                }
-              }, 100);
+            textareaRef.current.setAttribute("readonly", "readonly");
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.removeAttribute("readonly");
+              }
+            }, 100);
 
-              handleOpenKeyboard();
+            handleOpenKeyboard();
             }
             // PC klavyesi kullanıldığında readonly ekleme, normal yazı yazmaya izin ver
           } else if (isOpen) {

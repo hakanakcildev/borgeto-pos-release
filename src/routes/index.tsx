@@ -25,6 +25,7 @@ import {
   Printer,
   Bike,
   Package,
+  User,
 } from "lucide-react";
 import { useCallback } from "react";
 import { getCompany } from "@/lib/firebase/companies";
@@ -105,6 +106,7 @@ function POSLayoutWithTables() {
   const menuItems = [
     { title: "Masalar", icon: Home, href: "/" },
     { title: "Masa Yönetimi", icon: TableIcon, href: "/tables" },
+    { title: "Cari Masaları", icon: User, href: "/customer-tables" },
     { title: "Ürün Yönetimi", icon: UtensilsIcon, href: "/menus" },
     { title: "Stok Yönetimi", icon: Package, href: "/stocks" },
     {
@@ -135,6 +137,12 @@ function POSLayoutWithTables() {
         return (
           currentPath === "/tables" ||
           currentPath.startsWith("/tables/")
+        );
+      }
+      if (href === "/customer-tables") {
+        return (
+          currentPath === "/customer-tables" ||
+          currentPath.startsWith("/customer-tables/")
         );
       }
       if (href === "/payment-methods") {
