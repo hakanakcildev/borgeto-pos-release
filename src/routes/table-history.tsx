@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getBillsByCompany } from "@/lib/firebase/bills";
+import { getBillsByCompany, clearAllBills } from "@/lib/firebase/bills";
 import type { Bill, OrderItem } from "@/lib/firebase/types";
 import { POSLayout } from "@/components/layouts/POSLayout";
-import { History, Clock, Receipt, X, Printer } from "lucide-react";
+import { History, Clock, Receipt, X, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   formatPrintContent,
@@ -43,6 +43,7 @@ function TableHistoryContent() {
     assignedCategories?: string[];
   }>>([]);
   const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Yazıcı ayarlarını yükle
   useEffect(() => {
@@ -181,6 +182,34 @@ function TableHistoryContent() {
     }
   };
 
+  const handleClearAllBills = async () => {
+    const confirmed = window.confirm(
+      "Tüm adisyon geçmişini silmek istediğinize emin misiniz? Bu işlem geri alınamaz."
+    );
+
+    if (!confirmed) return;
+
+    const effectiveCompanyId = companyId || userData?.companyId;
+    const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+    if (!effectiveCompanyId) {
+      customAlert("Şirket bilgisi bulunamadı.", "Hata", "error");
+      return;
+    }
+
+    try {
+      setIsClearing(true);
+      await clearAllBills(effectiveCompanyId, effectiveBranchId || undefined);
+      setBills([]);
+      setSelectedBill(null);
+      customAlert("Tüm adisyon geçmişi başarıyla temizlendi.", "Başarılı", "success");
+    } catch (error) {
+      customAlert("Adisyon geçmişi temizlenirken bir hata oluştu.", "Hata", "error");
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -196,14 +225,28 @@ function TableHistoryContent() {
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 overflow-y-auto">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <History className="h-8 w-8" />
             Masa Geçmişi
           </h1>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
-          Tüm adisyon geçmişini görüntüleyin
+            Tüm adisyon geçmişini görüntüleyin
           </p>
+        </div>
+        {bills.length > 0 && (
+          <Button
+            onClick={handleClearAllBills}
+            disabled={isClearing}
+            variant="destructive"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isClearing ? "Temizleniyor..." : "Verileri Temizle"}
+          </Button>
+        )}
       </div>
 
       {/* Adisyon Listesi */}

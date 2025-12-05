@@ -6,6 +6,7 @@ import {
   addDoc,
   query,
   where,
+  deleteDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -311,6 +312,29 @@ export const getTablesWithBills = async (
     const allBills = await getBillsByCompany(companyId, { branchId });
     const uniqueTableIds = Array.from(new Set(allBills.map((bill) => bill.tableId)));
     return uniqueTableIds;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Tüm adisyonları temizle
+export const clearAllBills = async (
+  companyId: string,
+  branchId?: string
+): Promise<void> => {
+  try {
+    let q = query(
+      collection(db, COLLECTION_NAME),
+      where("companyId", "==", companyId)
+    );
+
+    if (branchId) {
+      q = query(q, where("branchId", "==", branchId));
+    }
+
+    const querySnapshot = await getDocs(q);
+    const deletePromises = querySnapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref));
+    await Promise.all(deletePromises);
   } catch (error) {
     throw error;
   }

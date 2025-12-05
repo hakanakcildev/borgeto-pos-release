@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { signInWithCredentials } from "@/lib/firebase/auth";
+import type { User, Branch, Company } from "@/lib/firebase/types";
+import type { User as FirebaseUser } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,10 +46,28 @@ function Login() {
     useState(false);
   const [savedCredentials, setSavedCredentials] = useState<
     Array<{ email: string; password: string }>
-  >([]);
+  >(() => {
+    const saved = localStorage.getItem("savedCredentials");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [showEmailDropdown, setShowEmailDropdown] = useState(false);
   const [pendingLoginResult, setPendingLoginResult] = useState<{
-    result: any;
+    result: {
+      type: "firebase" | "staff" | "branch";
+      firebaseUser?: FirebaseUser;
+      user?: User;
+      branch?: Branch;
+      company?: Company;
+      companyId: string;
+      branchId?: string;
+    };
   } | null>(null);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +85,7 @@ function Login() {
             if (versionResult?.version) {
               setCurrentVersion(versionResult.version);
             }
-          } catch (error) {
+          } catch {
             // Hata durumunda package.json'dan versiyonu al
             setCurrentVersion("1.1.16");
           }
@@ -77,19 +97,6 @@ function Login() {
     };
 
     loadVersion();
-  }, []);
-
-  // Kayıtlı kullanıcıları yükle
-  useEffect(() => {
-    const saved = localStorage.getItem("savedCredentials");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setSavedCredentials(parsed);
-      } catch {
-        setSavedCredentials([]);
-      }
-    }
   }, []);
 
   // Dropdown'u dışarı tıklandığında kapat
@@ -332,7 +339,7 @@ function Login() {
         setLoading(false);
       }
     },
-    [email, password]
+    [email, password, navigate]
   );
 
   // Güncelleme kontrolü
@@ -441,7 +448,7 @@ function Login() {
     if (window.electronAPI?.startDownloadUpdate) {
       try {
         await window.electronAPI.startDownloadUpdate();
-      } catch (error) {
+      } catch {
         setError("Güncelleme indirilirken bir hata oluştu");
         setDownloadingUpdate(false);
       }
@@ -453,7 +460,7 @@ function Login() {
     if (window.electronAPI?.quitAndInstall) {
       try {
         await window.electronAPI.quitAndInstall();
-      } catch (error) {
+      } catch {
         setError("Güncelleme kurulurken bir hata oluştu");
       }
     }

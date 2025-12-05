@@ -1277,125 +1277,127 @@ function TableDetailContent() {
         // Ödemeyi ekle
         await addPayment(order.id!, payment);
 
-        // Adisyon oluştur (her ödeme sonrası)
+        // Siparişi yeniden yükle (güncel haliyle) - önce yükle ki diğer işlemlerde kullanabilelim
+        const updatedOrder = await getOrder(order.id!);
+
+        // Arka planda yapılacak işlemler için verileri hazırla
         const effectiveCompanyId = companyId || userData?.companyId;
         const effectiveBranchId = branchId || userData?.assignedBranchId;
+        
+        // Ödeme yöntemi adını bul (bir kez hesapla)
+        const selectedPaymentMethod = paymentMethods.find(
+          (pm) => pm.code === paymentMethodToUse
+        );
+        const paymentMethodName = selectedPaymentMethod
+          ? selectedPaymentMethod.name
+          : paymentMethodToUse === "cash"
+            ? "Nakit"
+            : paymentMethodToUse === "card"
+              ? "Kart"
+              : paymentMethodToUse === "mealCard"
+                ? "Yemek Kartı"
+                : paymentMethodToUse;
+
+        // Adisyon ve masa geçmişi kayıtlarını paralel olarak arka planda yap
         if (effectiveCompanyId) {
-          try {
-            // Ödenen ürünleri belirle
-            let billItems: OrderItem[] = [];
-            
-            if (isPartialPayment && paidItems) {
-              // Kısmi ödeme: Sadece ödenen ürünleri al
-              // paidItems'dan OrderItem formatına dönüştür
-              billItems = paidItems.map((paidItem) => {
-                // Order'dan ilgili item'ı bul (menuId ve quantity'ye göre)
-                const orderItem = order.items.find(
-                  (item) => item.menuId === paidItem.menuId
-                );
-                if (orderItem) {
+          // Adisyon oluşturma işlemini arka planda başlat
+          (async () => {
+            try {
+              // Ödenen ürünleri belirle
+              let billItems: OrderItem[] = [];
+              
+              if (isPartialPayment && paidItems) {
+                // Kısmi ödeme: Sadece ödenen ürünleri al
+                billItems = paidItems.map((paidItem) => {
+                  const orderItem = order.items.find(
+                    (item) => item.menuId === paidItem.menuId
+                  );
+                  if (orderItem) {
+                    return {
+                      ...orderItem,
+                      quantity: paidItem.quantity,
+                      subtotal: paidItem.subtotal,
+                    };
+                  }
                   return {
-                    ...orderItem,
+                    menuId: paidItem.menuId,
+                    menuName: paidItem.menuName,
+                    menuPrice: paidItem.subtotal / paidItem.quantity,
                     quantity: paidItem.quantity,
                     subtotal: paidItem.subtotal,
+                    addedAt: new Date(),
                   };
-                }
-                // Eğer order'da bulunamazsa, paidItem'dan oluştur
-                return {
-                  menuId: paidItem.menuId,
-                  menuName: paidItem.menuName,
-                  menuPrice: paidItem.subtotal / paidItem.quantity,
-                  quantity: paidItem.quantity,
-                  subtotal: paidItem.subtotal,
-                  addedAt: new Date(),
-                };
+                });
+              } else {
+                // Tam ödeme: Tüm ürünleri al
+                billItems = [...order.items];
+              }
+
+              // Adisyon toplamlarını hesapla
+              const billSubtotal = billItems.reduce((sum, item) => sum + item.subtotal, 0);
+              const billDiscount = isPartialPayment ? 0 : (order.discount || 0);
+              const billTotal = Math.max(0, billSubtotal - billDiscount);
+
+              // Adisyon oluştur
+              await addBill({
+                companyId: effectiveCompanyId,
+                branchId: effectiveBranchId || undefined,
+                tableId: currentTable.id!,
+                tableNumber: currentTable.tableNumber,
+                orderId: order.id!,
+                items: billItems,
+                subtotal: billSubtotal,
+                discount: billDiscount > 0 ? billDiscount : undefined,
+                total: billTotal,
+                payments: [payment],
+                customerName: order.customerName,
+                customerPhone: order.customerPhone,
+                notes: order.notes,
+                createdBy: userData?.id || currentUser?.uid || "",
               });
-            } else {
-              // Tam ödeme: Tüm ürünleri al
-              billItems = [...order.items];
+            } catch (error) {
+              // Error saving bill
             }
+          })();
 
-            // Adisyon toplamlarını hesapla
-            const billSubtotal = billItems.reduce((sum, item) => sum + item.subtotal, 0);
-            const billDiscount = isPartialPayment ? 0 : (order.discount || 0);
-            const billTotal = Math.max(0, billSubtotal - billDiscount);
-
-            // Adisyon oluştur
-            await addBill({
-              companyId: effectiveCompanyId,
-              branchId: effectiveBranchId || undefined,
-              tableId: currentTable.id!,
-              tableNumber: currentTable.tableNumber,
-              orderId: order.id!,
-              items: billItems,
-              subtotal: billSubtotal,
-              discount: billDiscount > 0 ? billDiscount : undefined,
-              total: billTotal,
-              payments: [payment],
-              customerName: order.customerName,
-              customerPhone: order.customerPhone,
-              notes: order.notes,
-              createdBy: userData?.id || currentUser?.uid || "",
-            });
-          } catch (error) {
-            // Error saving bill
-          }
-        }
-
-        // Masa geçmişine kaydet (geriye dönük uyumluluk için)
-        if (effectiveCompanyId) {
-          try {
-            // Ödeme yöntemi adını bul
-            const selectedPaymentMethod = paymentMethods.find(
-              (pm) => pm.code === paymentMethodToUse
-            );
-            const paymentMethodName = selectedPaymentMethod
-              ? selectedPaymentMethod.name
-              : paymentMethodToUse === "cash"
-                ? "Nakit"
-                : paymentMethodToUse === "card"
-                  ? "Kart"
-                  : paymentMethodToUse === "mealCard"
-                    ? "Yemek Kartı"
-                    : paymentMethodToUse;
-
-            if (isPartialPayment && paidItems) {
-              // Kısmi ödeme
-              await addTableHistory(
-                effectiveCompanyId,
-                currentTable.id!,
-                currentTable.tableNumber,
-                "partial_payment",
-                `Kısmi ödeme alındı (${paymentMethodName})`,
-                {
-                  paymentAmount: amount,
-                  paymentMethod: paymentMethodName,
-                  paidItems: paidItems,
-                },
-                effectiveBranchId || undefined
-              );
-            } else {
-              // Tam ödeme
-              await addTableHistory(
-                effectiveCompanyId,
-                currentTable.id!,
-                currentTable.tableNumber,
-                "full_payment",
-                `Tam ödeme alındı (${paymentMethodName})`,
-                {
-                  paymentAmount: amount,
-                  paymentMethod: paymentMethodName,
-                },
-                effectiveBranchId || undefined
-              );
+          // Masa geçmişine kaydetme işlemini arka planda başlat
+          (async () => {
+            try {
+              if (isPartialPayment && paidItems) {
+                // Kısmi ödeme
+                await addTableHistory(
+                  effectiveCompanyId,
+                  currentTable.id!,
+                  currentTable.tableNumber,
+                  "partial_payment",
+                  `Kısmi ödeme alındı (${paymentMethodName})`,
+                  {
+                    paymentAmount: amount,
+                    paymentMethod: paymentMethodName,
+                    paidItems: paidItems,
+                  },
+                  effectiveBranchId || undefined
+                );
+              } else {
+                // Tam ödeme
+                await addTableHistory(
+                  effectiveCompanyId,
+                  currentTable.id!,
+                  currentTable.tableNumber,
+                  "full_payment",
+                  `Tam ödeme alındı (${paymentMethodName})`,
+                  {
+                    paymentAmount: amount,
+                    paymentMethod: paymentMethodName,
+                  },
+                  effectiveBranchId || undefined
+                );
+              }
+            } catch (error) {
+              // Error saving table history
             }
-          } catch (error) {
-            // Error saving table history
-          }
+          })();
         }
-
-        // Siparişi yeniden yükle (güncel haliyle)
-        const updatedOrder = await getOrder(order.id!);
 
         // Kurye ataması yapıldıysa (paket masaları için)
         const courierIdToUse = overrideCourierId !== undefined ? overrideCourierId : selectedCourierId;
@@ -1435,42 +1437,72 @@ function TableDetailContent() {
           }
         }
 
-        // Ödeme alındığında ana yazıcıdan yazdır
-        try {
-          const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
-          if (defaultPrinter && updatedOrder) {
-            // Ödenen ürünleri al (kısmi ödeme durumunda sadece ödenenler)
-            const paidItems = isPartialPayment && pendingPaymentItems.length > 0
-              ? updatedOrder.items.filter((item, index) => {
-                  const paidItem = pendingPaymentItems.find(pi => pi.menuId === item.menuId);
-                  return paidItem && paidItem.indices.includes(index);
-                })
-              : updatedOrder.items;
-            
-            if (paidItems.length > 0) {
-              const paymentMethodName = paymentMethods.find(
-                (pm) => pm.code === paymentMethodToUse
-              )?.name || paymentMethodToUse;
+        // Ödeme alındığında ana yazıcıdan yazdır (arka planda, await olmadan)
+        // Yazdırma için gerekli verileri sakla
+        const printData = {
+          isPartialPayment,
+          paidItems: paidItems,
+          orderItems: order.items,
+          updatedOrderItems: updatedOrder?.items || [],
+          amount,
+          paymentMethodName,
+          tableNumber: currentTable.tableNumber,
+          orderNumber: updatedOrder?.orderNumber || order.orderNumber,
+          discount: updatedOrder?.discount || 0,
+          subtotal: updatedOrder?.subtotal || 0,
+        };
+
+        (async () => {
+          try {
+            const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
+            if (defaultPrinter && updatedOrder) {
+              // Ödenen ürünleri al (kısmi ödeme durumunda sadece ödenenler)
+              let paidItemsForPrint: OrderItem[] = [];
               
-              const printContent = formatPrintContent(
-                "payment",
-                paidItems,
-                currentTable.tableNumber,
-                updatedOrder.orderNumber,
-                {
-                  total: amount,
-                  paymentMethod: paymentMethodName,
-                  discount: updatedOrder.discount || 0,
-                  subtotal: updatedOrder.subtotal || 0,
-                  companyName: companyData?.name || "",
-                }
-              );
-              await printToPrinter(defaultPrinter.name, printContent, "payment");
+              if (printData.isPartialPayment && printData.paidItems) {
+                // Kısmi ödeme: Sadece ödenen ürünleri al
+                paidItemsForPrint = printData.paidItems.map(paidItem => {
+                  const orderItem = printData.orderItems.find(item => item.menuId === paidItem.menuId);
+                  return orderItem ? {
+                    ...orderItem,
+                    quantity: paidItem.quantity,
+                    subtotal: paidItem.subtotal,
+                  } : {
+                    menuId: paidItem.menuId,
+                    menuName: paidItem.menuName,
+                    menuPrice: paidItem.subtotal / paidItem.quantity,
+                    quantity: paidItem.quantity,
+                    subtotal: paidItem.subtotal,
+                    addedAt: new Date(),
+                    selectedExtras: [],
+                  };
+                });
+              } else {
+                // Tam ödeme: Tüm ürünleri al
+                paidItemsForPrint = printData.updatedOrderItems;
+              }
+              
+              if (paidItemsForPrint.length > 0) {
+                const printContent = formatPrintContent(
+                  "payment",
+                  paidItemsForPrint,
+                  printData.tableNumber,
+                  printData.orderNumber,
+                  {
+                    total: printData.amount,
+                    paymentMethod: printData.paymentMethodName,
+                    discount: printData.discount,
+                    subtotal: printData.subtotal,
+                    companyName: companyData?.name || "",
+                  }
+                );
+                await printToPrinter(defaultPrinter.name, printContent, "payment");
+              }
             }
+          } catch (error) {
+            // Yazdırma hatası ödeme işlemini etkilemesin
           }
-        } catch (error) {
-          // Yazdırma hatası ödeme işlemini etkilemesin
-        }
+        })();
 
         // Eğer TAM ödeme alındıysa (ve partial ödeme değilse) veya tüm ürünler kaldırıldıysa siparişi kapat
         // Not: Kısmi ödemede (seçilen ürünlerin belli adetleri) masada ürün kaldığı sürece sipariş açık kalmalı
