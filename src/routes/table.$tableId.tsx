@@ -259,7 +259,6 @@ function TableDetailContent() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [customers, setCustomers] = useState<CustomerAccount[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [newCustomerName, setNewCustomerName] = useState<string>("");
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
@@ -2627,7 +2626,7 @@ function TableDetailContent() {
     setIsCreatingCustomer(true);
     try {
       // Yeni cari oluştur
-      const customerId = await addCustomer({
+      await addCustomer({
         companyId: effectiveCompanyId,
         branchId: effectiveBranchId || undefined,
         name: newCustomerName.trim(),
@@ -2652,11 +2651,10 @@ function TableDetailContent() {
       setCustomers(customersData);
 
       // Yeni oluşturulan cariyi seç
-      setSelectedCustomerId(customerId);
       setNewCustomerName("");
 
-      // Eğer ödeme al ekranındaysa ve mevcut sipariş varsa, siparişi yeni cari masasına taşı
-      if ((showPaymentModal || showFullScreenPayment) && order && order.items.length > 0) {
+      // Eğer mevcut sipariş varsa, siparişi yeni cari masasına taşı
+      if (order && order.items.length > 0) {
         try {
           // Hedef masayı al
           const targetTable = await getTable(tableId);
@@ -2734,6 +2732,7 @@ function TableDetailContent() {
       navigate({
         to: "/table/$tableId",
         params: { tableId },
+        search: { area: undefined, activeOnly: false },
       });
     } catch (error: any) {
       const errorMessage = error?.message || "Bilinmeyen bir hata oluştu";
@@ -2742,7 +2741,7 @@ function TableDetailContent() {
       setIsCreatingCustomer(false);
       setShowNewCustomerModal(false);
     }
-  }, [newCustomerName, companyId, branchId, userData, navigate, showPaymentModal, showFullScreenPayment, order, currentTable]);
+  }, [newCustomerName, companyId, branchId, userData, navigate, order, currentTable]);
 
   // Cari seç ve masaya yönlendir
   const handleSelectCustomer = useCallback(async (customerId: string) => {
@@ -2781,7 +2780,8 @@ function TableDetailContent() {
           tableNumber: customer.name,
           status: "available",
         });
-        customerTable = await getTable(tableId);
+        const table = await getTable(tableId);
+        customerTable = table || undefined;
       }
 
       if (!customerTable) {
@@ -2789,17 +2789,77 @@ function TableDetailContent() {
         return;
       }
 
+      // Eğer mevcut sipariş varsa, siparişi cari masasına taşı
+      if (order && order.items.length > 0) {
+        try {
+          // Hedef masada aktif sipariş var mı kontrol et
+          const allOrders = await getOrdersByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchId || undefined,
+          });
+          const targetOrder = allOrders.find(
+            (o) => o.tableId === customerTable!.id && o.status === "active"
+          );
+
+          if (targetOrder) {
+            // Mevcut siparişe ekle
+            const existingItems = targetOrder.items || [];
+            const mergedItems = [...existingItems, ...order.items];
+            const subtotal = mergedItems.reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+            const total = subtotal - (targetOrder.discount || 0);
+
+            await updateOrder(targetOrder.id!, {
+              items: mergedItems,
+              subtotal: subtotal,
+              total: total,
+            });
+          } else {
+            // Yeni sipariş oluştur
+            await addOrder({
+              companyId: effectiveCompanyId,
+              branchId: effectiveBranchId || customerTable.branchId,
+              tableId: customerTable.id!,
+              tableNumber: customerTable.tableNumber,
+              items: order.items,
+              sentItems: order.sentItems || order.items.map((item) => item.menuId),
+              createdBy: userData!.id!,
+              status: "active",
+              paymentStatus: "unpaid",
+              discount: order.discount,
+            });
+          }
+
+          // Mevcut masadan siparişi kaldır ve kapat
+          await updateOrder(order.id!, {
+            items: [],
+            subtotal: 0,
+            total: 0,
+          });
+
+          // Masa durumunu güncelle ve siparişi kapat
+          await updateOrderStatus(order.id!, "closed");
+          await updateTableStatus(currentTable.id!, "available", undefined);
+
+          customAlert("Cari seçildi ve sipariş cari masasına taşındı", "Başarılı", "success");
+        } catch (error: any) {
+          customAlert(`Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`, "Hata", "error");
+        }
+      }
+
       // Masaya yönlendir
       navigate({
         to: "/table/$tableId",
         params: { tableId: customerTable.id! },
+        search: { area: undefined, activeOnly: false },
       });
       
       setShowCustomerModal(false);
     } catch (error) {
       customAlert("Cari seçilirken bir hata oluştu", "Hata", "error");
     }
-  }, [companyId, branchId, userData, navigate]);
+  }, [companyId, branchId, userData, navigate, order, currentTable]);
 
   // Taşı modalı açıldığında masaları yükle
   useEffect(() => {
@@ -8520,7 +8580,6 @@ function TableDetailContent() {
                   size="sm"
                   onClick={() => {
                     setShowCustomerModal(false);
-                    setSelectedCustomerId("");
                   }}
                 >
                   <X className="h-4 w-4" />

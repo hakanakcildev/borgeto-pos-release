@@ -4,18 +4,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getTablesByCompany,
   deleteTable,
-  updateTable,
 } from "@/lib/firebase/tables";
 import { getCustomersByCompany, deleteCustomer } from "@/lib/firebase/customers";
 import { getOrdersByCompany } from "@/lib/firebase/orders";
-import type { Table, CustomerAccount, Order, OrderItem } from "@/lib/firebase/types";
+import type { Table, CustomerAccount } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
 import {
   Trash2,
-  X,
   User,
   Loader2,
-  Clock,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { customAlert } from "@/components/ui/alert-dialog";
@@ -36,7 +33,6 @@ function CustomerTablesManagementContent() {
   const { userData, companyId, branchId } = useAuth();
   const [customerTables, setCustomerTables] = useState<Table[]>([]);
   const [customers, setCustomers] = useState<CustomerAccount[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,7 +64,6 @@ function CustomerTablesManagementContent() {
         const ordersData = await getOrdersByCompany(effectiveCompanyId, {
           branchId: effectiveBranchId || undefined,
         });
-        setOrders(ordersData);
 
         // Her cari masası için son sipariş tarihini bul ve sırala
         customerTablesData = customerTablesData.map((table) => {
@@ -110,14 +105,11 @@ function CustomerTablesManagementContent() {
   }, [companyId, branchId, userData]);
 
   const handleDeleteCustomer = async (customer: CustomerAccount, table: Table) => {
-    const confirmed = await customAlert(
+    await customAlert(
       `${customer.name} carisini ve masasını silmek istediğinize emin misiniz?`,
       "Onay",
-      "warning",
-      true
+      "warning"
     );
-
-    if (!confirmed) return;
 
     try {
       // Önce masayı sil
@@ -198,6 +190,7 @@ function CustomerTablesManagementContent() {
                     <Link
                       to="/table/$tableId"
                       params={{ tableId: table.id! }}
+                      search={{ area: undefined, activeOnly: false }}
                       className="flex-1 min-w-0"
                     >
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate">
@@ -238,6 +231,7 @@ function CustomerTablesManagementContent() {
                     <Link
                       to="/table/$tableId"
                       params={{ tableId: table.id! }}
+                      search={{ area: undefined, activeOnly: false }}
                     >
                       <Button size="sm" variant="outline">
                         Aç
