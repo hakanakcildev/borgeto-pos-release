@@ -3,8 +3,18 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { getTablesByCompany, updateTableStatus, getTable, createDefaultTables } from "@/lib/firebase/tables";
-import { getOrdersByCompany, updateOrder, addOrder, updateOrderStatus } from "@/lib/firebase/orders";
+import {
+  getTablesByCompany,
+  updateTableStatus,
+  getTable,
+  createDefaultTables,
+} from "@/lib/firebase/tables";
+import {
+  getOrdersByCompany,
+  updateOrder,
+  addOrder,
+  updateOrderStatus,
+} from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
 import { customAlert } from "@/components/ui/alert-dialog";
@@ -26,6 +36,7 @@ import {
   Bike,
   Package,
   User,
+  Users,
 } from "lucide-react";
 import { useCallback } from "react";
 import { getCompany } from "@/lib/firebase/companies";
@@ -69,8 +80,7 @@ function POSLayoutWithTables() {
         try {
           const companyData = await getCompany(userData.companyId);
           setCompany(companyData);
-        } catch (error) {
-        }
+        } catch (error) {}
       }
     };
     loadCompany();
@@ -80,25 +90,29 @@ function POSLayoutWithTables() {
     try {
       // Local storage'ı temizle
       localStorage.removeItem("posAuth");
-      
+
       // Storage event tetikle
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: "posAuth",
-        newValue: null,
-      }));
-      
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: null,
+        })
+      );
+
       // Firebase'den çıkış yap
       await signOutUser();
-      
+
       // Login sayfasına yönlendir
       navigate({ to: "/auth/login", replace: true });
     } catch (error) {
       // Hata olsa bile temizle ve yönlendir
       localStorage.removeItem("posAuth");
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: "posAuth",
-        newValue: null,
-      }));
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: null,
+        })
+      );
       navigate({ to: "/auth/login", replace: true });
     }
   }, [navigate]);
@@ -114,6 +128,7 @@ function POSLayoutWithTables() {
       icon: CreditCard,
       href: "/payment-methods",
     },
+    { title: "Kullanıcılar", icon: Users, href: "/users" },
     { title: "İstatistikler", icon: BarChart3, href: "/statistics" },
     { title: "Masa Geçmişi", icon: History, href: "/table-history" },
     { title: "Kurye Yönetimi", icon: Bike, href: "/couriers" },
@@ -129,15 +144,11 @@ function POSLayoutWithTables() {
       }
       if (href === "/settings") {
         return (
-          currentPath === "/settings" ||
-          currentPath.startsWith("/settings/")
+          currentPath === "/settings" || currentPath.startsWith("/settings/")
         );
       }
       if (href === "/tables") {
-        return (
-          currentPath === "/tables" ||
-          currentPath.startsWith("/tables/")
-        );
+        return currentPath === "/tables" || currentPath.startsWith("/tables/");
       }
       if (href === "/customer-tables") {
         return (
@@ -151,25 +162,24 @@ function POSLayoutWithTables() {
           currentPath.startsWith("/payment-methods/")
         );
       }
+      if (href === "/users") {
+        return currentPath === "/users" || currentPath.startsWith("/users/");
+      }
       if (href === "/support") {
         return (
-          currentPath === "/support" ||
-          currentPath.startsWith("/support/")
+          currentPath === "/support" || currentPath.startsWith("/support/")
         );
       }
       if (href === "/menus") {
-        return (
-          currentPath === "/menus" || currentPath.startsWith("/menus/")
-        );
+        return currentPath === "/menus" || currentPath.startsWith("/menus/");
       }
       if (href === "/stocks") {
-        return (
-          currentPath === "/stocks" || currentPath.startsWith("/stocks/")
-        );
+        return currentPath === "/stocks" || currentPath.startsWith("/stocks/");
       }
       if (href === "/statistics") {
         return (
-          currentPath === "/statistics" || currentPath.startsWith("/statistics/")
+          currentPath === "/statistics" ||
+          currentPath.startsWith("/statistics/")
         );
       }
       return currentPath === href || currentPath === href + "/";
@@ -181,51 +191,19 @@ function POSLayoutWithTables() {
     <div className="h-[100dvh] flex w-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Sidebar - Collapsed/Expanded */}
       <div
-        className={`fixed lg:relative top-0 left-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
-          isSidebarExpanded 
-            ? "w-64 xl:w-72" 
-            : "w-16 xl:w-24"
+        className={`fixed lg:relative top-0 left-0 h-[100dvh] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
+          isSidebarExpanded ? "w-64 xl:w-72" : "w-16 xl:w-24"
         } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        <div className="h-full flex flex-col overflow-y-auto shadow-lg">
-          {/* Header */}
+        <div className="h-full flex flex-col overflow-hidden shadow-lg">
           <div
-            className={`border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 ${
-              isSidebarExpanded ? "px-3 xl:px-4 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
+            className={`flex-1 transition-all duration-300 overflow-hidden flex flex-col min-h-0 ${
+              isSidebarExpanded
+                ? "px-3 xl:px-6 py-4 xl:py-6"
+                : "px-2 xl:px-3 py-3 xl:py-4"
             }`}
           >
-            <div className="flex flex-col items-center">
-              <p
-                className="font-semibold text-gray-900 dark:text-white text-center mb-2 whitespace-nowrap text-xs xl:text-sm"
-              >
-                Borgeto POS
-              </p>
-              {company?.logo ? (
-                <img
-                  src={company.logo}
-                  alt={company.name}
-                  className="rounded-xl object-cover shadow-sm w-10 h-10 xl:w-12 xl:h-12"
-                />
-              ) : (
-                <div
-                  className="bg-blue-600 rounded-xl flex items-center justify-center shadow-sm w-10 h-10 xl:w-12 xl:h-12"
-                >
-                  <span
-                    className="text-white font-bold text-sm xl:text-lg"
-                  >
-                    {company?.name?.charAt(0).toUpperCase() || "P"}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div
-            className={`flex-1 transition-all duration-300 ${
-              isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
-            }`}
-          >
-            <div className="mb-2">
+            <div className="mb-2 flex-shrink-0">
               <button
                 onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
                 className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
@@ -241,11 +219,13 @@ function POSLayoutWithTables() {
                   <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                 )}
                 {isSidebarExpanded && (
-                  <span className="font-medium text-xs xl:text-sm">Menüyü Kapat</span>
+                  <span className="font-medium text-xs xl:text-sm">
+                    Menüyü Kapat
+                  </span>
                 )}
               </button>
             </div>
-            <div className="space-y-1.5 xl:space-y-2">
+            <div className="flex-1 overflow-hidden min-h-0 flex flex-col justify-start">
               {menuItems.map((item, index) => {
                 const isActive = getIsActive(item.href);
                 return (
@@ -255,7 +235,7 @@ function POSLayoutWithTables() {
                     onClick={() => {
                       setIsSidebarExpanded(false);
                     }}
-                    className={`flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
+                    className={`flex items-center transition-all duration-200 flex-1 min-h-0 ${
                       isSidebarExpanded
                         ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
                         : "justify-center px-2 rounded-lg"
@@ -289,8 +269,10 @@ function POSLayoutWithTables() {
           </div>
 
           <div
-            className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 ${
-              isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
+            className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 flex-shrink-0 ${
+              isSidebarExpanded
+                ? "px-3 xl:px-6 py-4 xl:py-6"
+                : "px-2 xl:px-3 py-3 xl:py-4"
             }`}
           >
             {isSidebarExpanded ? (
@@ -340,7 +322,9 @@ function TablesView() {
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedArea, setSelectedArea] = useState<string>(area || "");
-  const [showActiveOnly, setShowActiveOnly] = useState<boolean>(activeOnly || false);
+  const [showActiveOnly, setShowActiveOnly] = useState<boolean>(
+    activeOnly || false
+  );
 
   // URL search params değiştiğinde state'i güncelle
   useEffect(() => {
@@ -359,7 +343,9 @@ function TablesView() {
   const [sourceTable, setSourceTable] = useState<Table | null>(null);
   const [sourceOrder, setSourceOrder] = useState<Order | null>(null);
   const [moveModalArea, setMoveModalArea] = useState<string>("");
-  const [availableTablesForMove, setAvailableTablesForMove] = useState<Table[]>([]);
+  const [availableTablesForMove, setAvailableTablesForMove] = useState<Table[]>(
+    []
+  );
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMovingTable, setIsMovingTable] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -368,7 +354,7 @@ function TablesView() {
     const loadData = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) {
         setLoading(false);
         return;
@@ -376,12 +362,18 @@ function TablesView() {
 
       try {
         // Standart masaları oluştur (yoksa)
-        await createDefaultTables(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
+        await createDefaultTables(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ).catch(() => {
           // Hata olsa bile devam et
         });
 
         const [tablesData, ordersData] = await Promise.all([
-          getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
+          getTablesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => {
             return [];
           }),
           getOrdersByCompany(effectiveCompanyId, {
@@ -391,9 +383,11 @@ function TablesView() {
           }),
         ]);
 
-        const activeOrdersData = ordersData.filter((order) => order.status === "active");
+        const activeOrdersData = ordersData.filter(
+          (order) => order.status === "active"
+        );
         setActiveOrders(activeOrdersData);
-        
+
         const tablesToUpdate: Promise<void>[] = [];
         tablesData.forEach((table) => {
           if (table.status === "occupied") {
@@ -402,25 +396,29 @@ function TablesView() {
             );
             if (!hasActiveOrder) {
               tablesToUpdate.push(
-                updateTableStatus(table.id!, "available", undefined).catch(() => {
-                })
+                updateTableStatus(table.id!, "available", undefined).catch(
+                  () => {}
+                )
               );
             }
           }
         });
-        
+
         if (tablesToUpdate.length > 0) {
           await Promise.all(tablesToUpdate);
           const effectiveCompanyId = companyId || userData?.companyId;
           const effectiveBranchId = branchId || userData?.assignedBranchId;
-          const updatedTables = await getTablesByCompany(effectiveCompanyId!, effectiveBranchId || undefined);
+          const updatedTables = await getTablesByCompany(
+            effectiveCompanyId!,
+            effectiveBranchId || undefined
+          );
           const uniqueTables = removeDuplicateTables(updatedTables);
           setTables(uniqueTables);
         } else {
           const uniqueTables = removeDuplicateTables(tablesData);
           setTables(uniqueTables);
         }
-        
+
         if (tablesData.length > 0 && !selectedArea) {
           const areas = Array.from(
             new Set(
@@ -446,12 +444,15 @@ function TablesView() {
     const handleVisibilityChange = () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!document.hidden && effectiveCompanyId) {
         const reloadData = async () => {
           try {
             const [tablesData, ordersData] = await Promise.all([
-              getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
+              getTablesByCompany(
+                effectiveCompanyId,
+                effectiveBranchId || undefined
+              ).catch(() => {
                 return [];
               }),
               getOrdersByCompany(effectiveCompanyId, {
@@ -461,33 +462,39 @@ function TablesView() {
               }),
             ]);
 
-            const activeOrdersData = ordersData.filter((order) => order.status === "active");
+            const activeOrdersData = ordersData.filter(
+              (order) => order.status === "active"
+            );
             setActiveOrders(activeOrdersData);
-            
+
             const tablesToUpdate: Promise<void>[] = [];
             tablesData.forEach((table) => {
               if (table.status === "occupied") {
                 const hasActiveOrder = activeOrdersData.some(
-                  (order) => order.tableId === table.id && order.status === "active"
+                  (order) =>
+                    order.tableId === table.id && order.status === "active"
                 );
                 if (!hasActiveOrder) {
                   tablesToUpdate.push(
-                    updateTableStatus(table.id!, "available", undefined).catch(() => {
-                    })
+                    updateTableStatus(table.id!, "available", undefined).catch(
+                      () => {}
+                    )
                   );
                 }
               }
             });
-            
+
             if (tablesToUpdate.length > 0) {
               await Promise.all(tablesToUpdate);
-              const updatedTables = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
+              const updatedTables = await getTablesByCompany(
+                effectiveCompanyId,
+                effectiveBranchId || undefined
+              );
               setTables(updatedTables);
             } else {
               setTables(tablesData);
             }
-          } catch (error) {
-          }
+          } catch (error) {}
         };
         reloadData();
       }
@@ -501,33 +508,35 @@ function TablesView() {
 
   const removeDuplicateTables = (tables: Table[]): Table[] => {
     const tableMap = new Map<string, Table>();
-    
+
     tables.forEach((table) => {
       const key = `${table.area}-${table.tableNumber}`;
       const existing = tableMap.get(key);
-      
+
       if (!existing) {
         tableMap.set(key, table);
       } else {
         const existingDate = existing.updatedAt || existing.createdAt;
         const currentDate = table.updatedAt || table.createdAt;
-        
+
         if (currentDate > existingDate) {
           tableMap.set(key, table);
         }
       }
     });
-    
+
     return Array.from(tableMap.values());
   };
 
   const getTableOrder = (tableId: string) => {
-    return activeOrders.find((order) => order.tableId === tableId && order.status === "active");
+    return activeOrders.find(
+      (order) => order.tableId === tableId && order.status === "active"
+    );
   };
 
   const handleLongPressStart = (table: Table, order: Order) => {
     if (!order || order.items.length === 0) return;
-    
+
     longPressTimer.current = setTimeout(() => {
       setSourceTable(table);
       setSourceOrder(order);
@@ -555,7 +564,7 @@ function TablesView() {
 
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       const allOrders = await getOrdersByCompany(effectiveCompanyId!, {
         branchId: effectiveBranchId || undefined,
       });
@@ -566,7 +575,10 @@ function TablesView() {
       if (targetOrder) {
         const existingItems = targetOrder.items || [];
         const mergedItems = [...existingItems, ...sourceOrder.items];
-        const subtotal = mergedItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const subtotal = mergedItems.reduce(
+          (sum, item) => sum + item.subtotal,
+          0
+        );
         const total = subtotal - (targetOrder.discount || 0);
 
         await updateOrder(targetOrder.id!, {
@@ -582,7 +594,9 @@ function TablesView() {
           tableNumber: targetTable.tableNumber,
           items: sourceOrder.items,
           discount: sourceOrder.discount,
-          sentItems: sourceOrder.sentItems || sourceOrder.items.map((item) => item.menuId),
+          sentItems:
+            sourceOrder.sentItems ||
+            sourceOrder.items.map((item) => item.menuId),
           createdBy: userData!.id!,
           status: "active",
           paymentStatus: "unpaid",
@@ -615,19 +629,23 @@ function TablesView() {
   useEffect(() => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     if (showMoveModal && effectiveCompanyId) {
       const loadTables = async () => {
         try {
-          const tablesData = await getTablesByCompany(effectiveCompanyId, effectiveBranchId || undefined);
-          const filteredTables = tablesData.filter((t) => t.id !== sourceTable?.id);
+          const tablesData = await getTablesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          );
+          const filteredTables = tablesData.filter(
+            (t) => t.id !== sourceTable?.id
+          );
           setAvailableTablesForMove(filteredTables);
           if (filteredTables.length > 0 && !moveModalArea) {
             const firstArea = filteredTables[0].area;
             setMoveModalArea(firstArea);
           }
-        } catch (error) {
-        }
+        } catch (error) {}
       };
       loadTables();
     } else {
@@ -665,8 +683,10 @@ function TablesView() {
     }
   };
 
-
-  const getShadowEffect = (status: Table["status"], order: Order | undefined) => {
+  const getShadowEffect = (
+    status: Table["status"],
+    order: Order | undefined
+  ) => {
     if (status === "occupied" && order && order.total > 0) {
       return "shadow-lg"; // Daha belirgin gölge
     }
@@ -686,7 +706,7 @@ function TablesView() {
     if (!date) return "";
     const diff = currentTime.getTime() - new Date(date).getTime();
     const minutes = Math.floor(diff / 60000);
-    
+
     if (minutes < 1) return "Az önce";
     if (minutes < 60) return `${minutes} dakika önce`;
     const hours = Math.floor(minutes / 60);
@@ -698,24 +718,22 @@ function TablesView() {
   // İlk eklenen ürünü bul (en eski addedAt değerine sahip)
   const getFirstAddedItem = (order: Order | undefined) => {
     if (!order || !order.items || order.items.length === 0) return null;
-    
+
     // Tüm ürünler arasından en eski addedAt değerine sahip olanı bul
     return order.items.reduce((oldest, current) => {
       if (!oldest?.addedAt) return current;
       if (!current?.addedAt) return oldest;
-      
+
       const oldestTime = new Date(oldest.addedAt).getTime();
       const currentTime = new Date(current.addedAt).getTime();
-      
+
       return currentTime < oldestTime ? current : oldest;
     });
   };
 
   const areas = Array.from(
     new Set(
-      tables
-        .map((t) => t.area)
-        .filter((area) => area && area.trim() !== "")
+      tables.map((t) => t.area).filter((area) => area && area.trim() !== "")
     )
   ).sort();
 
@@ -726,15 +744,23 @@ function TablesView() {
   if (showActiveOnly) {
     filteredTables = filteredTables.filter((table) => {
       return activeOrders.some(
-        (order) => order.tableId === table.id && order.status === "active" && order.items && order.items.length > 0
+        (order) =>
+          order.tableId === table.id &&
+          order.status === "active" &&
+          order.items &&
+          order.items.length > 0
       );
     });
   }
-  
+
   // Aktif masa sayısını tüm masalardan hesapla (sadece filtrelenmiş masalardan değil)
   const activeTableCount = tables.filter((table) => {
     return activeOrders.some(
-      (order) => order.tableId === table.id && order.status === "active" && order.items && order.items.length > 0
+      (order) =>
+        order.tableId === table.id &&
+        order.status === "active" &&
+        order.items &&
+        order.items.length > 0
     );
   }).length;
 
@@ -753,8 +779,8 @@ function TablesView() {
 
     // İlk yüklemede hesapla
     const timeoutId = setTimeout(updateSize, 100);
-    
-    window.addEventListener('resize', updateSize);
+
+    window.addEventListener("resize", updateSize);
     // ResizeObserver kullanarak daha hassas takip
     const resizeObserver = new ResizeObserver(updateSize);
     if (gridContainerRef.current) {
@@ -763,25 +789,30 @@ function TablesView() {
 
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('resize', updateSize);
+      window.removeEventListener("resize", updateSize);
       resizeObserver.disconnect();
     };
   }, [filteredTables.length, showActiveOnly, selectedArea]);
 
   if (loading) {
-  return (
+    return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
         </div>
-    </div>
-  );
+      </div>
+    );
   }
 
   // Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
-  const calculateOptimalGrid = (tableCount: number, width: number, height: number) => {
-    if (tableCount === 0 || width === 0 || height === 0) return { cols: 2, gap: 12 };
+  const calculateOptimalGrid = (
+    tableCount: number,
+    width: number,
+    height: number
+  ) => {
+    if (tableCount === 0 || width === 0 || height === 0)
+      return { cols: 2, gap: 12 };
 
     // Padding için alan hesapla
     const paddingX = 32; // px-4 lg:px-6 için (16px * 2)
@@ -791,31 +822,36 @@ function TablesView() {
 
     // Gap değeri (12px)
     const gap = 12;
-    
+
     // Farklı kolon sayılarını dene ve en iyisini bul
     let bestCols = 2;
     let bestFit = Infinity;
 
     for (let cols = 2; cols <= 12; cols++) {
       const rows = Math.ceil(tableCount / cols);
-      
+
       // Her kartın boyutunu hesapla
       const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
       const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
-      
+
       // Minimum kart boyutu (çok küçük olmasın)
       const minCardSize = 100;
-      
+
       // Kare olması için en küçük boyutu kullan, ama minimum boyuttan küçük olmasın
       const cardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
-      
+
       // Tüm kartların sığması için gerekli alan
       const requiredWidth = cols * cardSize + (cols - 1) * gap;
       const requiredHeight = rows * cardSize + (rows - 1) * gap;
-      
+
       // Eğer sığıyorsa ve daha iyi bir fit ise
-      if (requiredWidth <= availableWidth && requiredHeight <= availableHeight && cardSize >= minCardSize) {
-        const unusedSpace = (availableWidth - requiredWidth) + (availableHeight - requiredHeight);
+      if (
+        requiredWidth <= availableWidth &&
+        requiredHeight <= availableHeight &&
+        cardSize >= minCardSize
+      ) {
+        const unusedSpace =
+          availableWidth - requiredWidth + (availableHeight - requiredHeight);
         if (unusedSpace < bestFit) {
           bestFit = unusedSpace;
           bestCols = cols;
@@ -856,7 +892,7 @@ function TablesView() {
               {filteredTables.length} masa • {activeTableCount} aktif masa
             </p>
           </div>
-          
+
           <div className="flex gap-1.5 xl:gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => {
@@ -876,34 +912,35 @@ function TablesView() {
             >
               Tüm Masalar ({tables.length})
             </button>
-            
-            {areas.length > 0 && areas
-              .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
-              .map((area) => {
-                const areaTables = tables.filter((t) => t.area === area);
-                return (
-                  <button
-                    key={area}
-                    onClick={() => {
-                      setSelectedArea(area);
-                      setShowActiveOnly(false);
-                      navigate({
-                        to: "/",
-                        search: { area, activeOnly: false },
-                        replace: true,
-                      });
-                    }}
-                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                      selectedArea === area && !showActiveOnly
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                    }`}
-                  >
-                    {area} ({areaTables.length})
-                  </button>
-                );
-              })}
-            
+
+            {areas.length > 0 &&
+              areas
+                .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
+                .map((area) => {
+                  const areaTables = tables.filter((t) => t.area === area);
+                  return (
+                    <button
+                      key={area}
+                      onClick={() => {
+                        setSelectedArea(area);
+                        setShowActiveOnly(false);
+                        navigate({
+                          to: "/",
+                          search: { area, activeOnly: false },
+                          replace: true,
+                        });
+                      }}
+                      className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
+                        selectedArea === area && !showActiveOnly
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      {area} ({areaTables.length})
+                    </button>
+                  );
+                })}
+
             <button
               onClick={() => {
                 setShowActiveOnly(true);
@@ -922,54 +959,58 @@ function TablesView() {
             >
               Aktif Masalar ({activeTableCount})
             </button>
-            
-            {areas.includes("Hızlı Satış") && (() => {
-              const hizliSatisTables = tables.filter((t) => t.area === "Hızlı Satış");
-              return (
-                <button
-                  onClick={() => {
-                    setSelectedArea("Hızlı Satış");
-                    setShowActiveOnly(false);
-                    navigate({
-                      to: "/",
-                      search: { area: "Hızlı Satış", activeOnly: false },
-                      replace: true,
-                    });
-                  }}
-                  className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                    selectedArea === "Hızlı Satış" && !showActiveOnly
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  Hızlı Satış ({hizliSatisTables.length})
-                </button>
-              );
-            })()}
-            
-            {areas.includes("Paket") && (() => {
-              const paketTables = tables.filter((t) => t.area === "Paket");
-              return (
-                <button
-                  onClick={() => {
-                    setSelectedArea("Paket");
-                    setShowActiveOnly(false);
-                    navigate({
-                      to: "/",
-                      search: { area: "Paket", activeOnly: false },
-                      replace: true,
-                    });
-                  }}
-                  className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                    selectedArea === "Paket" && !showActiveOnly
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  Paket ({paketTables.length})
-                </button>
-              );
-            })()}
+
+            {areas.includes("Hızlı Satış") &&
+              (() => {
+                const hizliSatisTables = tables.filter(
+                  (t) => t.area === "Hızlı Satış"
+                );
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedArea("Hızlı Satış");
+                      setShowActiveOnly(false);
+                      navigate({
+                        to: "/",
+                        search: { area: "Hızlı Satış", activeOnly: false },
+                        replace: true,
+                      });
+                    }}
+                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
+                      selectedArea === "Hızlı Satış" && !showActiveOnly
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    Hızlı Satış ({hizliSatisTables.length})
+                  </button>
+                );
+              })()}
+
+            {areas.includes("Paket") &&
+              (() => {
+                const paketTables = tables.filter((t) => t.area === "Paket");
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedArea("Paket");
+                      setShowActiveOnly(false);
+                      navigate({
+                        to: "/",
+                        search: { area: "Paket", activeOnly: false },
+                        replace: true,
+                      });
+                    }}
+                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
+                      selectedArea === "Paket" && !showActiveOnly
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    Paket ({paketTables.length})
+                  </button>
+                );
+              })()}
           </div>
         </div>
       </div>
@@ -981,26 +1022,26 @@ function TablesView() {
             {showActiveOnly
               ? "Aktif masa yok"
               : selectedArea
-              ? `${selectedArea} alanında masa yok`
-              : "Henüz masa eklenmemiş"}
+                ? `${selectedArea} alanında masa yok`
+                : "Henüz masa eklenmemiş"}
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             {showActiveOnly
               ? "Şu anda ürün girişi yapılmış aktif masa bulunmuyor"
               : selectedArea
-              ? "Başka bir alan seçin veya ayarlar sayfasından masa ekleyin"
-              : "Ayarlar sayfasından masa ekleyebilirsiniz"}
+                ? "Başka bir alan seçin veya ayarlar sayfasından masa ekleyin"
+                : "Ayarlar sayfasından masa ekleyebilirsiniz"}
           </p>
         </div>
       ) : (
-        <div 
+        <div
           ref={gridContainerRef}
           className="flex-1 px-4 lg:px-6 pb-4 min-h-0 overflow-y-auto"
           style={{
-            display: 'grid',
+            display: "grid",
             gridTemplateColumns: `repeat(${optimalColumns}, minmax(0, 1fr))`,
             gap: `${gap}px`,
-            alignContent: 'start',
+            alignContent: "start",
           }}
         >
           {filteredTables.map((table) => {
@@ -1009,22 +1050,33 @@ function TablesView() {
             return (
               <div
                 key={table.id}
-                onMouseDown={() => order && order.items.length > 0 && handleLongPressStart(table, order)}
+                onMouseDown={() =>
+                  order &&
+                  order.items.length > 0 &&
+                  handleLongPressStart(table, order)
+                }
                 onMouseUp={handleLongPressEnd}
                 onMouseLeave={handleLongPressEnd}
-                onTouchStart={() => order && order.items.length > 0 && handleLongPressStart(table, order)}
+                onTouchStart={() =>
+                  order &&
+                  order.items.length > 0 &&
+                  handleLongPressStart(table, order)
+                }
                 onTouchEnd={handleLongPressEnd}
                 className="relative w-full"
-                style={{ 
-                  aspectRatio: '1',
-                  minHeight: '100px',
-                  maxHeight: '100%'
+                style={{
+                  aspectRatio: "1",
+                  minHeight: "100px",
+                  maxHeight: "100%",
                 }}
               >
                 <Link
                   to="/table/$tableId"
                   params={{ tableId: table.id! }}
-                  search={(prev) => ({ area: prev?.area || undefined, activeOnly: prev?.activeOnly || false })}
+                  search={(prev) => ({
+                    area: prev?.area || undefined,
+                    activeOnly: prev?.activeOnly || false,
+                  })}
                   className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} ${getShadowEffect(table.status, order)} rounded-lg p-2 xl:p-3 border border-white hover:shadow-xl transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center ${
                     table.status === "occupied" && order && order.total > 0
                       ? "animate-pulse-subtle"
@@ -1032,47 +1084,67 @@ function TablesView() {
                   }`}
                 >
                   <div className="text-center space-y-1 xl:space-y-2">
-                    <div className={`text-lg xl:text-xl sm:text-2xl font-bold ${
-                      table.status === "occupied" && order && order.total > 0
-                        ? "text-white"
-                        : "text-gray-900 dark:text-white"
-                    }`}>
-                      {table.tableNumber}
-                    </div>
-                    
-                    <div className="flex flex-col items-center gap-0.5 xl:gap-1">
-                      <span className={`text-[10px] xl:text-xs font-medium ${
+                    <div
+                      className={`text-lg xl:text-xl sm:text-2xl font-bold ${
                         table.status === "occupied" && order && order.total > 0
                           ? "text-white"
-                          : "text-gray-700 dark:text-gray-300"
-                      }`}>Toplam</span>
-                      <span className={`text-xs xl:text-sm sm:text-base font-bold ${
-                        order && order.total > 0
-                          ? table.status === "occupied"
-                            ? "text-white text-base xl:text-lg sm:text-xl"
-                            : "text-blue-600 dark:text-blue-400"
-                          : "text-gray-400 dark:text-gray-500"
-                      }`}>
+                          : "text-gray-900 dark:text-white"
+                      }`}
+                    >
+                      {table.tableNumber}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-0.5 xl:gap-1">
+                      <span
+                        className={`text-[10px] xl:text-xs font-medium ${
+                          table.status === "occupied" &&
+                          order &&
+                          order.total > 0
+                            ? "text-white"
+                            : "text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        Toplam
+                      </span>
+                      <span
+                        className={`text-xs xl:text-sm sm:text-base font-bold ${
+                          order && order.total > 0
+                            ? table.status === "occupied"
+                              ? "text-white text-base xl:text-lg sm:text-xl"
+                              : "text-blue-600 dark:text-blue-400"
+                            : "text-gray-400 dark:text-gray-500"
+                        }`}
+                      >
                         {order && order.total > 0
                           ? `₺${order.total.toFixed(2)}`
                           : "₺0.00"}
                       </span>
                     </div>
-                    
+
                     {(() => {
                       const firstItem = getFirstAddedItem(order);
                       return firstItem?.addedAt ? (
-                        <div className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
-                          table.status === "occupied" && order && order.total > 0
-                            ? "text-white font-medium"
-                            : "text-gray-500 dark:text-gray-400"
-                        }`}>
-                          <Clock className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
-                            table.status === "occupied" && order && order.total > 0
-                              ? "text-white"
-                              : ""
-                          }`} />
-                          <span className="truncate">{getTimeAgo(firstItem.addedAt)}</span>
+                        <div
+                          className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
+                            table.status === "occupied" &&
+                            order &&
+                            order.total > 0
+                              ? "text-white font-medium"
+                              : "text-gray-500 dark:text-gray-400"
+                          }`}
+                        >
+                          <Clock
+                            className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
+                              table.status === "occupied" &&
+                              order &&
+                              order.total > 0
+                                ? "text-white"
+                                : ""
+                            }`}
+                          />
+                          <span className="truncate">
+                            {getTimeAgo(firstItem.addedAt)}
+                          </span>
                         </div>
                       ) : null;
                     })()}
@@ -1084,104 +1156,123 @@ function TablesView() {
         </div>
       )}
 
-      {showMoveModal && sourceTable && sourceOrder && (() => {
-        const areas = Array.from(new Set(availableTablesForMove.map((t) => t.area).filter(Boolean))).sort();
-        const tablesByArea = availableTablesForMove.filter((t) => t.area === moveModalArea);
-        
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                {isMovingTable && <Loader2 className="h-5 w-5 animate-spin" />}
-                Masa Taşı
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                <strong>{sourceTable.tableNumber}</strong> masasındaki tüm ürünler ({sourceOrder.items.length} ürün) taşınacak. Hangi masaya taşımak istersiniz?
-              </p>
-              
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Alan Seçin
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {areas.map((area) => (
-                      <Button
-                        key={area}
-                        type="button"
-                        variant={moveModalArea === area ? "default" : "outline"}
-                        onClick={() => setMoveModalArea(area)}
-                        className={`${
-                          moveModalArea === area
-                            ? "bg-blue-600 text-white hover:bg-blue-700"
-                            : "bg-white hover:bg-gray-50"
-                        }`}
-                      >
-                        {area}
-                      </Button>
-                    ))}
+      {showMoveModal &&
+        sourceTable &&
+        sourceOrder &&
+        (() => {
+          const areas = Array.from(
+            new Set(availableTablesForMove.map((t) => t.area).filter(Boolean))
+          ).sort();
+          const tablesByArea = availableTablesForMove.filter(
+            (t) => t.area === moveModalArea
+          );
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  {isMovingTable && (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  )}
+                  Masa Taşı
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <strong>{sourceTable.tableNumber}</strong> masasındaki tüm
+                  ürünler ({sourceOrder.items.length} ürün) taşınacak. Hangi
+                  masaya taşımak istersiniz?
+                </p>
+
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Alan Seçin
+                    </label>
+                    <div className="flex gap-2 flex-wrap">
+                      {areas.map((area) => (
+                        <Button
+                          key={area}
+                          type="button"
+                          variant={
+                            moveModalArea === area ? "default" : "outline"
+                          }
+                          onClick={() => setMoveModalArea(area)}
+                          className={`${
+                            moveModalArea === area
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
+                              : "bg-white hover:bg-gray-50"
+                          }`}
+                        >
+                          {area}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Masa Seçin
+                    </label>
+                    {tablesByArea.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+                        Bu alanda başka masa bulunamadı
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {tablesByArea.map((table) => (
+                          <button
+                            key={table.id}
+                            onClick={() => handleMoveAllItems(table.id!)}
+                            disabled={isMovingTable}
+                            className="text-left bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <div className="flex flex-col">
+                              <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                                {table.tableNumber}
+                              </div>
+                              <div
+                                className={`text-xs px-2 py-1 rounded inline-block w-fit ${
+                                  table.status === "available"
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                                    : table.status === "occupied"
+                                      ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
+                                      : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
+                                }`}
+                              >
+                                {table.status === "available"
+                                  ? "Müsait"
+                                  : table.status === "occupied"
+                                    ? "Dolu"
+                                    : table.status === "reserved"
+                                      ? "Rezerve"
+                                      : "Temizlik"}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Masa Seçin
-                  </label>
-                  {tablesByArea.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
-                      Bu alanda başka masa bulunamadı
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {tablesByArea.map((table) => (
-                        <button
-                          key={table.id}
-                          onClick={() => handleMoveAllItems(table.id!)}
-                          disabled={isMovingTable}
-                          className="text-left bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <div className="flex flex-col">
-                            <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                              {table.tableNumber}
-                            </div>
-                            <div className={`text-xs px-2 py-1 rounded inline-block w-fit ${
-                              table.status === "available"
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                                : table.status === "occupied"
-                                ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
-                                : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
-                            }`}>
-                              {table.status === "available" ? "Müsait" :
-                               table.status === "occupied" ? "Dolu" :
-                               table.status === "reserved" ? "Rezerve" : "Temizlik"}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowMoveModal(false);
+                      setSourceTable(null);
+                      setSourceOrder(null);
+                      setMoveModalArea("");
+                    }}
+                    className="flex-1"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    İptal
+                  </Button>
                 </div>
               </div>
-
-              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowMoveModal(false);
-                    setSourceTable(null);
-                    setSourceOrder(null);
-                    setMoveModalArea("");
-                  }}
-                  className="flex-1"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  İptal
-                </Button>
-              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }

@@ -105,7 +105,7 @@ export interface User {
   email: string;
   displayName: string;
   phone?: string;
-  role: "super_admin" | "admin" | "staff";
+  role: "super_admin" | "admin" | "manager" | "staff";
   companyId?: string;
   username?: string; // Username for login (for staff users)
   passwordHash?: string; // Hashed password (for staff users)

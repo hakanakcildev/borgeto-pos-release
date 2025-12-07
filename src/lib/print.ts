@@ -47,23 +47,23 @@ export function formatPrintContent(
     const price = item.menuPrice || 0;
     const subtotal = item.subtotal || 0;
 
-    // Adet x Ürün Adı - Fiyat
+    // Adet x Ürün Adı - Fiyat (kompakt format)
     const itemLine = `${quantity}x ${itemName}`;
-    const priceLine = `   ${price.toFixed(2)} TL x ${quantity} = ${subtotal.toFixed(2)} TL`;
+    const priceLine = `${price.toFixed(2)} TL x${quantity} = ${subtotal.toFixed(2)} TL`;
     lines.push(itemLine);
     lines.push(priceLine);
 
-    // Ekstra malzemeler varsa göster
+    // Ekstra malzemeler varsa göster (kompakt format)
     if (item.selectedExtras && item.selectedExtras.length > 0) {
       for (const extra of item.selectedExtras) {
-        const extraLine = `   + ${extra.name} (+${extra.price.toFixed(2)} TL)`;
+        const extraLine = `+ ${extra.name} (+${extra.price.toFixed(2)} TL)`;
         lines.push(extraLine);
       }
     }
 
-    // Not varsa göster
+    // Not varsa göster (kompakt format)
     if (item.notes && item.notes.trim()) {
-      const noteLine = `   Not: ${item.notes}`;
+      const noteLine = `Not: ${item.notes}`;
       lines.push(noteLine);
     }
 
@@ -106,20 +106,74 @@ export function formatPrintContent(
     lines.push(""); // Boş satır
   }
 
+  // 80mm kağıt için maksimum genişlik: 48 karakter (tam genişlik kullanımı)
+  // Kağıt genişliği bilgisi varsa kullan, yoksa 80mm için 48 karakter
+  const paperWidth = additionalInfo?.paperWidth || 48;
+  const maxPaperWidth = Math.min(paperWidth, 48); // Maksimum 48 karakter (80mm)
+
   // En uzun satırın genişliğini bul (boş satırlar hariç)
   const maxWidth = Math.max(
     ...lines.filter((line) => line.trim().length > 0).map((line) => line.length)
   );
 
-  // Çizgiyi en uzun satırın genişliğine göre oluştur (minimum 40 karakter)
-  const separatorWidth = Math.max(maxWidth, 40);
+  // Çizgiyi kağıt genişliğine göre oluştur (minimum maxPaperWidth karakter)
+  const separatorWidth = Math.max(maxWidth, maxPaperWidth);
   const separatorLine = "=".repeat(separatorWidth);
+
+  // Satırları 48 karakter genişliğinde formatla (uzun satırları wrap et)
+  const formatLine = (line: string, width: number): string[] => {
+    if (line.trim().length === 0) return [line];
+    if (line.length <= width) return [line];
+
+    // Uzun satırları wrap et
+    const words = line.split(" ");
+    const result: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (testLine.length <= width) {
+        currentLine = testLine;
+      } else {
+        if (currentLine) {
+          result.push(currentLine);
+          currentLine = word.length > width ? word.substring(0, width) : word;
+          if (word.length > width) {
+            // Çok uzun kelimeyi parçala
+            let remaining = word.substring(width);
+            while (remaining.length > width) {
+              result.push(remaining.substring(0, width));
+              remaining = remaining.substring(width);
+            }
+            if (remaining) currentLine = remaining;
+          }
+        } else {
+          // Tek kelime çok uzunsa kes
+          result.push(word.substring(0, width));
+          let remaining = word.substring(width);
+          while (remaining.length > width) {
+            result.push(remaining.substring(0, width));
+            remaining = remaining.substring(width);
+          }
+          currentLine = remaining;
+        }
+      }
+    }
+    if (currentLine) result.push(currentLine);
+    return result;
+  };
 
   // İçeriği oluştur ve çizgileri ekle
   let content = "";
 
-  // Başlık
-  content += headerLine + "\n";
+  // Başlık (ortalanmış)
+  const centeredHeader =
+    headerLine.length <= separatorWidth
+      ? headerLine
+          .padStart(Math.floor((separatorWidth + headerLine.length) / 2))
+          .padEnd(separatorWidth)
+      : headerLine.substring(0, separatorWidth);
+  content += centeredHeader + "\n";
   content += separatorLine + "\n";
   content += "\n";
 
@@ -134,7 +188,11 @@ export function formatPrintContent(
       content += "\n";
     }
 
-    content += line + "\n";
+    // Satırı formatla (maksimum 48 karakter, uzun satırları wrap et)
+    const formattedLines = formatLine(line, separatorWidth);
+    for (const formattedLine of formattedLines) {
+      content += formattedLine + "\n";
+    }
     lastWasEmpty = line.trim().length === 0;
   }
 
@@ -165,13 +223,16 @@ export function getExamplePrintOutput(
     "Toplam Tutar: 1085.00 TL",
   ];
 
+  // 80mm kağıt için maksimum genişlik: 48 karakter (tam genişlik kullanımı)
+  const maxPaperWidth = 48; // 80mm kağıt için standart genişlik
+
   // En uzun satırın genişliğini bul (boş satırlar hariç)
   const maxWidth = Math.max(
     ...lines.filter((line) => line.trim().length > 0).map((line) => line.length)
   );
 
-  // Çizgiyi en uzun satırın genişliğine göre oluştur (minimum 40 karakter)
-  const separatorWidth = Math.max(maxWidth, 40);
+  // Çizgiyi kağıt genişliğine göre oluştur (minimum 48 karakter - 80mm)
+  const separatorWidth = Math.max(maxWidth, maxPaperWidth);
   const separatorLine = "=".repeat(separatorWidth);
 
   // İçeriği oluştur

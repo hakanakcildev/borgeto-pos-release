@@ -25,7 +25,7 @@ export const getLocalIP = async (): Promise<string | null> => {
 
       pc.createDataChannel("");
 
-      pc.onicecandidate = (event) => {
+      pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
         if (event.candidate) {
           const candidate = event.candidate.candidate;
           const match = candidate.match(
@@ -47,7 +47,7 @@ export const getLocalIP = async (): Promise<string | null> => {
       };
 
       pc.createOffer()
-        .then((offer) => pc.setLocalDescription(offer))
+        .then((offer: RTCSessionDescriptionInit) => pc.setLocalDescription(offer))
         .catch(() => {
           pc.close();
           resolve(null);

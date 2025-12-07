@@ -593,8 +593,12 @@ if (-not $printer) {
 }
 
 # Out-Printer ile düz metin yazdır (Windows'ın kendi yazdırma komutu)
+# Font boyutunu küçültmek için Courier New 8pt kullan
 try {
-  Get-Content -Path $file -Encoding UTF8 | Out-Printer -Name $printerName;
+  # Font ayarı için özel formatlama
+  $content = Get-Content -Path $file -Encoding UTF8 -Raw;
+  # Out-Printer ile yazdır (font ayarı yazıcı sürücüsüne bağlı)
+  $content | Out-Printer -Name $printerName;
   Write-Output "SUCCESS";
 } catch {
   Write-Output "ERROR: Print failed - $($_.Exception.Message)";

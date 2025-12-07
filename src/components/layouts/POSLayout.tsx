@@ -68,31 +68,8 @@ function MobileMenu({
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800">
-          <div className="flex items-center space-x-3 min-w-0 flex-1">
-            {company?.logo ? (
-              <img
-                src={company.logo}
-                alt={company.name}
-                className="w-10 h-10 rounded-xl object-cover shadow-sm flex-shrink-0"
-              />
-            ) : (
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span className="text-white font-bold text-sm">
-                  {company?.name?.charAt(0).toUpperCase() || "P"}
-                </span>
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">
-                {company?.name || "Firma"}
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {userData?.displayName}
-              </p>
-            </div>
-          </div>
+        {/* Header - Sadece Kapat Butonu */}
+        <div className="flex items-center justify-end p-4 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer flex-shrink-0"
@@ -408,57 +385,6 @@ export function POSLayout({ children }: POSLayoutProps) {
           } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         >
           <div className="h-full flex flex-col overflow-hidden shadow-lg">
-            {/* Header */}
-            <div
-              className={`border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 flex-shrink-0 ${
-                isSidebarExpanded
-                  ? "px-3 xl:px-4 py-4 xl:py-6"
-                  : "px-2 xl:px-3 py-3 xl:py-4"
-              }`}
-            >
-              {/* Borgeto POS ve Logo */}
-              <div className="flex flex-col items-center">
-                <p
-                  className={`font-semibold text-gray-900 dark:text-white text-center mb-2 whitespace-nowrap ${
-                    isSidebarExpanded
-                      ? "text-xs xl:text-sm"
-                      : "text-[10px] xl:text-xs"
-                  }`}
-                >
-                  Borgeto POS
-                </p>
-                {company?.logo ? (
-                  <img
-                    src={company.logo}
-                    alt={company.name}
-                    className={`rounded-xl object-cover shadow-sm ${
-                      isSidebarExpanded
-                        ? "w-10 h-10 xl:w-12 xl:h-12"
-                        : "w-8 h-8 xl:w-10 xl:h-10"
-                    }`}
-                  />
-                ) : (
-                  <div
-                    className={`bg-blue-600 rounded-xl flex items-center justify-center shadow-sm ${
-                      isSidebarExpanded
-                        ? "w-10 h-10 xl:w-12 xl:h-12"
-                        : "w-8 h-8 xl:w-10 xl:h-10"
-                    }`}
-                  >
-                    <span
-                      className={`text-white font-bold ${
-                        isSidebarExpanded
-                          ? "text-sm xl:text-lg"
-                          : "text-xs xl:text-sm"
-                      }`}
-                    >
-                      {company?.name?.charAt(0).toUpperCase() || "P"}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div
               className={`flex-1 transition-all duration-300 overflow-hidden flex flex-col min-h-0 ${
                 isSidebarExpanded
@@ -489,7 +415,7 @@ export function POSLayout({ children }: POSLayoutProps) {
                   )}
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 xl:space-y-2">
+              <div className="flex-1 overflow-hidden min-h-0 flex flex-col justify-start">
                 {menuItems.map((item, index) => {
                   const isActive = getIsActive(item.href);
                   return (
@@ -499,7 +425,7 @@ export function POSLayout({ children }: POSLayoutProps) {
                       onClick={() => {
                         setIsSidebarExpanded(false);
                       }}
-                      className={`flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
+                      className={`flex items-center transition-all duration-200 flex-1 min-h-0 ${
                         isSidebarExpanded
                           ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
                           : "justify-center px-2 rounded-lg"

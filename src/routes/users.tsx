@@ -87,20 +87,12 @@ function UsersManagementContent() {
 
   const handleAddUser = async () => {
     if (!formData.username || !formData.password || !formData.displayName) {
-      await customAlert({
-        title: "Hata",
-        description: "Lütfen tüm alanları doldurun",
-        confirmText: "Tamam",
-      });
+      await customAlert("Lütfen tüm alanları doldurun", "Hata", "error");
       return;
     }
 
     if (!formData.allowedIp) {
-      await customAlert({
-        title: "Hata",
-        description: "IP adresi gerekli",
-        confirmText: "Tamam",
-      });
+      await customAlert("IP adresi gerekli", "Hata", "error");
       return;
     }
 
@@ -137,17 +129,13 @@ function UsersManagementContent() {
       });
       setShowAddModal(false);
 
-      await customAlert({
-        title: "Başarılı",
-        description: "Garson hesabı oluşturuldu",
-        confirmText: "Tamam",
-      });
+      await customAlert("Garson hesabı oluşturuldu", "Başarılı", "success");
     } catch (error: any) {
-      await customAlert({
-        title: "Hata",
-        description: error.message || "Garson hesabı oluşturulamadı",
-        confirmText: "Tamam",
-      });
+      await customAlert(
+        error.message || "Garson hesabı oluşturulamadı",
+        "Hata",
+        "error"
+      );
     }
   };
 
@@ -155,11 +143,7 @@ function UsersManagementContent() {
     if (!editingUser) return;
 
     if (!formData.displayName) {
-      await customAlert({
-        title: "Hata",
-        description: "Ad Soyad gerekli",
-        confirmText: "Tamam",
-      });
+      await customAlert("Ad Soyad gerekli", "Hata", "error");
       return;
     }
 
@@ -190,27 +174,20 @@ function UsersManagementContent() {
         allowedIp: localIP || "",
       });
 
-      await customAlert({
-        title: "Başarılı",
-        description: "Kullanıcı güncellendi",
-        confirmText: "Tamam",
-      });
+      await customAlert("Kullanıcı güncellendi", "Başarılı", "success");
     } catch (error: any) {
-      await customAlert({
-        title: "Hata",
-        description: error.message || "Kullanıcı güncellenemedi",
-        confirmText: "Tamam",
-      });
+      await customAlert(
+        error.message || "Kullanıcı güncellenemedi",
+        "Hata",
+        "error"
+      );
     }
   };
 
   const handleDeleteUser = async (userId: string, displayName: string) => {
-    const confirmed = await customAlert({
-      title: "Kullanıcıyı Sil",
-      description: `${displayName} adlı kullanıcıyı silmek istediğinize emin misiniz?`,
-      confirmText: "Sil",
-      cancelText: "İptal",
-    });
+    const confirmed = window.confirm(
+      `${displayName} adlı kullanıcıyı silmek istediğinize emin misiniz?`
+    );
 
     if (!confirmed) return;
 
@@ -229,17 +206,13 @@ function UsersManagementContent() {
         setUsers(usersData);
       }
 
-      await customAlert({
-        title: "Başarılı",
-        description: "Kullanıcı silindi",
-        confirmText: "Tamam",
-      });
+      await customAlert("Kullanıcı silindi", "Başarılı", "success");
     } catch (error: any) {
-      await customAlert({
-        title: "Hata",
-        description: error.message || "Kullanıcı silinemedi",
-        confirmText: "Tamam",
-      });
+      await customAlert(
+        error.message || "Kullanıcı silinemedi",
+        "Hata",
+        "error"
+      );
     }
   };
 
@@ -292,9 +265,11 @@ function UsersManagementContent() {
 
   // Şube yöneticisi ve garsonları filtrele
   // Manager veya admin rolüne sahip kullanıcıyı şube yöneticisi olarak göster
+  // Sadece role === "staff" olan kullanıcılar garson listesinde gösterilecek
   const managerUser = users.find(
     (u) => u.role === "manager" || u.role === "admin"
   );
+  // Sadece staff rolüne sahip kullanıcıları filtrele (kesinlikle staff olmalı)
   const staffUsers = users.filter((u) => u.role === "staff");
 
   return (
