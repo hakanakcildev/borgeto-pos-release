@@ -39,8 +39,6 @@ import {
   Users,
 } from "lucide-react";
 import { useCallback } from "react";
-import { getCompany } from "@/lib/firebase/companies";
-import type { Company } from "@/lib/firebase/types";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -63,28 +61,14 @@ function Index() {
 // POS Layout component'ini buraya taşıdık
 function POSLayoutWithTables() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [company, setCompany] = useState<Company | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [currentPath, setCurrentPath] = useState(location.pathname);
-  const { userData } = useAuth();
 
   useEffect(() => {
     setCurrentPath(location.pathname);
     window.scrollTo(0, 0);
   }, [location.pathname]);
-
-  useEffect(() => {
-    const loadCompany = async () => {
-      if (userData?.companyId) {
-        try {
-          const companyData = await getCompany(userData.companyId);
-          setCompany(companyData);
-        } catch (error) {}
-      }
-    };
-    loadCompany();
-  }, [userData?.companyId]);
 
   const handleLogout = useCallback(async () => {
     try {

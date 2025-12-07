@@ -25,8 +25,6 @@ import {
   Users,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
-import { getCompany } from "@/lib/firebase/companies";
-import type { Company } from "@/lib/firebase/types";
 
 // Mobile Menu Component
 function MobileMenu({
@@ -35,7 +33,6 @@ function MobileMenu({
   menuItems,
   getIsActive,
   onLogout,
-  company,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -46,7 +43,6 @@ function MobileMenu({
   }>;
   getIsActive: (href: string) => boolean;
   onLogout: () => void;
-  company: Company | null;
 }) {
   const { userData } = useAuth();
 
@@ -149,7 +145,6 @@ interface POSLayoutProps {
 export function POSLayout({ children }: POSLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [company, setCompany] = useState<Company | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [currentPath, setCurrentPath] = useState(location.pathname);
@@ -167,18 +162,6 @@ export function POSLayout({ children }: POSLayoutProps) {
     setCurrentPath(location.pathname);
     window.scrollTo(0, 0);
   }, [location.pathname]);
-
-  useEffect(() => {
-    const loadCompany = async () => {
-      if (userData?.companyId) {
-        try {
-          const companyData = await getCompany(userData.companyId);
-          setCompany(companyData);
-        } catch (error) {}
-      }
-    };
-    loadCompany();
-  }, [userData?.companyId]);
 
   // Kullanıcı giriş yaptığında otomatik güncelleme kontrolünü etkinleştir
   useEffect(() => {
@@ -507,7 +490,6 @@ export function POSLayout({ children }: POSLayoutProps) {
           menuItems={menuItems}
           getIsActive={getIsActive}
           onLogout={handleLogout}
-          company={company}
         />
 
         {/* Güncelleme İndiriliyor Modal */}
