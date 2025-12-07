@@ -156,13 +156,16 @@ function TableDetailContent() {
 
   // Miktar girme modalı için state'ler
   const [showQuantityModal, setShowQuantityModal] = useState(false);
-  const [selectedMenuForQuantity, setSelectedMenuForQuantity] = useState<Menu | null>(null);
+  const [selectedMenuForQuantity, setSelectedMenuForQuantity] =
+    useState<Menu | null>(null);
   const [quantityInput, setQuantityInput] = useState("");
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ekstra malzeme seçimi için state'ler
   const [showExtraModal, setShowExtraModal] = useState(false);
-  const [selectedMenuForExtra, setSelectedMenuForExtra] = useState<Menu | null>(null);
+  const [selectedMenuForExtra, setSelectedMenuForExtra] = useState<Menu | null>(
+    null
+  );
   const [selectedExtras, setSelectedExtras] = useState<Set<string>>(new Set());
 
   // Sipariş yönetimi state'leri
@@ -245,15 +248,20 @@ function TableDetailContent() {
     useState<string>("");
   const [showPaymentScreenDiscountModal, setShowPaymentScreenDiscountModal] =
     useState(false);
-  const [, setSelectedNumericKey] = useState<number | null>(
-    null
-  );
-  const [paymentScreenQuantityInput, setPaymentScreenQuantityInput] = useState<string>("");
+  const [, setSelectedNumericKey] = useState<number | null>(null);
+  const [paymentScreenQuantityInput, setPaymentScreenQuantityInput] =
+    useState<string>("");
   // Paket masaları için kurye atama state'leri
-  const [paymentScreenSelectedCourierId, setPaymentScreenSelectedCourierId] = useState<string>("");
-  const [paymentScreenChangeAmount, setPaymentScreenChangeAmount] = useState<string>("0");
-  const [showPaymentScreenCourierModal, setShowPaymentScreenCourierModal] = useState(false);
-  const [showPaymentScreenChangeAmountModal, setShowPaymentScreenChangeAmountModal] = useState(false);
+  const [paymentScreenSelectedCourierId, setPaymentScreenSelectedCourierId] =
+    useState<string>("");
+  const [paymentScreenChangeAmount, setPaymentScreenChangeAmount] =
+    useState<string>("0");
+  const [showPaymentScreenCourierModal, setShowPaymentScreenCourierModal] =
+    useState(false);
+  const [
+    showPaymentScreenChangeAmountModal,
+    setShowPaymentScreenChangeAmountModal,
+  ] = useState(false);
 
   // Cari yönetimi için state'ler
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -300,19 +308,23 @@ function TableDetailContent() {
   >(null);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isMovingItems, setIsMovingItems] = useState(false);
-  
+
   // Yazıcılar için state
-  const [printers, setPrinters] = useState<Array<{
-    id: string;
-    name: string;
-    type: "serial" | "usb" | "network" | "system";
-    port?: string;
-    vendorId?: number;
-    productId?: number;
-    isConnected: boolean;
-    assignedCategories?: string[];
-  }>>([]);
-  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
+  const [printers, setPrinters] = useState<
+    Array<{
+      id: string;
+      name: string;
+      type: "serial" | "usb" | "network" | "system";
+      port?: string;
+      vendorId?: number;
+      productId?: number;
+      isConnected: boolean;
+      assignedCategories?: string[];
+    }>
+  >([]);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     const loadData = async () => {
@@ -378,21 +390,24 @@ function TableDetailContent() {
         if (tableData) {
           setCurrentTable(tableData);
         }
-        
+
         // Yazıcıları yükle
         try {
-          const savedPrinters = localStorage.getItem(`printers_${effectiveCompanyId}`);
+          const savedPrinters = localStorage.getItem(
+            `printers_${effectiveCompanyId}`
+          );
           if (savedPrinters) {
             const printersData = JSON.parse(savedPrinters);
             setPrinters(printersData);
-            
-            const selected = localStorage.getItem(`selectedPrinter_${effectiveCompanyId}`);
+
+            const selected = localStorage.getItem(
+              `selectedPrinter_${effectiveCompanyId}`
+            );
             if (selected) {
               setSelectedPrinterId(selected);
             }
           }
-        } catch (error) {
-        }
+        } catch (error) {}
 
         // Aktif ödeme yöntemlerini filtrele ve yükle
         const activePaymentMethods = paymentMethodsData.filter(
@@ -467,35 +482,39 @@ function TableDetailContent() {
     : menus;
 
   // Sepete ürün ekle (not ile birlikte) - sadece modal'dan yeni ürün eklemek için
-  const addToCartWithNote = useCallback((menu: Menu, note?: string, extras?: SelectedExtra[]) => {
-    const extrasTotal = extras?.reduce((sum, extra) => sum + extra.price, 0) || 0;
-    const itemPrice = menu.price + extrasTotal;
-    
-    setCart((prev) => {
-      // Yeni eklenen ürünleri ayrı tutmak için her eklemede yeni bir item oluştur
-      const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
-      return [
-        ...prev,
-        {
-          cartItemId,
-          menuId: menu.id!,
-          menuName: menu.name,
-          menuPrice: menu.price,
-          quantity: 1,
-          subtotal: itemPrice,
-          notes: note || undefined,
-          selectedExtras: extras && extras.length > 0 ? extras : undefined,
-          addedAt: new Date(),
-        },
-      ];
-    });
-    // Sepeti göster
-    setShowCart(true);
-    // Modal'ı kapat
-    setShowAddNoteModal(false);
-    setSelectedMenuForNote(null);
-    setItemNote("");
-  }, []);
+  const addToCartWithNote = useCallback(
+    (menu: Menu, note?: string, extras?: SelectedExtra[]) => {
+      const extrasTotal =
+        extras?.reduce((sum, extra) => sum + extra.price, 0) || 0;
+      const itemPrice = menu.price + extrasTotal;
+
+      setCart((prev) => {
+        // Yeni eklenen ürünleri ayrı tutmak için her eklemede yeni bir item oluştur
+        const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
+        return [
+          ...prev,
+          {
+            cartItemId,
+            menuId: menu.id!,
+            menuName: menu.name,
+            menuPrice: menu.price,
+            quantity: 1,
+            subtotal: itemPrice,
+            notes: note || undefined,
+            selectedExtras: extras && extras.length > 0 ? extras : undefined,
+            addedAt: new Date(),
+          },
+        ];
+      });
+      // Sepeti göster
+      setShowCart(true);
+      // Modal'ı kapat
+      setShowAddNoteModal(false);
+      setSelectedMenuForNote(null);
+      setItemNote("");
+    },
+    []
+  );
 
   // Ürün ekleme butonuna tıklandığında ekstra malzeme kontrolü yap
   const handleAddToCart = useCallback((menu: Menu) => {
@@ -504,28 +523,28 @@ function TableDetailContent() {
       setSelectedMenuForExtra(menu);
       // Zorunlu ekstraları otomatik seç
       const requiredExtras = new Set(
-        menu.extras.filter(extra => extra.isRequired).map(extra => extra.id)
+        menu.extras.filter((extra) => extra.isRequired).map((extra) => extra.id)
       );
       setSelectedExtras(requiredExtras);
       setShowExtraModal(true);
     } else {
       // Ekstra malzeme yoksa direkt sepete ekle
-    setCart((prev) => {
-      const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
-      return [
-        ...prev,
-        {
-          cartItemId,
-          menuId: menu.id!,
-          menuName: menu.name,
-          menuPrice: menu.price,
-          quantity: 1,
-          subtotal: menu.price,
-          addedAt: new Date(),
-        },
-      ];
-    });
-    setShowCart(true);
+      setCart((prev) => {
+        const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
+        return [
+          ...prev,
+          {
+            cartItemId,
+            menuId: menu.id!,
+            menuName: menu.name,
+            menuPrice: menu.price,
+            quantity: 1,
+            subtotal: menu.price,
+            addedAt: new Date(),
+          },
+        ];
+      });
+      setShowCart(true);
     }
   }, []);
 
@@ -534,17 +553,24 @@ function TableDetailContent() {
     if (!selectedMenuForExtra) return;
 
     const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
-      .map(extraId => {
-        const extra = selectedMenuForExtra.extras?.find(e => e.id === extraId);
-        return extra ? {
-          id: extra.id,
-          name: extra.name,
-          price: extra.price,
-        } : null;
+      .map((extraId) => {
+        const extra = selectedMenuForExtra.extras?.find(
+          (e) => e.id === extraId
+        );
+        return extra
+          ? {
+              id: extra.id,
+              name: extra.name,
+              price: extra.price,
+            }
+          : null;
       })
       .filter((e): e is SelectedExtra => e !== null);
 
-    const extrasTotal = selectedExtrasList.reduce((sum, extra) => sum + extra.price, 0);
+    const extrasTotal = selectedExtrasList.reduce(
+      (sum, extra) => sum + extra.price,
+      0
+    );
     const itemPrice = selectedMenuForExtra.price + extrasTotal;
 
     setCart((prev) => {
@@ -558,7 +584,8 @@ function TableDetailContent() {
           menuPrice: selectedMenuForExtra.price,
           quantity: 1,
           subtotal: itemPrice,
-          selectedExtras: selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
+          selectedExtras:
+            selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
           addedAt: new Date(),
         },
       ];
@@ -579,7 +606,9 @@ function TableDetailContent() {
       // Eğer üründe ekstra malzeme varsa zorunlu olanları otomatik seç
       if (menu.extras && menu.extras.length > 0) {
         const requiredExtras = new Set(
-          menu.extras.filter(extra => extra.isRequired).map(extra => extra.id)
+          menu.extras
+            .filter((extra) => extra.isRequired)
+            .map((extra) => extra.id)
         );
         setSelectedExtras(requiredExtras);
       } else {
@@ -612,17 +641,24 @@ function TableDetailContent() {
 
     // Eğer ekstra malzeme seçildiyse onları kullan, yoksa boş
     const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
-      .map(extraId => {
-        const extra = selectedMenuForQuantity.extras?.find(e => e.id === extraId);
-        return extra ? {
-          id: extra.id,
-          name: extra.name,
-          price: extra.price,
-        } : null;
+      .map((extraId) => {
+        const extra = selectedMenuForQuantity.extras?.find(
+          (e) => e.id === extraId
+        );
+        return extra
+          ? {
+              id: extra.id,
+              name: extra.name,
+              price: extra.price,
+            }
+          : null;
       })
       .filter((e): e is SelectedExtra => e !== null);
 
-    const extrasTotal = selectedExtrasList.reduce((sum, extra) => sum + extra.price, 0);
+    const extrasTotal = selectedExtrasList.reduce(
+      (sum, extra) => sum + extra.price,
+      0
+    );
     const itemPrice = selectedMenuForQuantity.price + extrasTotal;
 
     setCart((prev) => {
@@ -636,7 +672,8 @@ function TableDetailContent() {
           menuPrice: selectedMenuForQuantity.price,
           quantity: quantity,
           subtotal: itemPrice * quantity,
-          selectedExtras: selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
+          selectedExtras:
+            selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
           addedAt: new Date(),
         },
       ];
@@ -663,7 +700,8 @@ function TableDetailContent() {
       }
 
       // Ekstra malzemelerin fiyatını da hesaba kat
-      const extrasTotal = item.selectedExtras?.reduce((sum, extra) => sum + extra.price, 0) || 0;
+      const extrasTotal =
+        item.selectedExtras?.reduce((sum, extra) => sum + extra.price, 0) || 0;
       const itemPrice = item.menuPrice + extrasTotal;
 
       return prev.map((i) =>
@@ -792,6 +830,9 @@ function TableDetailContent() {
         updatedOrder = await getOrder(orderId);
       }
 
+      // Yeni eklenen ürünleri kaydet (cart temizlenmeden önce)
+      const newItems = [...cart];
+
       // Siparişi güncelle ve sepeti temizle
       setOrder(updatedOrder);
       setCart([]);
@@ -805,37 +846,56 @@ function TableDetailContent() {
         if (tableData) {
           setCurrentTable(tableData);
         }
-        
-        // Yeni eklenen ürünleri yazdır (kategori yazıcılarına)
+
+        // Yeni eklenen ürünleri yazdır (kategori yazıcılarına - tek adisyon)
         try {
-          const newItems = cart; // Yeni eklenen ürünler
           if (newItems.length > 0) {
-            // Her ürün için kategori bul ve ilgili yazıcılara yazdır
+            // Kategorilere göre grupla
+            const itemsByCategory = new Map<string, OrderItem[]>();
+
             for (const item of newItems) {
               const menuItem = menus.find((m) => m.id === item.menuId);
               if (menuItem && menuItem.category) {
-                const category = categories.find((c) => c.name === menuItem.category);
+                const category = categories.find(
+                  (c) => c.name === menuItem.category
+                );
                 if (category) {
-                  // Bu kategoriye atanmış yazıcıları bul
-                  const categoryPrinters = getPrintersForCategories(
-                    printers,
-                    categories,
-                    [category.id || ""]
-                  );
-                  
-                  // Her yazıcıya yazdır
-                  for (const printer of categoryPrinters) {
-                    const printContent = formatPrintContent(
-                      "order",
-                      [item],
-                      currentTable.tableNumber,
-                      updatedOrder.orderNumber,
-                      {
-                        companyName: companyData?.name || "",
-                      }
-                    );
-                    await printToPrinter(printer.name, printContent, "order");
+                  const categoryId = category.id || "";
+                  if (!itemsByCategory.has(categoryId)) {
+                    itemsByCategory.set(categoryId, []);
                   }
+                  itemsByCategory.get(categoryId)!.push(item);
+                }
+              }
+            }
+
+            // Her kategori için o kategorideki tüm ürünleri tek adisyonda yazdır
+            for (const [
+              categoryId,
+              categoryItems,
+            ] of itemsByCategory.entries()) {
+              const category = categories.find((c) => c.id === categoryId);
+              if (category) {
+                // Bu kategoriye atanmış yazıcıları bul
+                const categoryPrinters = getPrintersForCategories(
+                  printers,
+                  categories,
+                  [categoryId]
+                );
+
+                // Her yazıcıya bu kategorideki TÜM ürünleri tek adisyonda yazdır
+                for (const printer of categoryPrinters) {
+                  const printContent = formatPrintContent(
+                    "order",
+                    categoryItems, // Tüm ürünler tek adisyonda
+                    currentTable.tableNumber,
+                    undefined, // Sipariş no gösterilmeyecek
+                    {
+                      companyName: companyData?.name || "",
+                      isPaid: false, // Gönderilen ürünler henüz ödenmedi
+                    }
+                  );
+                  await printToPrinter(printer.name, printContent, "order");
                 }
               }
             }
@@ -883,14 +943,14 @@ function TableDetailContent() {
           try {
             const settings = JSON.parse(navSettings);
             if (settings.returnAfterProductAdd) {
-        navigateToHome();
+              navigateToHome();
             } else {
               setCart([]);
               if (updatedOrder) {
                 setOrder(updatedOrder);
               }
-      }
-    } catch (error) {
+            }
+          } catch (error) {
             // Hata durumunda varsayılan davranış (masalara dön)
             navigateToHome();
           }
@@ -904,7 +964,20 @@ function TableDetailContent() {
     } finally {
       setIsSendingOrder(false);
     }
-  }, [userData, cart, order, notes, currentTable, navigate, menus, categories, printers, companyId, branchId, companyData]);
+  }, [
+    userData,
+    cart,
+    order,
+    notes,
+    currentTable,
+    navigate,
+    menus,
+    categories,
+    printers,
+    companyId,
+    branchId,
+    companyData,
+  ]);
 
   // Ödeme alma
   const handlePayment = useCallback(
@@ -925,7 +998,7 @@ function TableDetailContent() {
     ) => {
       // Eğer overrideAmount verilmişse onu kullan, yoksa state'ten oku
       const amountToUse = overrideAmount || paymentAmount;
-      
+
       // Eğer overridePaymentMethod verilmişse onu kullan, yoksa state'ten oku
       const paymentMethodToUse = overridePaymentMethod || paymentMethod;
 
@@ -950,7 +1023,11 @@ function TableDetailContent() {
         parseFloat(amountToUse) <= 0 ||
         isNaN(parseFloat(amountToUse))
       ) {
-        customAlert("Lütfen geçerli bir ödeme tutarı girin", "Uyarı", "warning");
+        customAlert(
+          "Lütfen geçerli bir ödeme tutarı girin",
+          "Uyarı",
+          "warning"
+        );
         return;
       }
 
@@ -1282,7 +1359,7 @@ function TableDetailContent() {
         // Arka planda yapılacak işlemler için verileri hazırla
         const effectiveCompanyId = companyId || userData?.companyId;
         const effectiveBranchId = branchId || userData?.assignedBranchId;
-        
+
         // Ödeme yöntemi adını bul (bir kez hesapla)
         const selectedPaymentMethod = paymentMethods.find(
           (pm) => pm.code === paymentMethodToUse
@@ -1304,7 +1381,7 @@ function TableDetailContent() {
             try {
               // Ödenen ürünleri belirle
               let billItems: OrderItem[] = [];
-              
+
               if (isPartialPayment && paidItems) {
                 // Kısmi ödeme: Sadece ödenen ürünleri al
                 billItems = paidItems.map((paidItem) => {
@@ -1333,8 +1410,11 @@ function TableDetailContent() {
               }
 
               // Adisyon toplamlarını hesapla
-              const billSubtotal = billItems.reduce((sum, item) => sum + item.subtotal, 0);
-              const billDiscount = isPartialPayment ? 0 : (order.discount || 0);
+              const billSubtotal = billItems.reduce(
+                (sum, item) => sum + item.subtotal,
+                0
+              );
+              const billDiscount = isPartialPayment ? 0 : order.discount || 0;
               const billTotal = Math.max(0, billSubtotal - billDiscount);
 
               // Adisyon oluştur
@@ -1399,10 +1479,19 @@ function TableDetailContent() {
         }
 
         // Kurye ataması yapıldıysa (paket masaları için)
-        const courierIdToUse = overrideCourierId !== undefined ? overrideCourierId : selectedCourierId;
-        const packageCountToUse = overridePackageCount !== undefined ? overridePackageCount : packageCount;
-        const changeAmountToUse = overrideChangeAmount !== undefined ? overrideChangeAmount : changeAmount;
-        
+        const courierIdToUse =
+          overrideCourierId !== undefined
+            ? overrideCourierId
+            : selectedCourierId;
+        const packageCountToUse =
+          overridePackageCount !== undefined
+            ? overridePackageCount
+            : packageCount;
+        const changeAmountToUse =
+          overrideChangeAmount !== undefined
+            ? overrideChangeAmount
+            : changeAmount;
+
         if (courierIdToUse && updatedOrder) {
           const courier = couriers.find((c) => c.id === courierIdToUse);
           if (courier) {
@@ -1453,49 +1542,62 @@ function TableDetailContent() {
 
         (async () => {
           try {
-            const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
+            const defaultPrinter = getDefaultPrinter(
+              printers,
+              selectedPrinterId
+            );
             if (defaultPrinter && updatedOrder) {
               // Ödenen ürünleri al (kısmi ödeme durumunda sadece ödenenler)
               let paidItemsForPrint: OrderItem[] = [];
-              
+
               if (printData.isPartialPayment && printData.paidItems) {
                 // Kısmi ödeme: Sadece ödenen ürünleri al
-                paidItemsForPrint = printData.paidItems.map(paidItem => {
-                  const orderItem = printData.orderItems.find(item => item.menuId === paidItem.menuId);
-                  return orderItem ? {
-                    ...orderItem,
-                    quantity: paidItem.quantity,
-                    subtotal: paidItem.subtotal,
-                  } : {
-                    menuId: paidItem.menuId,
-                    menuName: paidItem.menuName,
-                    menuPrice: paidItem.subtotal / paidItem.quantity,
-                    quantity: paidItem.quantity,
-                    subtotal: paidItem.subtotal,
-                    addedAt: new Date(),
-                    selectedExtras: [],
-                  };
+                paidItemsForPrint = printData.paidItems.map((paidItem) => {
+                  const orderItem = printData.orderItems.find(
+                    (item) => item.menuId === paidItem.menuId
+                  );
+                  return orderItem
+                    ? {
+                        ...orderItem,
+                        quantity: paidItem.quantity,
+                        subtotal: paidItem.subtotal,
+                      }
+                    : {
+                        menuId: paidItem.menuId,
+                        menuName: paidItem.menuName,
+                        menuPrice: paidItem.subtotal / paidItem.quantity,
+                        quantity: paidItem.quantity,
+                        subtotal: paidItem.subtotal,
+                        addedAt: new Date(),
+                        selectedExtras: [],
+                      };
                 });
               } else {
                 // Tam ödeme: Tüm ürünleri al
                 paidItemsForPrint = printData.updatedOrderItems;
               }
-              
+
               if (paidItemsForPrint.length > 0) {
                 const printContent = formatPrintContent(
                   "payment",
                   paidItemsForPrint,
                   printData.tableNumber,
-                  printData.orderNumber,
+                  undefined, // Sipariş no gösterilmeyecek
                   {
                     total: printData.amount,
                     paymentMethod: printData.paymentMethodName,
                     discount: printData.discount,
                     subtotal: printData.subtotal,
                     companyName: companyData?.name || "",
+                    isPaid: true, // Ödeme alındı
+                    paperWidth: defaultPrinter?.options?.paperWidth || 110,
                   }
                 );
-                await printToPrinter(defaultPrinter.name, printContent, "payment");
+                await printToPrinter(
+                  defaultPrinter.name,
+                  printContent,
+                  "payment"
+                );
               }
             }
           } catch (error) {
@@ -1525,9 +1627,12 @@ function TableDetailContent() {
           if (navSettings) {
             try {
               const settings = JSON.parse(navSettings);
-              if (settings.returnAfterPayment || settings.returnAfterOrderClose) {
-          navigateToHome();
-          return;
+              if (
+                settings.returnAfterPayment ||
+                settings.returnAfterOrderClose
+              ) {
+                navigateToHome();
+                return;
               }
               // Masalara dönmüyorsa bile state'i güncelle (zaten yukarıda güncellendi)
               return;
@@ -1569,7 +1674,7 @@ function TableDetailContent() {
             if (settings.returnAfterPayment) {
               navigateToHome();
             }
-      } catch (error) {
+          } catch (error) {
             // Hata durumunda yönlendirme yapma
           }
         }
@@ -1664,7 +1769,9 @@ function TableDetailContent() {
           try {
             const menuItem = menus.find((m) => m.id === canceledItem.menuId);
             if (menuItem && menuItem.category) {
-              const category = categories.find((c) => c.name === menuItem.category);
+              const category = categories.find(
+                (c) => c.name === menuItem.category
+              );
               if (category) {
                 // Bu kategoriye atanmış yazıcıları bul
                 const categoryPrinters = getPrintersForCategories(
@@ -1672,7 +1779,7 @@ function TableDetailContent() {
                   categories,
                   [category.id || ""]
                 );
-                
+
                 // Her yazıcıya yazdır
                 for (const printer of categoryPrinters) {
                   const printContent = formatPrintContent(
@@ -1704,13 +1811,16 @@ function TableDetailContent() {
 
           // Sonra masayı müsait yap (currentOrderId'yi temizle)
           await updateTableStatus(currentTable.id!, "available", undefined);
-          
+
           // Navigation ayarını kontrol et
           const navSettings = localStorage.getItem("navigationSettings");
           if (navSettings) {
             try {
               const settings = JSON.parse(navSettings);
-              if (settings.returnAfterProductCancel || settings.returnAfterOrderClose) {
+              if (
+                settings.returnAfterProductCancel ||
+                settings.returnAfterOrderClose
+              ) {
                 navigateToHome();
                 return;
               }
@@ -1772,7 +1882,7 @@ function TableDetailContent() {
               categories,
               [category.id || ""]
             );
-            
+
             // Her yazıcıya yazdır
             for (const printer of categoryPrinters) {
               const printContent = formatPrintContent(
@@ -1832,7 +1942,7 @@ function TableDetailContent() {
           if (settings.returnAfterProductCancel) {
             navigateToHome();
           }
-    } catch (error) {
+        } catch (error) {
           // Hata durumunda yönlendirme yapma
         }
       }
@@ -1930,13 +2040,15 @@ function TableDetailContent() {
         const canceledItemsForPrint = order.items.filter((_, index) =>
           selectedItems.has(index)
         );
-        
+
         if (canceledItemsForPrint.length > 0) {
           // Her iptal edilen ürün için kategori bul ve ilgili yazıcılara yazdır
           for (const canceledItem of canceledItemsForPrint) {
             const menuItem = menus.find((m) => m.id === canceledItem.menuId);
             if (menuItem && menuItem.category) {
-              const category = categories.find((c) => c.name === menuItem.category);
+              const category = categories.find(
+                (c) => c.name === menuItem.category
+              );
               if (category) {
                 // Bu kategoriye atanmış yazıcıları bul
                 const categoryPrinters = getPrintersForCategories(
@@ -1944,7 +2056,7 @@ function TableDetailContent() {
                   categories,
                   [category.id || ""]
                 );
-                
+
                 // Her yazıcıya yazdır
                 for (const printer of categoryPrinters) {
                   const printContent = formatPrintContent(
@@ -2000,7 +2112,7 @@ function TableDetailContent() {
       const updatedOrder = await getOrder(order.id!);
       setOrder(updatedOrder);
       setSelectedItems(new Set());
-      
+
       // Navigation ayarını kontrol et
       const navSettings = localStorage.getItem("navigationSettings");
       if (navSettings) {
@@ -2009,7 +2121,7 @@ function TableDetailContent() {
           if (settings.returnAfterProductCancel) {
             navigateToHome();
           }
-    } catch (error) {
+        } catch (error) {
           // Hata durumunda yönlendirme yapma
         }
       }
@@ -2525,16 +2637,16 @@ function TableDetailContent() {
         }
         setSelectedItems(new Set());
         setShowMoveModal(false);
-        
+
         // Navigation ayarını kontrol et
         const navSettings = localStorage.getItem("navigationSettings");
         if (navSettings) {
           try {
             const settings = JSON.parse(navSettings);
             if (settings.returnAfterItemMove) {
-        navigateToHome();
+              navigateToHome();
             }
-      } catch (error) {
+          } catch (error) {
             // Hata durumunda varsayılan davranış (masalara dön)
             navigateToHome();
           }
@@ -2569,12 +2681,12 @@ function TableDetailContent() {
           // Sadece gerçek touch event'lerinde klavyeyi aç
           const lastEventWasTouch = (window as any).__lastTouchEvent;
           if (lastEventWasTouch) {
-          const currentValue = itemNoteTextareaRef.current.value || "";
-          openKeyboard(
-            itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
-            "text",
-            currentValue
-          );
+            const currentValue = itemNoteTextareaRef.current.value || "";
+            openKeyboard(
+              itemNoteTextareaRef as React.RefObject<HTMLTextAreaElement>,
+              "text",
+              currentValue
+            );
           }
         }
       }, 100);
@@ -2585,12 +2697,12 @@ function TableDetailContent() {
   useEffect(() => {
     const loadCustomers = async () => {
       if (!showCustomerModal) return;
-      
+
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) return;
-      
+
       setIsLoadingCustomers(true);
       try {
         const customersData = await getCustomersByCompany(
@@ -2604,7 +2716,7 @@ function TableDetailContent() {
         setIsLoadingCustomers(false);
       }
     };
-    
+
     loadCustomers();
   }, [showCustomerModal, companyId, branchId, userData]);
 
@@ -2693,7 +2805,8 @@ function TableDetailContent() {
               tableId: tableId,
               tableNumber: targetTable.tableNumber,
               items: order.items,
-              sentItems: order.sentItems || order.items.map((item) => item.menuId),
+              sentItems:
+                order.sentItems || order.items.map((item) => item.menuId),
               createdBy: userData!.id!,
               status: "active",
               paymentStatus: "unpaid",
@@ -2711,7 +2824,7 @@ function TableDetailContent() {
           // Masa durumunu güncelle ve siparişi kapat
           await updateTableStatus(currentTable.id!, "available", undefined);
           await updateOrderStatus(order.id!, "closed");
-          
+
           // Order state'ini güncelle
           setOrder(null);
 
@@ -2720,14 +2833,22 @@ function TableDetailContent() {
           setShowFullScreenPayment(false);
           setShowCustomerModal(false);
 
-          customAlert("Cari oluşturuldu ve sipariş cari masasına taşındı", "Başarılı", "success");
+          customAlert(
+            "Cari oluşturuldu ve sipariş cari masasına taşındı",
+            "Başarılı",
+            "success"
+          );
         } catch (error: any) {
-          customAlert(`Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`, "Hata", "error");
+          customAlert(
+            `Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
+            "Hata",
+            "error"
+          );
         }
       } else {
         customAlert("Cari başarıyla oluşturuldu", "Başarılı", "success");
       }
-      
+
       // Masaya yönlendir
       navigate({
         to: "/table/$tableId",
@@ -2736,130 +2857,154 @@ function TableDetailContent() {
       });
     } catch (error: any) {
       const errorMessage = error?.message || "Bilinmeyen bir hata oluştu";
-      customAlert(`Cari oluşturulurken bir hata oluştu: ${errorMessage}`, "Hata", "error");
+      customAlert(
+        `Cari oluşturulurken bir hata oluştu: ${errorMessage}`,
+        "Hata",
+        "error"
+      );
     } finally {
       setIsCreatingCustomer(false);
       setShowNewCustomerModal(false);
     }
-  }, [newCustomerName, companyId, branchId, userData, navigate, order, currentTable]);
+  }, [
+    newCustomerName,
+    companyId,
+    branchId,
+    userData,
+    navigate,
+    order,
+    currentTable,
+  ]);
 
   // Cari seç ve masaya yönlendir
-  const handleSelectCustomer = useCallback(async (customerId: string) => {
-    const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+  const handleSelectCustomer = useCallback(
+    async (customerId: string) => {
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
 
-    if (!effectiveCompanyId) {
-      customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
-      return;
-    }
-
-    try {
-      // Cari bilgisini al
-      const customer = await getCustomer(customerId);
-      if (!customer) {
-        customAlert("Cari bulunamadı", "Hata", "error");
+      if (!effectiveCompanyId) {
+        customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
         return;
       }
 
-      // Cari için masa var mı kontrol et
-      const allTables = await getTablesByCompany(
-        effectiveCompanyId,
-        effectiveBranchId || undefined
-      );
-      
-      let customerTable = allTables.find(
-        (t) => t.area === "Cari" && t.tableNumber === customer.name
-      );
-
-      // Masa yoksa oluştur
-      if (!customerTable) {
-        const tableId = await addTable({
-          companyId: effectiveCompanyId,
-          branchId: effectiveBranchId || undefined,
-          area: "Cari",
-          tableNumber: customer.name,
-          status: "available",
-        });
-        const table = await getTable(tableId);
-        customerTable = table || undefined;
-      }
-
-      if (!customerTable) {
-        customAlert("Masa oluşturulamadı", "Hata", "error");
-        return;
-      }
-
-      // Eğer mevcut sipariş varsa, siparişi cari masasına taşı
-      if (order && order.items.length > 0) {
-        try {
-          // Hedef masada aktif sipariş var mı kontrol et
-          const allOrders = await getOrdersByCompany(effectiveCompanyId, {
-            branchId: effectiveBranchId || undefined,
-          });
-          const targetOrder = allOrders.find(
-            (o) => o.tableId === customerTable!.id && o.status === "active"
-          );
-
-          if (targetOrder) {
-            // Mevcut siparişe ekle
-            const existingItems = targetOrder.items || [];
-            const mergedItems = [...existingItems, ...order.items];
-            const subtotal = mergedItems.reduce(
-              (sum, item) => sum + item.subtotal,
-              0
-            );
-            const total = subtotal - (targetOrder.discount || 0);
-
-            await updateOrder(targetOrder.id!, {
-              items: mergedItems,
-              subtotal: subtotal,
-              total: total,
-            });
-          } else {
-            // Yeni sipariş oluştur
-            await addOrder({
-              companyId: effectiveCompanyId,
-              branchId: effectiveBranchId || customerTable.branchId,
-              tableId: customerTable.id!,
-              tableNumber: customerTable.tableNumber,
-              items: order.items,
-              sentItems: order.sentItems || order.items.map((item) => item.menuId),
-              createdBy: userData!.id!,
-              status: "active",
-              paymentStatus: "unpaid",
-              discount: order.discount,
-            });
-          }
-
-          // Mevcut masadan siparişi kaldır ve kapat
-          await updateOrder(order.id!, {
-            items: [],
-            subtotal: 0,
-            total: 0,
-          });
-
-          // Masa durumunu güncelle ve siparişi kapat
-          await updateOrderStatus(order.id!, "closed");
-          await updateTableStatus(currentTable.id!, "available", undefined);
-
-          customAlert("Cari seçildi ve sipariş cari masasına taşındı", "Başarılı", "success");
-        } catch (error: any) {
-          customAlert(`Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`, "Hata", "error");
+      try {
+        // Cari bilgisini al
+        const customer = await getCustomer(customerId);
+        if (!customer) {
+          customAlert("Cari bulunamadı", "Hata", "error");
+          return;
         }
-      }
 
-      // Masaya yönlendir
-      navigate({
-        to: "/table/$tableId",
-        params: { tableId: customerTable.id! },
-        search: { area: undefined, activeOnly: false },
-      });
-      
-      setShowCustomerModal(false);
-    } catch (error) {
-      customAlert("Cari seçilirken bir hata oluştu", "Hata", "error");
-    }
-  }, [companyId, branchId, userData, navigate, order, currentTable]);
+        // Cari için masa var mı kontrol et
+        const allTables = await getTablesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        );
+
+        let customerTable = allTables.find(
+          (t) => t.area === "Cari" && t.tableNumber === customer.name
+        );
+
+        // Masa yoksa oluştur
+        if (!customerTable) {
+          const tableId = await addTable({
+            companyId: effectiveCompanyId,
+            branchId: effectiveBranchId || undefined,
+            area: "Cari",
+            tableNumber: customer.name,
+            status: "available",
+          });
+          const table = await getTable(tableId);
+          customerTable = table || undefined;
+        }
+
+        if (!customerTable) {
+          customAlert("Masa oluşturulamadı", "Hata", "error");
+          return;
+        }
+
+        // Eğer mevcut sipariş varsa, siparişi cari masasına taşı
+        if (order && order.items.length > 0) {
+          try {
+            // Hedef masada aktif sipariş var mı kontrol et
+            const allOrders = await getOrdersByCompany(effectiveCompanyId, {
+              branchId: effectiveBranchId || undefined,
+            });
+            const targetOrder = allOrders.find(
+              (o) => o.tableId === customerTable!.id && o.status === "active"
+            );
+
+            if (targetOrder) {
+              // Mevcut siparişe ekle
+              const existingItems = targetOrder.items || [];
+              const mergedItems = [...existingItems, ...order.items];
+              const subtotal = mergedItems.reduce(
+                (sum, item) => sum + item.subtotal,
+                0
+              );
+              const total = subtotal - (targetOrder.discount || 0);
+
+              await updateOrder(targetOrder.id!, {
+                items: mergedItems,
+                subtotal: subtotal,
+                total: total,
+              });
+            } else {
+              // Yeni sipariş oluştur
+              await addOrder({
+                companyId: effectiveCompanyId,
+                branchId: effectiveBranchId || customerTable.branchId,
+                tableId: customerTable.id!,
+                tableNumber: customerTable.tableNumber,
+                items: order.items,
+                sentItems:
+                  order.sentItems || order.items.map((item) => item.menuId),
+                createdBy: userData!.id!,
+                status: "active",
+                paymentStatus: "unpaid",
+                discount: order.discount,
+              });
+            }
+
+            // Mevcut masadan siparişi kaldır ve kapat
+            await updateOrder(order.id!, {
+              items: [],
+              subtotal: 0,
+              total: 0,
+            });
+
+            // Masa durumunu güncelle ve siparişi kapat
+            await updateOrderStatus(order.id!, "closed");
+            await updateTableStatus(currentTable.id!, "available", undefined);
+
+            customAlert(
+              "Cari seçildi ve sipariş cari masasına taşındı",
+              "Başarılı",
+              "success"
+            );
+          } catch (error: any) {
+            customAlert(
+              `Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
+              "Hata",
+              "error"
+            );
+          }
+        }
+
+        // Masaya yönlendir
+        navigate({
+          to: "/table/$tableId",
+          params: { tableId: customerTable.id! },
+          search: { area: undefined, activeOnly: false },
+        });
+
+        setShowCustomerModal(false);
+      } catch (error) {
+        customAlert("Cari seçilirken bir hata oluştu", "Hata", "error");
+      }
+    },
+    [companyId, branchId, userData, navigate, order, currentTable]
+  );
 
   // Taşı modalı açıldığında masaları yükle
   useEffect(() => {
@@ -2907,8 +3052,8 @@ function TableDetailContent() {
       {/* Header - Mobile */}
       <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={navigateToHome}
             className="h-10 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold"
           >
@@ -3683,13 +3828,20 @@ function TableDetailContent() {
                   );
                 })()}
 
-                <div className={currentTable.area === "Cari" ? "space-y-4" : "space-y-2"}>
+                <div
+                  className={
+                    currentTable.area === "Cari" ? "space-y-4" : "space-y-2"
+                  }
+                >
                   {(() => {
                     // Cari masasıysa tarihe göre grupla, değilse normal göster
                     if (currentTable.area === "Cari") {
                       // Ürünleri tarihe göre grupla
-                      const itemsByDate = new Map<string, Array<{ item: OrderItem; index: number }>>();
-                      
+                      const itemsByDate = new Map<
+                        string,
+                        Array<{ item: OrderItem; index: number }>
+                      >();
+
                       order.items.forEach((item, index) => {
                         const dateKey = item.addedAt
                           ? item.addedAt.toLocaleDateString("tr-TR", {
@@ -3698,7 +3850,7 @@ function TableDetailContent() {
                               year: "numeric",
                             })
                           : "Tarih Yok";
-                        
+
                         if (!itemsByDate.has(dateKey)) {
                           itemsByDate.set(dateKey, []);
                         }
@@ -3706,17 +3858,23 @@ function TableDetailContent() {
                       });
 
                       // Tarihleri sırala (en yeni üstte)
-                      const sortedDates = Array.from(itemsByDate.keys()).sort((a, b) => {
-                        if (a === "Tarih Yok") return 1;
-                        if (b === "Tarih Yok") return -1;
-                        const dateA = new Date(a.split(".").reverse().join("-"));
-                        const dateB = new Date(b.split(".").reverse().join("-"));
-                        return dateB.getTime() - dateA.getTime();
-                      });
+                      const sortedDates = Array.from(itemsByDate.keys()).sort(
+                        (a, b) => {
+                          if (a === "Tarih Yok") return 1;
+                          if (b === "Tarih Yok") return -1;
+                          const dateA = new Date(
+                            a.split(".").reverse().join("-")
+                          );
+                          const dateB = new Date(
+                            b.split(".").reverse().join("-")
+                          );
+                          return dateB.getTime() - dateA.getTime();
+                        }
+                      );
 
                       return sortedDates.map((dateKey) => {
                         const itemsForDate = itemsByDate.get(dateKey)!;
-                        
+
                         return (
                           <div key={dateKey} className="space-y-2">
                             {/* Tarih Başlığı */}
@@ -3726,11 +3884,11 @@ function TableDetailContent() {
                               </h3>
                               <div className="border-t border-gray-300 dark:border-gray-600 mb-2"></div>
                             </div>
-                            
+
                             {/* O tarihteki ürünler */}
                             {itemsForDate.map(({ item, index }) => {
                               const isSelected = selectedItems.has(index);
-                              
+
                               return (
                                 <div
                                   key={`${item.menuId}-${index}`}
@@ -4053,15 +4211,20 @@ function TableDetailContent() {
                               <p className="text-xs text-gray-600 dark:text-gray-400">
                                 ₺{item.menuPrice.toFixed(2)} x {item.quantity}
                               </p>
-                              {item.selectedExtras && item.selectedExtras.length > 0 && (
-                                <div className="mt-1 space-y-0.5">
-                                  {item.selectedExtras.map((extra, idx) => (
-                                    <p key={idx} className="text-[10px] text-gray-500 dark:text-gray-400">
-                                      + {extra.name} (+₺{extra.price.toFixed(2)})
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
+                              {item.selectedExtras &&
+                                item.selectedExtras.length > 0 && (
+                                  <div className="mt-1 space-y-0.5">
+                                    {item.selectedExtras.map((extra, idx) => (
+                                      <p
+                                        key={idx}
+                                        className="text-[10px] text-gray-500 dark:text-gray-400"
+                                      >
+                                        + {extra.name} (+₺
+                                        {extra.price.toFixed(2)})
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                               {item.notes && (
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
                                   Not: {item.notes}
@@ -4144,7 +4307,6 @@ function TableDetailContent() {
 
           {/* Totals & Actions */}
           <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-3 flex-shrink-0">
-
             {order && order.items.length > 0 ? (
               // Aktif Sipariş İşlemleri
               <>
@@ -4416,12 +4578,14 @@ function TableDetailContent() {
 
                                   if (totalQuantity > 1) {
                                     // Tek ürün durumunda da pendingMoveItems set et
-                                    const singleItemArray = [{
-                                      menuId: singleItem.item.menuId,
-                                      menuName: singleItem.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: singleItem.indices,
-                                    }];
+                                    const singleItemArray = [
+                                      {
+                                        menuId: singleItem.item.menuId,
+                                        menuName: singleItem.item.menuName,
+                                        totalQuantity: totalQuantity,
+                                        indices: singleItem.indices,
+                                      },
+                                    ];
                                     setPendingMoveItems(singleItemArray);
                                     setCurrentMoveItemIndex(0);
                                     setSelectedItemForQuantity({
@@ -4450,59 +4614,91 @@ function TableDetailContent() {
                           <div className="flex gap-2 w-full">
                             <Button
                               onClick={async () => {
-                                const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
+                                const defaultPrinter = getDefaultPrinter(
+                                  printers,
+                                  selectedPrinterId
+                                );
                                 if (!defaultPrinter) {
-                                  customAlert("Varsayılan yazıcı bulunamadı.\nLütfen yazıcı ayarlarından varsayılan yazıcı seçin.", "Uyarı", "warning");
+                                  customAlert(
+                                    "Varsayılan yazıcı bulunamadı.\nLütfen yazıcı ayarlarından varsayılan yazıcı seçin.",
+                                    "Uyarı",
+                                    "warning"
+                                  );
                                   return;
                                 }
 
                                 if (!order) {
-                                  customAlert("Henüz sipariş bulunmuyor.", "Uyarı", "warning");
+                                  customAlert(
+                                    "Henüz sipariş bulunmuyor.",
+                                    "Uyarı",
+                                    "warning"
+                                  );
                                   return;
                                 }
 
                                 try {
                                   // Tüm ürünleri birleştir: mevcut + iptal + ödeme alınan
                                   const allItems: OrderItem[] = [];
-                                  
+
                                   // 1. Aktif sipariş listesindeki mevcut ürünleri ekle
                                   if (order.items && order.items.length > 0) {
-                                    const activeItems = order.items.filter(item => 
-                                      !order.canceledItems?.some(canceled => canceled.menuId === item.menuId) &&
-                                      !order.payments?.some(payment => 
-                                        payment.paidItems?.some(paid => paid.menuId === item.menuId)
-                                      )
+                                    const activeItems = order.items.filter(
+                                      (item) =>
+                                        !order.canceledItems?.some(
+                                          (canceled) =>
+                                            canceled.menuId === item.menuId
+                                        ) &&
+                                        !order.payments?.some((payment) =>
+                                          payment.paidItems?.some(
+                                            (paid) =>
+                                              paid.menuId === item.menuId
+                                          )
+                                        )
                                     );
                                     allItems.push(...activeItems);
                                   }
 
                                   // 2. İptal edilen ürünleri ekle
-                                  if (order.canceledItems && order.canceledItems.length > 0) {
-                                    const canceledOrderItems: OrderItem[] = order.canceledItems.map(canceled => ({
-                                      menuId: canceled.menuId,
-                                      menuName: canceled.menuName,
-                                      quantity: canceled.quantity,
-                                      menuPrice: canceled.subtotal / canceled.quantity,
-                                      subtotal: canceled.subtotal,
-                                      notes: canceled.notes || "",
-                                      selectedExtras: canceled.selectedExtras || [],
-                                    }));
+                                  if (
+                                    order.canceledItems &&
+                                    order.canceledItems.length > 0
+                                  ) {
+                                    const canceledOrderItems: OrderItem[] =
+                                      order.canceledItems.map((canceled) => ({
+                                        menuId: canceled.menuId,
+                                        menuName: canceled.menuName,
+                                        quantity: canceled.quantity,
+                                        menuPrice:
+                                          canceled.subtotal / canceled.quantity,
+                                        subtotal: canceled.subtotal,
+                                        notes: canceled.notes || "",
+                                        selectedExtras:
+                                          canceled.selectedExtras || [],
+                                      }));
                                     allItems.push(...canceledOrderItems);
                                   }
 
                                   // 3. Ödemesi alınan ürünleri ekle
-                                  if (order.payments && order.payments.length > 0) {
+                                  if (
+                                    order.payments &&
+                                    order.payments.length > 0
+                                  ) {
                                     for (const payment of order.payments) {
-                                      if (payment.paidItems && payment.paidItems.length > 0) {
-                                        const paidOrderItems: OrderItem[] = payment.paidItems.map(paid => ({
-                                          menuId: paid.menuId,
-                                          menuName: paid.menuName,
-                                          quantity: paid.quantity,
-                                          menuPrice: paid.subtotal / paid.quantity,
-                                          subtotal: paid.subtotal,
-                                          notes: "",
-                                          selectedExtras: [],
-                                        }));
+                                      if (
+                                        payment.paidItems &&
+                                        payment.paidItems.length > 0
+                                      ) {
+                                        const paidOrderItems: OrderItem[] =
+                                          payment.paidItems.map((paid) => ({
+                                            menuId: paid.menuId,
+                                            menuName: paid.menuName,
+                                            quantity: paid.quantity,
+                                            menuPrice:
+                                              paid.subtotal / paid.quantity,
+                                            subtotal: paid.subtotal,
+                                            notes: "",
+                                            selectedExtras: [],
+                                          }));
                                         allItems.push(...paidOrderItems);
                                       }
                                     }
@@ -4510,25 +4706,44 @@ function TableDetailContent() {
 
                                   // Tüm ürünleri tek bir çıktıda yazdır
                                   if (allItems.length > 0) {
-                                    // Toplam tutarı hesapla
-                                    const totalAmount = allItems.reduce((sum, item) => sum + item.subtotal, 0);
-                                    
+                                    // Toplam tutarı hesapla (sadece aktif ürünler)
+                                    const activeItems = order.items || [];
+                                    const totalAmount = activeItems.reduce(
+                                      (sum, item) => sum + item.subtotal,
+                                      0
+                                    );
+
                                     const content = formatPrintContent(
                                       "order",
-                                      allItems,
+                                      allItems, // Aktif + iptal edilmiş + ödenen ürünler
                                       currentTable.tableNumber.toString(),
-                                      order.id,
+                                      undefined, // Sipariş no gösterilmeyecek
                                       {
                                         companyName: companyData?.name || "",
                                         total: totalAmount,
+                                        canceledItems:
+                                          order.canceledItems || [], // İptal edilmiş ürünler
+                                        isPaid: false, // Tekrar yazdırma - ödeme durumu bilinmiyor
                                       }
                                     );
-                                    await printToPrinter(defaultPrinter.name, content, "order");
+                                    await printToPrinter(
+                                      defaultPrinter.name,
+                                      content,
+                                      "order"
+                                    );
                                   } else {
-                                    customAlert("Yazdırılacak ürün bulunamadı.", "Uyarı", "warning");
+                                    customAlert(
+                                      "Yazdırılacak ürün bulunamadı.",
+                                      "Uyarı",
+                                      "warning"
+                                    );
                                   }
                                 } catch (error) {
-                                  customAlert("Yazdırma sırasında bir hata oluştu.", "Hata", "error");
+                                  customAlert(
+                                    "Yazdırma sırasında bir hata oluştu.",
+                                    "Hata",
+                                    "error"
+                                  );
                                 }
                               }}
                               variant="outline"
@@ -4538,32 +4753,32 @@ function TableDetailContent() {
                             >
                               <Printer className="h-4 w-4" />
                             </Button>
-                          <Button
-                            onClick={() => {
-                              // Aynı üründen birden fazla yoksa direkt ödeme modalını aç
-                              let remaining: number;
-                              // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
-                              remaining = (order.items || []).reduce(
-                                (sum, item) => sum + item.subtotal,
-                                0
-                              );
-                              // Tam ekran ödeme ekranını aç
-                              setPaymentScreenAmount(
-                                remaining > 0 ? remaining.toFixed(2) : ""
-                              );
-                              setPaymentScreenDiscountType("percentage");
-                              setPaymentScreenDiscountValue("");
-                              setPaymentScreenManualDiscount("");
-                              setPaymentScreenSelectedItems(new Set());
-                              setPaymentScreenSelectedQuantities(new Map());
-                              setPaymentMethod(""); // Ödeme yöntemini temizle
-                              setShowFullScreenPayment(true);
-                            }}
+                            <Button
+                              onClick={() => {
+                                // Aynı üründen birden fazla yoksa direkt ödeme modalını aç
+                                let remaining: number;
+                                // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
+                                remaining = (order.items || []).reduce(
+                                  (sum, item) => sum + item.subtotal,
+                                  0
+                                );
+                                // Tam ekran ödeme ekranını aç
+                                setPaymentScreenAmount(
+                                  remaining > 0 ? remaining.toFixed(2) : ""
+                                );
+                                setPaymentScreenDiscountType("percentage");
+                                setPaymentScreenDiscountValue("");
+                                setPaymentScreenManualDiscount("");
+                                setPaymentScreenSelectedItems(new Set());
+                                setPaymentScreenSelectedQuantities(new Map());
+                                setPaymentMethod(""); // Ödeme yöntemini temizle
+                                setShowFullScreenPayment(true);
+                              }}
                               className="flex-1 h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                          >
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Ödeme Al
-                          </Button>
+                            >
+                              <CreditCard className="h-4 w-4 mr-2" />
+                              Ödeme Al
+                            </Button>
                           </div>
                         )}
                       </>
@@ -4575,23 +4790,23 @@ function TableDetailContent() {
 
             {/* Buton Alanı - Desktop (Sabit) */}
             {cart.length > 0 && (
-                <Button
-                  onClick={handleSendOrder}
-                  disabled={cart.length === 0 || isSendingOrder}
+              <Button
+                onClick={handleSendOrder}
+                disabled={cart.length === 0 || isSendingOrder}
                 className="w-full h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                >
-                  {isSendingOrder ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Gönderiliyor...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Gönder
-                    </>
-                  )}
-                </Button>
+              >
+                {isSendingOrder ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Gönderiliyor...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Gönder
+                  </>
+                )}
+              </Button>
             )}
           </div>
         </div>
@@ -6040,7 +6255,7 @@ function TableDetailContent() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   {selectedMenuForQuantity.name}
                 </p>
-                
+
                 {/* Miktar Girişi */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -6058,7 +6273,7 @@ function TableDetailContent() {
                     className="w-full h-16 px-4 text-3xl font-bold text-center border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
                     autoFocus
                   />
-                  
+
                   {/* Hesaplanan Fiyat */}
                   {quantityInput && (
                     <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -6067,24 +6282,34 @@ function TableDetailContent() {
                           Toplam Fiyat:
                         </span>
                         <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                          ₺{(
-                            (selectedMenuForQuantity.price + 
+                          ₺
+                          {(
+                            (selectedMenuForQuantity.price +
                               Array.from(selectedExtras)
-                                .map(extraId => {
-                                  const extra = selectedMenuForQuantity.extras?.find(e => e.id === extraId);
+                                .map((extraId) => {
+                                  const extra =
+                                    selectedMenuForQuantity.extras?.find(
+                                      (e) => e.id === extraId
+                                    );
                                   return extra ? extra.price : 0;
                                 })
-                                .reduce((sum, price) => sum + price, 0)
-                            ) * parseFloat(quantityInput.replace(",", ".") || "0")
+                                .reduce((sum, price) => sum + price, 0)) *
+                            parseFloat(quantityInput.replace(",", ".") || "0")
                           ).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center mt-1 text-xs text-gray-600 dark:text-gray-400">
                         <span>
-                          {parseFloat(quantityInput.replace(",", ".") || "0")} × ₺{(selectedMenuForQuantity.price + 
+                          {parseFloat(quantityInput.replace(",", ".") || "0")} ×
+                          ₺
+                          {(
+                            selectedMenuForQuantity.price +
                             Array.from(selectedExtras)
-                              .map(extraId => {
-                                const extra = selectedMenuForQuantity.extras?.find(e => e.id === extraId);
+                              .map((extraId) => {
+                                const extra =
+                                  selectedMenuForQuantity.extras?.find(
+                                    (e) => e.id === extraId
+                                  );
                                 return extra ? extra.price : 0;
                               })
                               .reduce((sum, price) => sum + price, 0)
@@ -6096,67 +6321,70 @@ function TableDetailContent() {
                 </div>
 
                 {/* Ekstra Malzemeler */}
-                {selectedMenuForQuantity.extras && selectedMenuForQuantity.extras.length > 0 && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Ekstra Malzemeler
-                    </label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {selectedMenuForQuantity.extras.map((extra) => {
-                        const isSelected = selectedExtras.has(extra.id);
-                        const isRequired = extra.isRequired;
-                        
-                        return (
-                          <div
-                            key={extra.id}
-                            onClick={() => {
-                              if (isRequired) return;
-                              const newSelected = new Set(selectedExtras);
-                              if (isSelected) {
-                                newSelected.delete(extra.id);
-                              } else {
-                                newSelected.add(extra.id);
-                              }
-                              setSelectedExtras(newSelected);
-                            }}
-                            className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all cursor-pointer ${
-                              isSelected
-                                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400"
-                                : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
-                            } ${isRequired ? "border-orange-300 dark:border-orange-600 cursor-not-allowed" : ""}`}
-                          >
-                            <div className="flex items-center gap-2 flex-1">
-                              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                {selectedMenuForQuantity.extras &&
+                  selectedMenuForQuantity.extras.length > 0 && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Ekstra Malzemeler
+                      </label>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {selectedMenuForQuantity.extras.map((extra) => {
+                          const isSelected = selectedExtras.has(extra.id);
+                          const isRequired = extra.isRequired;
+
+                          return (
+                            <div
+                              key={extra.id}
+                              onClick={() => {
+                                if (isRequired) return;
+                                const newSelected = new Set(selectedExtras);
+                                if (isSelected) {
+                                  newSelected.delete(extra.id);
+                                } else {
+                                  newSelected.add(extra.id);
+                                }
+                                setSelectedExtras(newSelected);
+                              }}
+                              className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
-                                  : "border-gray-300 dark:border-gray-500"
-                              } ${isRequired ? "opacity-50" : ""}`}>
-                                {isSelected && (
-                                  <Check className="h-2.5 w-2.5 text-white" />
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium text-gray-900 dark:text-white">
-                                    {extra.name}
-                                  </span>
-                                  {isRequired && (
-                                    <span className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 rounded">
-                                      Zorunlu
-                                    </span>
+                                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400"
+                                  : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              } ${isRequired ? "border-orange-300 dark:border-orange-600 cursor-not-allowed" : ""}`}
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <div
+                                  className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                                    isSelected
+                                      ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
+                                      : "border-gray-300 dark:border-gray-500"
+                                  } ${isRequired ? "opacity-50" : ""}`}
+                                >
+                                  {isSelected && (
+                                    <Check className="h-2.5 w-2.5 text-white" />
                                   )}
                                 </div>
-                                <span className="text-[10px] text-gray-600 dark:text-gray-400">
-                                  +₺{extra.price.toFixed(2)}
-                                </span>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium text-gray-900 dark:text-white">
+                                      {extra.name}
+                                    </span>
+                                    {isRequired && (
+                                      <span className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 rounded">
+                                        Zorunlu
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-gray-600 dark:text-gray-400">
+                                    +₺{extra.price.toFixed(2)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Numerik Klavye */}
                 <div className="mb-4">
@@ -6165,7 +6393,9 @@ function TableDetailContent() {
                       <button
                         key={num}
                         type="button"
-                        onClick={() => setQuantityInput((prev) => prev + num.toString())}
+                        onClick={() =>
+                          setQuantityInput((prev) => prev + num.toString())
+                        }
                         className="h-14 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
                       >
                         {num}
@@ -6187,7 +6417,9 @@ function TableDetailContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setQuantityInput((prev) => prev.slice(0, -1))}
+                      onClick={() =>
+                        setQuantityInput((prev) => prev.slice(0, -1))
+                      }
                       className="h-14 bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg flex items-center justify-center text-white transition-colors"
                     >
                       <Delete className="h-6 w-6" />
@@ -6212,7 +6444,10 @@ function TableDetailContent() {
                   <button
                     type="button"
                     onClick={handleAddWithQuantity}
-                    disabled={!quantityInput || parseFloat(quantityInput.replace(",", ".") || "0") <= 0}
+                    disabled={
+                      !quantityInput ||
+                      parseFloat(quantityInput.replace(",", ".") || "0") <= 0
+                    }
                     className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Sepete Ekle
@@ -6313,19 +6548,26 @@ function TableDetailContent() {
               </h2>
               <div className="mb-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ürün: <span className="font-semibold text-gray-900 dark:text-white">{selectedMenuForExtra.name}</span>
+                  Ürün:{" "}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {selectedMenuForExtra.name}
+                  </span>
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Temel Fiyat: <span className="font-semibold text-blue-600 dark:text-blue-400">₺{selectedMenuForExtra.price.toFixed(2)}</span>
+                  Temel Fiyat:{" "}
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    ₺{selectedMenuForExtra.price.toFixed(2)}
+                  </span>
                 </p>
               </div>
 
-              {selectedMenuForExtra.extras && selectedMenuForExtra.extras.length > 0 ? (
+              {selectedMenuForExtra.extras &&
+              selectedMenuForExtra.extras.length > 0 ? (
                 <div className="space-y-2 mb-4">
                   {selectedMenuForExtra.extras.map((extra) => {
                     const isSelected = selectedExtras.has(extra.id);
                     const isRequired = extra.isRequired;
-                    
+
                     return (
                       <div
                         key={extra.id}
@@ -6346,11 +6588,13 @@ function TableDetailContent() {
                         } ${isRequired ? "border-orange-300 dark:border-orange-600 cursor-not-allowed" : ""}`}
                       >
                         <div className="flex items-center gap-3 flex-1">
-                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                            isSelected
-                              ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
-                              : "border-gray-300 dark:border-gray-500"
-                          } ${isRequired ? "opacity-50" : ""}`}>
+                          <div
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              isSelected
+                                ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
+                                : "border-gray-300 dark:border-gray-500"
+                            } ${isRequired ? "opacity-50" : ""}`}
+                          >
                             {isSelected && (
                               <Check className="h-3 w-3 text-white" />
                             )}
@@ -6388,11 +6632,14 @@ function TableDetailContent() {
                     Toplam:
                   </span>
                   <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                    ₺{(
+                    ₺
+                    {(
                       selectedMenuForExtra.price +
                       Array.from(selectedExtras)
-                        .map(extraId => {
-                          const extra = selectedMenuForExtra.extras?.find(e => e.id === extraId);
+                        .map((extraId) => {
+                          const extra = selectedMenuForExtra.extras?.find(
+                            (e) => e.id === extraId
+                          );
                           return extra ? extra.price : 0;
                         })
                         .reduce((sum, price) => sum + price, 0)
@@ -6872,7 +7119,11 @@ function TableDetailContent() {
                           setSelectedCancelQuantities(new Map());
                           // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
                         } catch (error) {
-                          customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
+                          customAlert(
+                            "Ürünler iptal edilirken bir hata oluştu",
+                            "Hata",
+                            "error"
+                          );
                           // Ana sayfaya yönlendirme KALDIRILDI
                         }
                       } else if (quantitySelectionAction === "payment") {
@@ -7168,13 +7419,17 @@ function TableDetailContent() {
                               );
 
                               let quantityToAdd = 0.5;
-                              
+
                               // Miktar girişi varsa onu kullan
                               if (paymentScreenQuantityInput) {
                                 // Virgülü noktaya çevir ve parse et
-                                const quantityStr = paymentScreenQuantityInput.replace(",", ".");
+                                const quantityStr =
+                                  paymentScreenQuantityInput.replace(",", ".");
                                 const parsedQuantity = parseFloat(quantityStr);
-                                if (!isNaN(parsedQuantity) && parsedQuantity > 0) {
+                                if (
+                                  !isNaN(parsedQuantity) &&
+                                  parsedQuantity > 0
+                                ) {
                                   quantityToAdd = parsedQuantity;
                                 }
                               } else {
@@ -7182,45 +7437,56 @@ function TableDetailContent() {
                                 if (newSelected.has(index)) {
                                   // Zaten seçiliyse, 1 adet artır
                                   quantityToAdd = 1;
+                                } else {
+                                  // Yeni seçiliyorsa
+                                  // Eğer ürünün miktarı tam sayı ise, 1 adet seç
+                                  // Eğer küsüratlı ise, küsürat kadar seç
+                                  const roundedQuantity =
+                                    Math.round(itemQuantity * 100) / 100;
+                                  if (roundedQuantity % 1 === 0) {
+                                    // Tam sayı (1, 2, 3, 4, vb.)
+                                    quantityToAdd = 1;
                                   } else {
-                                    // Yeni seçiliyorsa
-                                    // Eğer ürünün miktarı tam sayı ise, 1 adet seç
-                                    // Eğer küsüratlı ise, küsürat kadar seç
-                                    const roundedQuantity = Math.round(itemQuantity * 100) / 100;
-                                    if (roundedQuantity % 1 === 0) {
-                                      // Tam sayı (1, 2, 3, 4, vb.)
-                                      quantityToAdd = 1;
-                                    } else {
-                                      // Küsüratlı sayı (1.5, 1.25, 2.75, vb.)
-                                      // Küsüratı bul ve yuvarla (örn: 1.5 → 0.5, 1.25 → 0.25, 0.8799999 → 0.88)
-                                      const fractionalPart = roundedQuantity % 1;
-                                      quantityToAdd = Math.round(fractionalPart * 100) / 100;
-                                    }
+                                    // Küsüratlı sayı (1.5, 1.25, 2.75, vb.)
+                                    // Küsüratı bul ve yuvarla (örn: 1.5 → 0.5, 1.25 → 0.25, 0.8799999 → 0.88)
+                                    const fractionalPart = roundedQuantity % 1;
+                                    quantityToAdd =
+                                      Math.round(fractionalPart * 100) / 100;
                                   }
+                                }
                               }
 
                               // Eğer zaten seçiliyse, adetini artır
                               if (newSelected.has(index)) {
                                 const currentQty =
                                   newQuantities.get(index) || 0;
-                                const roundedCurrentQty = Math.round(currentQty * 100) / 100;
-                                const roundedItemQty = Math.round(itemQuantity * 100) / 100;
+                                const roundedCurrentQty =
+                                  Math.round(currentQty * 100) / 100;
+                                const roundedItemQty =
+                                  Math.round(itemQuantity * 100) / 100;
                                 const newQty = Math.min(
                                   roundedCurrentQty + quantityToAdd,
                                   roundedItemQty
                                 );
                                 // Yuvarlanmış değeri kaydet
-                                newQuantities.set(index, Math.round(newQty * 100) / 100);
+                                newQuantities.set(
+                                  index,
+                                  Math.round(newQty * 100) / 100
+                                );
                               } else {
                                 // Yeni seçiliyorsa, seçilen sayı kadar ekle
-                                const roundedItemQty = Math.round(itemQuantity * 100) / 100;
+                                const roundedItemQty =
+                                  Math.round(itemQuantity * 100) / 100;
                                 const finalQty = Math.min(
                                   quantityToAdd,
                                   roundedItemQty
                                 );
                                 newSelected.add(index);
                                 // Yuvarlanmış değeri kaydet
-                                newQuantities.set(index, Math.round(finalQty * 100) / 100);
+                                newQuantities.set(
+                                  index,
+                                  Math.round(finalQty * 100) / 100
+                                );
                               }
 
                               setPaymentScreenSelectedItems(newSelected);
@@ -7296,12 +7562,16 @@ function TableDetailContent() {
                         </div>
                         {/* Toplam / Alınacak Ödeme */}
                         <div className="flex justify-end items-center gap-2">
-                          <span className={`text-sm font-medium ${
-                            paymentScreenSelectedItems.size === 0 
-                              ? "text-green-600 dark:text-green-400" 
-                              : "text-gray-700 dark:text-gray-300"
-                          }`}>
-                            {paymentScreenSelectedItems.size === 0 ? "Alınacak Ödeme" : "Toplam"}
+                          <span
+                            className={`text-sm font-medium ${
+                              paymentScreenSelectedItems.size === 0
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            {paymentScreenSelectedItems.size === 0
+                              ? "Alınacak Ödeme"
+                              : "Toplam"}
                           </span>
                           <span className="text-xl font-bold text-gray-900 dark:text-white">
                             ₺
@@ -7380,7 +7650,8 @@ function TableDetailContent() {
                           const rawSelectedQty =
                             paymentScreenSelectedQuantities.get(index) || 1;
                           // Miktarı 2 ondalık basamağa yuvarla
-                          const selectedQty = Math.round(rawSelectedQty * 100) / 100;
+                          const selectedQty =
+                            Math.round(rawSelectedQty * 100) / 100;
                           const itemPrice = selectedQty * item.menuPrice;
 
                           return (
@@ -7419,8 +7690,11 @@ function TableDetailContent() {
                                         const rawSelectedQty =
                                           newQuantities.get(idx) || 1;
                                         // Miktarı yuvarla
-                                        const selectedQty = Math.round(rawSelectedQty * 100) / 100;
-                                        const roundedItemQty = Math.round(item.quantity * 100) / 100;
+                                        const selectedQty =
+                                          Math.round(rawSelectedQty * 100) /
+                                          100;
+                                        const roundedItemQty =
+                                          Math.round(item.quantity * 100) / 100;
                                         const actualQty = Math.min(
                                           selectedQty,
                                           roundedItemQty
@@ -7459,12 +7733,16 @@ function TableDetailContent() {
                   <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700/50 min-h-[80px] flex items-center">
                     <div className="space-y-1 w-full">
                       <div className="flex justify-end items-center gap-2">
-                        <span className={`text-sm font-medium ${
-                          paymentScreenSelectedItems.size > 0 
-                            ? "text-green-600 dark:text-green-400" 
-                            : "text-gray-700 dark:text-gray-300"
-                        }`}>
-                          {paymentScreenSelectedItems.size > 0 ? "Alınacak Ödeme" : "Toplam"}
+                        <span
+                          className={`text-sm font-medium ${
+                            paymentScreenSelectedItems.size > 0
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          {paymentScreenSelectedItems.size > 0
+                            ? "Alınacak Ödeme"
+                            : "Toplam"}
                         </span>
                         <span className="text-xl font-bold text-gray-900 dark:text-white">
                           ₺
@@ -7477,8 +7755,10 @@ function TableDetailContent() {
                                 const rawSelectedQty =
                                   paymentScreenSelectedQuantities.get(idx) || 1;
                                 // Miktarı yuvarla
-                                const selectedQty = Math.round(rawSelectedQty * 100) / 100;
-                                const roundedItemQty = Math.round(item.quantity * 100) / 100;
+                                const selectedQty =
+                                  Math.round(rawSelectedQty * 100) / 100;
+                                const roundedItemQty =
+                                  Math.round(item.quantity * 100) / 100;
                                 const actualQty = Math.min(
                                   selectedQty,
                                   roundedItemQty
@@ -7501,8 +7781,10 @@ function TableDetailContent() {
                                     paymentScreenSelectedQuantities.get(idx) ||
                                     1;
                                   // Miktarı yuvarla
-                                  const selectedQty = Math.round(rawSelectedQty * 100) / 100;
-                                  const roundedItemQty = Math.round(item.quantity * 100) / 100;
+                                  const selectedQty =
+                                    Math.round(rawSelectedQty * 100) / 100;
+                                  const roundedItemQty =
+                                    Math.round(item.quantity * 100) / 100;
                                   const actualQty = Math.min(
                                     selectedQty,
                                     roundedItemQty
@@ -7573,7 +7855,9 @@ function TableDetailContent() {
                           variant="outline"
                           onClick={() => {
                             // Sayı ekle
-                            setPaymentScreenQuantityInput((prev) => prev + num.toString());
+                            setPaymentScreenQuantityInput(
+                              (prev) => prev + num.toString()
+                            );
                           }}
                           className="h-14 text-xl font-semibold"
                         >
@@ -7612,7 +7896,9 @@ function TableDetailContent() {
                         variant="outline"
                         onClick={() => {
                           // Son karakteri sil
-                          setPaymentScreenQuantityInput((prev) => prev.slice(0, -1));
+                          setPaymentScreenQuantityInput((prev) =>
+                            prev.slice(0, -1)
+                          );
                         }}
                         className="h-14 text-xl font-semibold text-red-600 dark:text-red-400"
                       >
@@ -7633,9 +7919,14 @@ function TableDetailContent() {
                     <Button
                       variant="outline"
                       onClick={async () => {
-                        const defaultPrinter = getDefaultPrinter(printers, selectedPrinterId);
+                        const defaultPrinter = getDefaultPrinter(
+                          printers,
+                          selectedPrinterId
+                        );
                         if (!defaultPrinter) {
-                          alert("Varsayılan yazıcı bulunamadı. Lütfen yazıcı ayarlarından varsayılan yazıcı seçin.");
+                          alert(
+                            "Varsayılan yazıcı bulunamadı. Lütfen yazıcı ayarlarından varsayılan yazıcı seçin."
+                          );
                           return;
                         }
 
@@ -7647,45 +7938,59 @@ function TableDetailContent() {
                         try {
                           // Tüm ürünleri birleştir: mevcut + iptal + ödeme alınan
                           const allItems: OrderItem[] = [];
-                          
+
                           // 1. Aktif sipariş listesindeki mevcut ürünleri ekle
                           if (order.items && order.items.length > 0) {
-                            const activeItems = order.items.filter(item => 
-                              !order.canceledItems?.some(canceled => canceled.menuId === item.menuId) &&
-                              !order.payments?.some(payment => 
-                                payment.paidItems?.some(paid => paid.menuId === item.menuId)
-                              )
+                            const activeItems = order.items.filter(
+                              (item) =>
+                                !order.canceledItems?.some(
+                                  (canceled) => canceled.menuId === item.menuId
+                                ) &&
+                                !order.payments?.some((payment) =>
+                                  payment.paidItems?.some(
+                                    (paid) => paid.menuId === item.menuId
+                                  )
+                                )
                             );
                             allItems.push(...activeItems);
                           }
 
                           // 2. İptal edilen ürünleri ekle
-                          if (order.canceledItems && order.canceledItems.length > 0) {
-                            const canceledOrderItems: OrderItem[] = order.canceledItems.map(canceled => ({
-                              menuId: canceled.menuId,
-                              menuName: canceled.menuName,
-                              quantity: canceled.quantity,
-                              menuPrice: canceled.subtotal / canceled.quantity,
-                              subtotal: canceled.subtotal,
-                              notes: canceled.notes || "",
-                              selectedExtras: canceled.selectedExtras || [],
-                            }));
+                          if (
+                            order.canceledItems &&
+                            order.canceledItems.length > 0
+                          ) {
+                            const canceledOrderItems: OrderItem[] =
+                              order.canceledItems.map((canceled) => ({
+                                menuId: canceled.menuId,
+                                menuName: canceled.menuName,
+                                quantity: canceled.quantity,
+                                menuPrice:
+                                  canceled.subtotal / canceled.quantity,
+                                subtotal: canceled.subtotal,
+                                notes: canceled.notes || "",
+                                selectedExtras: canceled.selectedExtras || [],
+                              }));
                             allItems.push(...canceledOrderItems);
                           }
 
                           // 3. Ödemesi alınan ürünleri ekle
                           if (order.payments && order.payments.length > 0) {
                             for (const payment of order.payments) {
-                              if (payment.paidItems && payment.paidItems.length > 0) {
-                                const paidOrderItems: OrderItem[] = payment.paidItems.map(paid => ({
-                                  menuId: paid.menuId,
-                                  menuName: paid.menuName,
-                                  quantity: paid.quantity,
-                                  menuPrice: paid.subtotal / paid.quantity,
-                                  subtotal: paid.subtotal,
-                                  notes: "",
-                                  selectedExtras: [],
-                                }));
+                              if (
+                                payment.paidItems &&
+                                payment.paidItems.length > 0
+                              ) {
+                                const paidOrderItems: OrderItem[] =
+                                  payment.paidItems.map((paid) => ({
+                                    menuId: paid.menuId,
+                                    menuName: paid.menuName,
+                                    quantity: paid.quantity,
+                                    menuPrice: paid.subtotal / paid.quantity,
+                                    subtotal: paid.subtotal,
+                                    notes: "",
+                                    selectedExtras: [],
+                                  }));
                                 allItems.push(...paidOrderItems);
                               }
                             }
@@ -7694,8 +7999,11 @@ function TableDetailContent() {
                           // Tüm ürünleri tek bir çıktıda yazdır
                           if (allItems.length > 0) {
                             // Toplam tutarı hesapla
-                            const totalAmount = allItems.reduce((sum, item) => sum + item.subtotal, 0);
-                            
+                            const totalAmount = allItems.reduce(
+                              (sum, item) => sum + item.subtotal,
+                              0
+                            );
+
                             const content = formatPrintContent(
                               "order",
                               allItems,
@@ -7707,7 +8015,11 @@ function TableDetailContent() {
                                 paperWidth: defaultPrinter.paperWidth || 48,
                               }
                             );
-                            await printToPrinter(defaultPrinter.name, content, "order");
+                            await printToPrinter(
+                              defaultPrinter.name,
+                              content,
+                              "order"
+                            );
                           } else {
                             alert("Yazdırılacak ürün bulunamadı.");
                           }
@@ -7738,15 +8050,20 @@ function TableDetailContent() {
                           className="flex-1 h-14"
                         >
                           {paymentScreenSelectedCourierId
-                            ? couriers.find((c) => c.id === paymentScreenSelectedCourierId)?.name || "Kurye Seç"
+                            ? couriers.find(
+                                (c) => c.id === paymentScreenSelectedCourierId
+                              )?.name || "Kurye Seç"
                             : "Kurye Seç"}
                         </Button>
                         <Button
                           variant="outline"
-                          onClick={() => setShowPaymentScreenChangeAmountModal(true)}
+                          onClick={() =>
+                            setShowPaymentScreenChangeAmountModal(true)
+                          }
                           className="flex-1 h-14"
                         >
-                          {paymentScreenChangeAmount && parseFloat(paymentScreenChangeAmount) > 0
+                          {paymentScreenChangeAmount &&
+                          parseFloat(paymentScreenChangeAmount) > 0
                             ? `Para Üstü: ₺${parseFloat(paymentScreenChangeAmount).toFixed(2)}`
                             : "Para Üstü"}
                         </Button>
@@ -7937,9 +8254,15 @@ function TableDetailContent() {
                                   hasSelectedItems ? quantitiesMap : new Map(),
                                   pm.code, // Ödeme yöntemi kodunu direkt geç
                                   // Paket masaları için kurye atama ve para üstü (paket sayısı otomatik 1)
-                                  currentTable.area === "Paket" ? paymentScreenSelectedCourierId : undefined,
-                                  currentTable.area === "Paket" ? "1" : undefined, // Her masa 1 paket
-                                  currentTable.area === "Paket" ? paymentScreenChangeAmount : undefined
+                                  currentTable.area === "Paket"
+                                    ? paymentScreenSelectedCourierId
+                                    : undefined,
+                                  currentTable.area === "Paket"
+                                    ? "1"
+                                    : undefined, // Her masa 1 paket
+                                  currentTable.area === "Paket"
+                                    ? paymentScreenChangeAmount
+                                    : undefined
                                 );
 
                                 // Ekranı kapat
@@ -8191,8 +8514,16 @@ function TableDetailContent() {
                     <div className="flex gap-2 pt-2">
                       <Button
                         onClick={async () => {
-                          if (!order || !order.items || order.items.length === 0) {
-                            customAlert("Ödeme yapılacak ürün bulunamadı", "Uyarı", "warning");
+                          if (
+                            !order ||
+                            !order.items ||
+                            order.items.length === 0
+                          ) {
+                            customAlert(
+                              "Ödeme yapılacak ürün bulunamadı",
+                              "Uyarı",
+                              "warning"
+                            );
                             return;
                           }
 
@@ -8223,7 +8554,11 @@ function TableDetailContent() {
                           }
 
                           if (discountAmount <= 0) {
-                            customAlert("Lütfen geçerli bir indirim girin", "Uyarı", "warning");
+                            customAlert(
+                              "Lütfen geçerli bir indirim girin",
+                              "Uyarı",
+                              "warning"
+                            );
                             return;
                           }
 
@@ -8231,7 +8566,10 @@ function TableDetailContent() {
                           const currentDiscount = order.discount || 0;
                           const newDiscount = currentDiscount + discountAmount;
                           const newSubtotal = order.subtotal;
-                          const newTotal = Math.max(0, newSubtotal - newDiscount);
+                          const newTotal = Math.max(
+                            0,
+                            newSubtotal - newDiscount
+                          );
 
                           try {
                             setIsProcessingPayment(true);
@@ -8251,7 +8589,11 @@ function TableDetailContent() {
                             // Modalı kapat ve ödeme ekranına geri dön
                             setShowPaymentScreenDiscountModal(false);
                           } catch (error) {
-                            customAlert("İskonto uygulanırken bir hata oluştu", "Hata", "error");
+                            customAlert(
+                              "İskonto uygulanırken bir hata oluştu",
+                              "Hata",
+                              "error"
+                            );
                           } finally {
                             setIsProcessingPayment(false);
                           }
@@ -8343,7 +8685,9 @@ function TableDetailContent() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setShowPaymentScreenChangeAmountModal(false)}
+                      onClick={() =>
+                        setShowPaymentScreenChangeAmountModal(false)
+                      }
                       className="h-8 w-8"
                     >
                       <X className="h-4 w-4" />
@@ -8428,7 +8772,9 @@ function TableDetailContent() {
 
                     <div className="flex gap-2 pt-2">
                       <Button
-                        onClick={() => setShowPaymentScreenChangeAmountModal(false)}
+                        onClick={() =>
+                          setShowPaymentScreenChangeAmountModal(false)
+                        }
                         className="flex-1 h-12 text-base font-semibold"
                       >
                         Tamam

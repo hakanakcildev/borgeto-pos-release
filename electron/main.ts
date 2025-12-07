@@ -302,27 +302,27 @@ function registerIpcHandlers() {
           printerArray.forEach((printer: any, index: number) => {
             if (printer && printer.Name) {
               // Kağıt boyutunu tespit et
-              let paperWidth = 48; // Varsayılan: 80mm termal yazıcı (48 karakter)
+              let paperWidth = 56; // Varsayılan: 80mm termal yazıcı (56 karakter - küçük font)
               let paperType = "80mm"; // Varsayılan
 
               // MaxWidth bilgisi varsa kullan (mikron cinsinden)
               if (printer.MaxWidth) {
                 const widthMM = printer.MaxWidth / 1000; // Mikron'dan mm'ye çevir
                 if (widthMM >= 75 && widthMM <= 85) {
-                  // 80mm termal yazıcı
-                  paperWidth = 48;
+                  // 80mm termal yazıcı (küçük font ile 56 karakter)
+                  paperWidth = 56;
                   paperType = "80mm";
                 } else if (widthMM >= 55 && widthMM <= 62) {
-                  // 58mm termal yazıcı
-                  paperWidth = 32;
+                  // 58mm termal yazıcı (küçük font ile 40 karakter)
+                  paperWidth = 40;
                   paperType = "58mm";
                 } else if (widthMM >= 100 && widthMM <= 110) {
-                  // 110mm termal yazıcı
-                  paperWidth = 72;
+                  // 110mm termal yazıcı (küçük font ile 80 karakter)
+                  paperWidth = 80;
                   paperType = "110mm";
                 } else {
-                  // Diğer boyutlar için hesapla (1mm ≈ 0.6 karakter)
-                  paperWidth = Math.floor(widthMM * 0.6);
+                  // Diğer boyutlar için hesapla (1mm ≈ 0.7 karakter - küçük font)
+                  paperWidth = Math.floor(widthMM * 0.7);
                   paperType = `${Math.round(widthMM)}mm`;
                 }
               }
@@ -374,7 +374,7 @@ function registerIpcHandlers() {
                         : 2,
                   isDefault: printer.Default === true,
                   options: {
-                    paperWidth: 48, // Varsayılan
+                    paperWidth: 56, // Varsayılan (80mm - küçük font)
                     paperType: "80mm",
                   },
                 });
@@ -593,11 +593,15 @@ if (-not $printer) {
 }
 
 # Out-Printer ile düz metin yazdır (Windows'ın kendi yazdırma komutu)
-# Font boyutunu küçültmek için Courier New 8pt kullan
+# Yazıcı ayarlarını optimize et - tam genişlik kullanımı için
 try {
-  # Font ayarı için özel formatlama
   $content = Get-Content -Path $file -Encoding UTF8 -Raw;
-  # Out-Printer ile yazdır (font ayarı yazıcı sürücüsüne bağlı)
+  
+  # Yazıcı ayarlarını kontrol et ve optimize et
+  $printerSettings = Get-PrinterProperty -PrinterName $printerName -PropertyName "PrinterDefault" -ErrorAction SilentlyContinue;
+  
+  # Out-Printer ile yazdır (yazıcı sürücüsü varsayılan ayarlarını kullanır)
+  # Not: Font ve genişlik ayarları yazıcı sürücüsüne bağlıdır
   $content | Out-Printer -Name $printerName;
   Write-Output "SUCCESS";
 } catch {
