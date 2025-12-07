@@ -22,6 +22,7 @@ import {
   CheckCircle,
   Package,
   User,
+  Users,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { getCompany } from "@/lib/firebase/companies";
@@ -127,7 +128,6 @@ function MobileMenu({
                 </Link>
               );
             })}
-
           </div>
 
           {/* User Info & Logout */}
@@ -177,7 +177,7 @@ export function POSLayout({ children }: POSLayoutProps) {
   const navigate = useNavigate();
   const [currentPath, setCurrentPath] = useState(location.pathname);
   const { userData } = useAuth();
-  
+
   // Güncelleme state'leri
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateVersion, setUpdateVersion] = useState<string>("");
@@ -197,13 +197,11 @@ export function POSLayout({ children }: POSLayoutProps) {
         try {
           const companyData = await getCompany(userData.companyId);
           setCompany(companyData);
-        } catch (error) {
-        }
+        } catch (error) {}
       }
     };
     loadCompany();
   }, [userData?.companyId]);
-
 
   // Kullanıcı giriş yaptığında otomatik güncelleme kontrolünü etkinleştir
   useEffect(() => {
@@ -219,12 +217,12 @@ export function POSLayout({ children }: POSLayoutProps) {
     const handleUpdateAvailable = (version: string, releaseNotes?: string) => {
       setUpdateAvailable(true);
       setUpdateVersion(version);
-      
+
       // Release notes'u localStorage'a kaydet
       if (releaseNotes) {
         localStorage.setItem("updateReleaseNotes", releaseNotes);
       }
-      
+
       // Eğer autoDownload true ise indirme başlamış demektir
       // Eğer false ise kullanıcıdan onay bekleniyor demektir
       // Login sayfasında değilsek ve kullanıcı giriş yapmışsa bildirim göster
@@ -270,8 +268,7 @@ export function POSLayout({ children }: POSLayoutProps) {
       setUpdateAvailable(false);
     };
 
-    const handleUpdateChecking = () => {
-    };
+    const handleUpdateChecking = () => {};
 
     if (window.electronAPI.onUpdateAvailable) {
       window.electronAPI.onUpdateAvailable(handleUpdateAvailable);
@@ -296,8 +293,7 @@ export function POSLayout({ children }: POSLayoutProps) {
     if (window.electronAPI?.quitAndInstall) {
       try {
         await window.electronAPI.quitAndInstall();
-      } catch (error) {
-      }
+      } catch (error) {}
     }
   }, []);
 
@@ -305,25 +301,29 @@ export function POSLayout({ children }: POSLayoutProps) {
     try {
       // Local storage'ı temizle
       localStorage.removeItem("posAuth");
-      
+
       // Storage event tetikle
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: "posAuth",
-        newValue: null,
-      }));
-      
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: null,
+        })
+      );
+
       // Firebase'den çıkış yap
       await signOutUser();
-      
+
       // Login sayfasına yönlendir
       navigate({ to: "/auth/login", replace: true });
     } catch (error) {
       // Hata olsa bile temizle ve yönlendir
       localStorage.removeItem("posAuth");
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: "posAuth",
-        newValue: null,
-      }));
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "posAuth",
+          newValue: null,
+        })
+      );
       navigate({ to: "/auth/login", replace: true });
     }
   }, [navigate]);
@@ -339,6 +339,7 @@ export function POSLayout({ children }: POSLayoutProps) {
       icon: CreditCard,
       href: "/payment-methods",
     },
+    { title: "Kullanıcılar", icon: Users, href: "/users" },
     { title: "İstatistikler", icon: BarChart3, href: "/statistics" },
     { title: "Masa Geçmişi", icon: History, href: "/table-history" },
     { title: "Kurye Yönetimi", icon: Bike, href: "/couriers" },
@@ -354,15 +355,14 @@ export function POSLayout({ children }: POSLayoutProps) {
       }
       if (href === "/settings") {
         return (
-          currentPath === "/settings" ||
-          currentPath.startsWith("/settings/")
+          currentPath === "/settings" || currentPath.startsWith("/settings/")
         );
       }
+      if (href === "/users") {
+        return currentPath === "/users" || currentPath.startsWith("/users/");
+      }
       if (href === "/tables") {
-        return (
-          currentPath === "/tables" ||
-          currentPath.startsWith("/tables/")
-        );
+        return currentPath === "/tables" || currentPath.startsWith("/tables/");
       }
       if (href === "/payment-methods") {
         return (
@@ -372,28 +372,25 @@ export function POSLayout({ children }: POSLayoutProps) {
       }
       if (href === "/support") {
         return (
-          currentPath === "/support" ||
-          currentPath.startsWith("/support/")
+          currentPath === "/support" || currentPath.startsWith("/support/")
         );
       }
       if (href === "/menus") {
-        return (
-          currentPath === "/menus" || currentPath.startsWith("/menus/")
-        );
+        return currentPath === "/menus" || currentPath.startsWith("/menus/");
       }
       if (href === "/stocks") {
-        return (
-          currentPath === "/stocks" || currentPath.startsWith("/stocks/")
-        );
+        return currentPath === "/stocks" || currentPath.startsWith("/stocks/");
       }
       if (href === "/customer-tables") {
         return (
-          currentPath === "/customer-tables" || currentPath.startsWith("/customer-tables/")
+          currentPath === "/customer-tables" ||
+          currentPath.startsWith("/customer-tables/")
         );
       }
       if (href === "/statistics") {
         return (
-          currentPath === "/statistics" || currentPath.startsWith("/statistics/")
+          currentPath === "/statistics" ||
+          currentPath.startsWith("/statistics/")
         );
       }
       return currentPath === href || currentPath === href + "/";
@@ -406,24 +403,26 @@ export function POSLayout({ children }: POSLayoutProps) {
       <div className="h-[100dvh] flex w-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
         {/* Sidebar - Collapsed/Expanded */}
         <div
-          className={`fixed lg:relative top-0 left-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
-            isSidebarExpanded 
-              ? "w-64 xl:w-72" 
-              : "w-16 xl:w-24"
+          className={`fixed lg:relative top-0 left-0 h-[100dvh] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
+            isSidebarExpanded ? "w-64 xl:w-72" : "w-16 xl:w-24"
           } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         >
-          <div className="h-full flex flex-col overflow-y-auto shadow-lg">
+          <div className="h-full flex flex-col overflow-hidden shadow-lg">
             {/* Header */}
             <div
-              className={`border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 ${
-                isSidebarExpanded ? "px-3 xl:px-4 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
+              className={`border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 flex-shrink-0 ${
+                isSidebarExpanded
+                  ? "px-3 xl:px-4 py-4 xl:py-6"
+                  : "px-2 xl:px-3 py-3 xl:py-4"
               }`}
             >
               {/* Borgeto POS ve Logo */}
               <div className="flex flex-col items-center">
                 <p
                   className={`font-semibold text-gray-900 dark:text-white text-center mb-2 whitespace-nowrap ${
-                    isSidebarExpanded ? "text-xs xl:text-sm" : "text-[10px] xl:text-xs"
+                    isSidebarExpanded
+                      ? "text-xs xl:text-sm"
+                      : "text-[10px] xl:text-xs"
                   }`}
                 >
                   Borgeto POS
@@ -433,18 +432,24 @@ export function POSLayout({ children }: POSLayoutProps) {
                     src={company.logo}
                     alt={company.name}
                     className={`rounded-xl object-cover shadow-sm ${
-                      isSidebarExpanded ? "w-10 h-10 xl:w-12 xl:h-12" : "w-8 h-8 xl:w-10 xl:h-10"
+                      isSidebarExpanded
+                        ? "w-10 h-10 xl:w-12 xl:h-12"
+                        : "w-8 h-8 xl:w-10 xl:h-10"
                     }`}
                   />
                 ) : (
                   <div
                     className={`bg-blue-600 rounded-xl flex items-center justify-center shadow-sm ${
-                      isSidebarExpanded ? "w-10 h-10 xl:w-12 xl:h-12" : "w-8 h-8 xl:w-10 xl:h-10"
+                      isSidebarExpanded
+                        ? "w-10 h-10 xl:w-12 xl:h-12"
+                        : "w-8 h-8 xl:w-10 xl:h-10"
                     }`}
                   >
                     <span
                       className={`text-white font-bold ${
-                        isSidebarExpanded ? "text-sm xl:text-lg" : "text-xs xl:text-sm"
+                        isSidebarExpanded
+                          ? "text-sm xl:text-lg"
+                          : "text-xs xl:text-sm"
                       }`}
                     >
                       {company?.name?.charAt(0).toUpperCase() || "P"}
@@ -455,12 +460,14 @@ export function POSLayout({ children }: POSLayoutProps) {
             </div>
 
             <div
-              className={`flex-1 transition-all duration-300 ${
-                isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
+              className={`flex-1 transition-all duration-300 overflow-hidden flex flex-col min-h-0 ${
+                isSidebarExpanded
+                  ? "px-3 xl:px-6 py-4 xl:py-6"
+                  : "px-2 xl:px-3 py-3 xl:py-4"
               }`}
             >
               {/* Menü Aç/Kapa Butonu - Menü Öğelerinin Üstünde */}
-              <div className="mb-2">
+              <div className="mb-2 flex-shrink-0">
                 <button
                   onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
                   className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
@@ -476,11 +483,13 @@ export function POSLayout({ children }: POSLayoutProps) {
                     <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
                   )}
                   {isSidebarExpanded && (
-                    <span className="font-medium text-xs xl:text-sm">Menüyü Kapat</span>
+                    <span className="font-medium text-xs xl:text-sm">
+                      Menüyü Kapat
+                    </span>
                   )}
                 </button>
               </div>
-              <div className="space-y-1.5 xl:space-y-2">
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 xl:space-y-2">
                 {menuItems.map((item, index) => {
                   const isActive = getIsActive(item.href);
                   return (
@@ -520,13 +529,14 @@ export function POSLayout({ children }: POSLayoutProps) {
                     </Link>
                   );
                 })}
-
               </div>
             </div>
 
             <div
-              className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 ${
-                isSidebarExpanded ? "px-3 xl:px-6 py-4 xl:py-6" : "px-2 xl:px-3 py-3 xl:py-4"
+              className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 flex-shrink-0 ${
+                isSidebarExpanded
+                  ? "px-3 xl:px-6 py-4 xl:py-6"
+                  : "px-2 xl:px-3 py-3 xl:py-4"
               }`}
             >
               {isSidebarExpanded ? (
@@ -612,7 +622,8 @@ export function POSLayout({ children }: POSLayoutProps) {
                   Güncelleme Hazır
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Versiyon {updateVersion} indirildi. Güncellemeyi kurmak ve uygulamayı yeniden başlatmak ister misiniz?
+                  Versiyon {updateVersion} indirildi. Güncellemeyi kurmak ve
+                  uygulamayı yeniden başlatmak ister misiniz?
                 </p>
                 <div className="flex gap-3">
                   <Button
@@ -650,7 +661,8 @@ export function POSLayout({ children }: POSLayoutProps) {
                         Güncelleme Hazır
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        Versiyon {updateVersion} indirildi. Kurmak için tıklayın.
+                        Versiyon {updateVersion} indirildi. Kurmak için
+                        tıklayın.
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -768,4 +780,3 @@ export function POSLayout({ children }: POSLayoutProps) {
     </ProtectedRoute>
   );
 }
-

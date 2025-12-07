@@ -9,13 +9,33 @@ declare global {
       };
       quitApp: () => Promise<void>;
       quitAndInstall: () => Promise<void>;
-      checkForUpdates: () => Promise<{ success: boolean; error?: string; devMode?: boolean }>;
-      startDownloadUpdate: () => Promise<{ success: boolean; error?: string; devMode?: boolean }>;
-      enableAutoDownload: () => Promise<{ success: boolean; devMode?: boolean }>;
-      onUpdateAvailable: (callback: (version: string, releaseNotes?: string) => void) => void;
-      onUpdateNotAvailable: (callback: (info?: { currentVersion?: string; latestVersion?: string }) => void) => void;
+      checkForUpdates: () => Promise<{
+        success: boolean;
+        error?: string;
+        devMode?: boolean;
+      }>;
+      startDownloadUpdate: () => Promise<{
+        success: boolean;
+        error?: string;
+        devMode?: boolean;
+      }>;
+      enableAutoDownload: () => Promise<{
+        success: boolean;
+        devMode?: boolean;
+      }>;
+      onUpdateAvailable: (
+        callback: (version: string, releaseNotes?: string) => void
+      ) => void;
+      onUpdateNotAvailable: (
+        callback: (info?: {
+          currentVersion?: string;
+          latestVersion?: string;
+        }) => void
+      ) => void;
       onUpdateDownloaded: (callback: (version: string) => void) => void;
-      onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
+      onDownloadProgress: (
+        callback: (progress: { percent: number }) => void
+      ) => void;
       onUpdateError: (callback: (error: string) => void) => void;
       onUpdateChecking: (callback: () => void) => void;
       onTriggerClearTableHistory: (callback: () => void) => void;
@@ -45,9 +65,9 @@ declare global {
         success: boolean;
         error?: string;
       }>;
+      getLocalIP: () => Promise<{ ip: string | null }>;
     };
   }
 }
 
 export {};
-

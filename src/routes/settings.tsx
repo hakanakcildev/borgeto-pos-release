@@ -2,7 +2,20 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { POSLayout } from "@/components/layouts/POSLayout";
-import { Settings as SettingsIcon, Download, CheckCircle, RefreshCw, Sun, Moon, Monitor, ArrowLeft, X, CreditCard, Send, CheckCircle2 } from "lucide-react";
+import {
+  Settings as SettingsIcon,
+  Download,
+  CheckCircle,
+  RefreshCw,
+  Sun,
+  Moon,
+  Monitor,
+  ArrowLeft,
+  X,
+  CreditCard,
+  Send,
+  CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/settings")({
@@ -27,7 +40,10 @@ interface NavigationSettings {
 
 function SettingsContent() {
   const { theme, setTheme } = useTheme();
-  const [pendingUpdate, setPendingUpdate] = useState<{ version: string; timestamp: number } | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<{
+    version: string;
+    timestamp: number;
+  } | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
@@ -47,17 +63,15 @@ function SettingsContent() {
     if (storedNavSettings) {
       try {
         setNavSettings(JSON.parse(storedNavSettings));
-      } catch (error) {
-      }
+      } catch (error) {}
     }
-    
+
     // Bekleyen güncelleme var mı kontrol et
     const storedUpdate = localStorage.getItem("pendingUpdate");
     if (storedUpdate) {
       try {
         setPendingUpdate(JSON.parse(storedUpdate));
-      } catch (error) {
-      }
+      } catch (error) {}
     }
 
     // Güncelleme event listener'ları
@@ -74,7 +88,10 @@ function SettingsContent() {
 
     const handleUpdateAvailable = (version: string) => {
       setPendingUpdate({ version, timestamp: Date.now() });
-      localStorage.setItem("pendingUpdate", JSON.stringify({ version, timestamp: Date.now() }));
+      localStorage.setItem(
+        "pendingUpdate",
+        JSON.stringify({ version, timestamp: Date.now() })
+      );
     };
 
     if (window.electronAPI) {
@@ -112,11 +129,25 @@ function SettingsContent() {
     }
   };
 
-  const handleNavSettingChange = (key: keyof NavigationSettings, value: boolean) => {
+  const handleNavSettingChange = (
+    key: keyof NavigationSettings,
+    value: boolean
+  ) => {
     const newSettings = { ...navSettings, [key]: value };
     setNavSettings(newSettings);
     localStorage.setItem("navigationSettings", JSON.stringify(newSettings));
   };
+
+  const [localIP, setLocalIP] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadIP = async () => {
+      const { getLocalIP } = await import("@/lib/utils/ip");
+      const ip = await getLocalIP();
+      setLocalIP(ip);
+    };
+    loadIP();
+  }, []);
 
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 overflow-y-auto">
@@ -131,15 +162,47 @@ function SettingsContent() {
         </p>
       </div>
 
+      {/* WiFi IP Bilgisi */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Sistem Bilgileri
+        </h2>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                Bağlı WiFi IP Adresi
+              </p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {localIP || "Yükleniyor..."}
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                const { getLocalIP } = await import("@/lib/utils/ip");
+                const ip = await getLocalIP();
+                setLocalIP(ip);
+              }}
+              className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+            >
+              <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </button>
+          </div>
+          <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+            Garson hesapları bu IP adresi ile eşleşmelidir
+          </p>
+        </div>
+      </div>
+
       {/* Tema Ayarları */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Tema Ayarları
-          </h2>
+          Tema Ayarları
+        </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Açık Tema */}
-              <button
+          <button
             onClick={() => setTheme("light")}
             className={`p-4 rounded-lg border-2 transition-all ${
               theme === "light"
@@ -148,22 +211,28 @@ function SettingsContent() {
             }`}
           >
             <div className="flex flex-col items-center gap-3">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                theme === "light" 
-                  ? "bg-blue-100 dark:bg-blue-900/30" 
-                  : "bg-gray-100 dark:bg-gray-700"
-              }`}>
-                <Sun className={`h-6 w-6 ${
-                  theme === "light" 
-                    ? "text-blue-600 dark:text-blue-400" 
-                    : "text-gray-600 dark:text-gray-400"
-                }`} />
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  theme === "light"
+                    ? "bg-blue-100 dark:bg-blue-900/30"
+                    : "bg-gray-100 dark:bg-gray-700"
+                }`}
+              >
+                <Sun
+                  className={`h-6 w-6 ${
+                    theme === "light"
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400"
+                  }`}
+                />
               </div>
-              <span className={`font-medium ${
-                theme === "light"
-                  ? "text-blue-900 dark:text-blue-100"
-                  : "text-gray-700 dark:text-gray-300"
-              }`}>
+              <span
+                className={`font-medium ${
+                  theme === "light"
+                    ? "text-blue-900 dark:text-blue-100"
+                    : "text-gray-700 dark:text-gray-300"
+                }`}
+              >
                 Açık Tema
               </span>
             </div>
@@ -176,28 +245,34 @@ function SettingsContent() {
               theme === "dark"
                 ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
                 : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+            }`}
+          >
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  theme === "dark"
+                    ? "bg-blue-100 dark:bg-blue-900/30"
+                    : "bg-gray-100 dark:bg-gray-700"
                 }`}
               >
-            <div className="flex flex-col items-center gap-3">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                theme === "dark" 
-                  ? "bg-blue-100 dark:bg-blue-900/30" 
-                  : "bg-gray-100 dark:bg-gray-700"
-              }`}>
-                <Moon className={`h-6 w-6 ${
-                  theme === "dark" 
-                    ? "text-blue-600 dark:text-blue-400" 
-                    : "text-gray-600 dark:text-gray-400"
-                }`} />
-                  </div>
-              <span className={`font-medium ${
-                theme === "dark"
-                          ? "text-blue-900 dark:text-blue-100"
-                  : "text-gray-700 dark:text-gray-300"
-              }`}>
+                <Moon
+                  className={`h-6 w-6 ${
+                    theme === "dark"
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400"
+                  }`}
+                />
+              </div>
+              <span
+                className={`font-medium ${
+                  theme === "dark"
+                    ? "text-blue-900 dark:text-blue-100"
+                    : "text-gray-700 dark:text-gray-300"
+                }`}
+              >
                 Koyu Tema
               </span>
-                    </div>
+            </div>
           </button>
 
           {/* Sistem Teması */}
@@ -210,26 +285,32 @@ function SettingsContent() {
             }`}
           >
             <div className="flex flex-col items-center gap-3">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                theme === "system" 
-                  ? "bg-blue-100 dark:bg-blue-900/30" 
-                  : "bg-gray-100 dark:bg-gray-700"
-              }`}>
-                <Monitor className={`h-6 w-6 ${
-                  theme === "system" 
-                    ? "text-blue-600 dark:text-blue-400" 
-                    : "text-gray-600 dark:text-gray-400"
-                }`} />
-                    </div>
-              <span className={`font-medium ${
-                theme === "system"
-                  ? "text-blue-900 dark:text-blue-100"
-                  : "text-gray-700 dark:text-gray-300"
-              }`}>
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  theme === "system"
+                    ? "bg-blue-100 dark:bg-blue-900/30"
+                    : "bg-gray-100 dark:bg-gray-700"
+                }`}
+              >
+                <Monitor
+                  className={`h-6 w-6 ${
+                    theme === "system"
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400"
+                  }`}
+                />
+              </div>
+              <span
+                className={`font-medium ${
+                  theme === "system"
+                    ? "text-blue-900 dark:text-blue-100"
+                    : "text-gray-700 dark:text-gray-300"
+                }`}
+              >
                 Sistem
               </span>
-                </div>
-              </button>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -241,7 +322,7 @@ function SettingsContent() {
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
           İşlemlerden sonra otomatik olarak masalar sayfasına dönüş yapılsın mı?
         </p>
-        
+
         <div className="space-y-4">
           {/* Ürün Girişi */}
           <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -257,7 +338,12 @@ function SettingsContent() {
               </div>
             </div>
             <button
-              onClick={() => handleNavSettingChange("returnAfterProductAdd", !navSettings.returnAfterProductAdd)}
+              onClick={() =>
+                handleNavSettingChange(
+                  "returnAfterProductAdd",
+                  !navSettings.returnAfterProductAdd
+                )
+              }
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 navSettings.returnAfterProductAdd
                   ? "bg-blue-600"
@@ -266,7 +352,9 @@ function SettingsContent() {
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  navSettings.returnAfterProductAdd ? "translate-x-6" : "translate-x-1"
+                  navSettings.returnAfterProductAdd
+                    ? "translate-x-6"
+                    : "translate-x-1"
                 }`}
               />
             </button>
@@ -286,7 +374,12 @@ function SettingsContent() {
               </div>
             </div>
             <button
-              onClick={() => handleNavSettingChange("returnAfterProductCancel", !navSettings.returnAfterProductCancel)}
+              onClick={() =>
+                handleNavSettingChange(
+                  "returnAfterProductCancel",
+                  !navSettings.returnAfterProductCancel
+                )
+              }
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 navSettings.returnAfterProductCancel
                   ? "bg-blue-600"
@@ -295,7 +388,9 @@ function SettingsContent() {
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  navSettings.returnAfterProductCancel ? "translate-x-6" : "translate-x-1"
+                  navSettings.returnAfterProductCancel
+                    ? "translate-x-6"
+                    : "translate-x-1"
                 }`}
               />
             </button>
@@ -315,7 +410,12 @@ function SettingsContent() {
               </div>
             </div>
             <button
-              onClick={() => handleNavSettingChange("returnAfterPayment", !navSettings.returnAfterPayment)}
+              onClick={() =>
+                handleNavSettingChange(
+                  "returnAfterPayment",
+                  !navSettings.returnAfterPayment
+                )
+              }
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 navSettings.returnAfterPayment
                   ? "bg-blue-600"
@@ -324,7 +424,9 @@ function SettingsContent() {
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  navSettings.returnAfterPayment ? "translate-x-6" : "translate-x-1"
+                  navSettings.returnAfterPayment
+                    ? "translate-x-6"
+                    : "translate-x-1"
                 }`}
               />
             </button>
@@ -344,7 +446,12 @@ function SettingsContent() {
               </div>
             </div>
             <button
-              onClick={() => handleNavSettingChange("returnAfterOrderClose", !navSettings.returnAfterOrderClose)}
+              onClick={() =>
+                handleNavSettingChange(
+                  "returnAfterOrderClose",
+                  !navSettings.returnAfterOrderClose
+                )
+              }
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 navSettings.returnAfterOrderClose
                   ? "bg-blue-600"
@@ -353,7 +460,9 @@ function SettingsContent() {
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  navSettings.returnAfterOrderClose ? "translate-x-6" : "translate-x-1"
+                  navSettings.returnAfterOrderClose
+                    ? "translate-x-6"
+                    : "translate-x-1"
                 }`}
               />
             </button>
@@ -363,17 +472,22 @@ function SettingsContent() {
           <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
             <div className="flex items-center gap-3">
               <ArrowLeft className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-          <div>
+              <div>
                 <p className="font-medium text-gray-900 dark:text-white">
                   Ürün Taşındıktan Sonra Masalara Dön
-            </p>
+                </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Ürün başka masaya taşındıktan sonra otomatik yönlendirme
                 </p>
               </div>
             </div>
             <button
-              onClick={() => handleNavSettingChange("returnAfterItemMove", !navSettings.returnAfterItemMove)}
+              onClick={() =>
+                handleNavSettingChange(
+                  "returnAfterItemMove",
+                  !navSettings.returnAfterItemMove
+                )
+              }
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 navSettings.returnAfterItemMove
                   ? "bg-blue-600"
@@ -382,7 +496,9 @@ function SettingsContent() {
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  navSettings.returnAfterItemMove ? "translate-x-6" : "translate-x-1"
+                  navSettings.returnAfterItemMove
+                    ? "translate-x-6"
+                    : "translate-x-1"
                 }`}
               />
             </button>
@@ -448,7 +564,7 @@ function SettingsContent() {
           </div>
         ) : pendingUpdate ? (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
-          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center flex-shrink-0">
                 <Download className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
@@ -462,15 +578,15 @@ function SettingsContent() {
               </div>
             </div>
             <div className="mt-4">
-            <Button
+              <Button
                 onClick={handleDownloadUpdate}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            >
+              >
                 <Download className="h-4 w-4 mr-2" />
                 İndir ve Kur
-            </Button>
+              </Button>
+            </div>
           </div>
-        </div>
         ) : (
           <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
             <div className="flex items-center gap-3">

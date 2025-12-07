@@ -4,7 +4,14 @@ import {
   onAuthStateChanged,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { User, Branch, Company } from "./types";
 import { verifyPassword } from "../utils/password";
@@ -123,7 +130,7 @@ export const signInWithStaffCredentials = async (
     }
 
     const isValidPassword = await verifyPassword(password, user.passwordHash);
-    
+
     if (!isValidPassword) {
       throw new Error("Geçersiz kullanıcı adı veya şifre");
     }
@@ -136,6 +143,18 @@ export const signInWithStaffCredentials = async (
     // Check if user has company
     if (!user.companyId) {
       throw new Error("Kullanıcının atanmış bir firması yok");
+    }
+
+    // IP kontrolü (sadece staff kullanıcılar için)
+    if (user.role === "staff" && user.allowedIp) {
+      const { getLocalIP } = await import("../utils/ip");
+      const currentIP = await getLocalIP();
+
+      if (!currentIP || currentIP !== user.allowedIp) {
+        throw new Error(
+          `Bu cihazdan giriş yapılamaz. İzin verilen IP: ${user.allowedIp}, Mevcut IP: ${currentIP || "Bilinmiyor"}`
+        );
+      }
     }
 
     return {
@@ -193,7 +212,9 @@ export const signInWithBranchCredentials = async (
     }
 
     // Get company
-    const companyDoc = await getDoc(doc(db, COMPANIES_COLLECTION, branch.companyId));
+    const companyDoc = await getDoc(
+      doc(db, COMPANIES_COLLECTION, branch.companyId)
+    );
     if (!companyDoc.exists()) {
       throw new Error("Firma bulunamadı");
     }
@@ -234,7 +255,7 @@ export const signInWithCredentials = async (
   branchId?: string;
 }> => {
   const trimmedInput = emailOrUsername.trim();
-  
+
   // If input is a valid email, try Firebase Auth first
   if (isValidEmail(trimmedInput)) {
     try {
@@ -243,21 +264,36 @@ export const signInWithCredentials = async (
         trimmedInput,
         password
       );
-      
+
       const userData = await getCurrentUserData(userCredential.user.uid);
       if (!userData || !userData.companyId) {
         throw new Error("Kullanıcı bilgileri bulunamadı");
+      }
+
+      // Check POS access
+      const { getCompany } = await import("./companies");
+      const company = await getCompany(userData.companyId);
+      if (!company) {
+        throw new Error("Firma bilgileri bulunamadı");
+      }
+
+      // Check if company has POS access
+      if (company.hasPosAccess === false) {
+        throw new Error(
+          "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+        );
       }
 
       return {
         type: "firebase",
         firebaseUser: userCredential.user,
         user: userData,
+        company: company,
         companyId: userData.companyId,
         branchId: userData.assignedBranchId,
       };
     } catch (firebaseError: any) {
-      // If Firebase Auth fails with user-not-found or wrong-password, 
+      // If Firebase Auth fails with user-not-found or wrong-password,
       // it might be a staff user, so try staff credentials
       if (
         firebaseError.code === "auth/user-not-found" ||
@@ -265,14 +301,27 @@ export const signInWithCredentials = async (
       ) {
         // Try staff credentials as fallback
         try {
-          const { user, companyId, branchId } = await signInWithStaffCredentials(
-            trimmedInput,
-            password
-          );
+          const { user, companyId, branchId } =
+            await signInWithStaffCredentials(trimmedInput, password);
+
+          // Check POS access
+          const { getCompany } = await import("./companies");
+          const company = await getCompany(companyId);
+          if (!company) {
+            throw new Error("Firma bilgileri bulunamadı");
+          }
+
+          // Check if company has POS access
+          if (company.hasPosAccess === false) {
+            throw new Error(
+              "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+            );
+          }
 
           return {
             type: "staff",
             user,
+            company: company,
             companyId,
             branchId,
           };
@@ -284,6 +333,13 @@ export const signInWithCredentials = async (
               password
             );
 
+            // Check if company has POS access
+            if (company.hasPosAccess === false) {
+              throw new Error(
+                "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+              );
+            }
+
             return {
               type: "branch",
               branch,
@@ -292,6 +348,13 @@ export const signInWithCredentials = async (
               branchId: branch.id,
             };
           } catch (branchError) {
+            // If branch error is about POS access, throw it directly
+            if (
+              branchError instanceof Error &&
+              branchError.message.includes("POS Sistemine erişiminiz yok")
+            ) {
+              throw branchError;
+            }
             throw new Error("Geçersiz kullanıcı adı veya şifre");
           }
         }
@@ -303,9 +366,24 @@ export const signInWithCredentials = async (
           password
         );
 
+        // Check POS access
+        const { getCompany } = await import("./companies");
+        const company = await getCompany(companyId);
+        if (!company) {
+          throw new Error("Firma bilgileri bulunamadı");
+        }
+
+        // Check if company has POS access
+        if (company.hasPosAccess === false) {
+          throw new Error(
+            "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+          );
+        }
+
         return {
           type: "staff",
           user,
+          company: company,
           companyId,
           branchId,
         };
@@ -316,6 +394,13 @@ export const signInWithCredentials = async (
             password
           );
 
+          // Check if company has POS access
+          if (company.hasPosAccess === false) {
+            throw new Error(
+              "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+            );
+          }
+
           return {
             type: "branch",
             branch,
@@ -324,6 +409,13 @@ export const signInWithCredentials = async (
             branchId: branch.id,
           };
         } catch (branchError) {
+          // If branch error is about POS access, throw it directly
+          if (
+            branchError instanceof Error &&
+            branchError.message.includes("POS Sistemine erişiminiz yok")
+          ) {
+            throw branchError;
+          }
           throw firebaseError;
         }
       }
@@ -336,9 +428,24 @@ export const signInWithCredentials = async (
         password
       );
 
+      // Check POS access
+      const { getCompany } = await import("./companies");
+      const company = await getCompany(companyId);
+      if (!company) {
+        throw new Error("Firma bilgileri bulunamadı");
+      }
+
+      // Check if company has POS access
+      if (company.hasPosAccess === false) {
+        throw new Error(
+          "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+        );
+      }
+
       return {
         type: "staff",
         user,
+        company: company,
         companyId,
         branchId,
       };
@@ -350,6 +457,13 @@ export const signInWithCredentials = async (
           password
         );
 
+        // Check if company has POS access
+        if (company.hasPosAccess === false) {
+          throw new Error(
+            "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+          );
+        }
+
         return {
           type: "branch",
           branch,
@@ -358,9 +472,15 @@ export const signInWithCredentials = async (
           branchId: branch.id,
         };
       } catch (branchError) {
+        // If branch error is about POS access, throw it directly
+        if (
+          branchError instanceof Error &&
+          branchError.message.includes("POS Sistemine erişiminiz yok")
+        ) {
+          throw branchError;
+        }
         throw new Error("Geçersiz kullanıcı adı veya şifre");
       }
     }
   }
 };
-

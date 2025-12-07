@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UsersRouteImport } from './routes/users'
 import { Route as TablesRouteImport } from './routes/tables'
 import { Route as TableHistoryRouteImport } from './routes/table-history'
 import { Route as SupportRouteImport } from './routes/support'
@@ -28,6 +29,11 @@ import { Route as TableTableIdRouteImport } from './routes/table.$tableId'
 import { Route as PosOrdersRouteImport } from './routes/pos/orders'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 
+const UsersRoute = UsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TablesRoute = TablesRouteImport.update({
   id: '/tables',
   path: '/tables',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
+  '/users': typeof UsersRoute
   '/auth/login': typeof AuthLoginRoute
   '/pos/orders': typeof PosOrdersRoute
   '/table/$tableId': typeof TableTableIdRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
+  '/users': typeof UsersRoute
   '/auth/login': typeof AuthLoginRoute
   '/pos/orders': typeof PosOrdersRoute
   '/table/$tableId': typeof TableTableIdRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/support': typeof SupportRoute
   '/table-history': typeof TableHistoryRoute
   '/tables': typeof TablesRoute
+  '/users': typeof UsersRoute
   '/auth/login': typeof AuthLoginRoute
   '/pos/orders': typeof PosOrdersRoute
   '/table/$tableId': typeof TableTableIdRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/table-history'
     | '/tables'
+    | '/users'
     | '/auth/login'
     | '/pos/orders'
     | '/table/$tableId'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/table-history'
     | '/tables'
+    | '/users'
     | '/auth/login'
     | '/pos/orders'
     | '/table/$tableId'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/table-history'
     | '/tables'
+    | '/users'
     | '/auth/login'
     | '/pos/orders'
     | '/table/$tableId'
@@ -256,12 +268,20 @@ export interface RootRouteChildren {
   SupportRoute: typeof SupportRoute
   TableHistoryRoute: typeof TableHistoryRoute
   TablesRoute: typeof TablesRoute
+  UsersRoute: typeof UsersRoute
   AuthLoginRoute: typeof AuthLoginRoute
   TableTableIdRoute: typeof TableTableIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/users': {
+      id: '/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof UsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tables': {
       id: '/tables'
       path: '/tables'
@@ -418,6 +438,7 @@ const rootRouteChildren: RootRouteChildren = {
   SupportRoute: SupportRoute,
   TableHistoryRoute: TableHistoryRoute,
   TablesRoute: TablesRoute,
+  UsersRoute: UsersRoute,
   AuthLoginRoute: AuthLoginRoute,
   TableTableIdRoute: TableTableIdRoute,
 }

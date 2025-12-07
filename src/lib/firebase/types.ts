@@ -24,6 +24,8 @@ export interface Company {
     theme: string;
   };
   supportedLanguages?: string[];
+  // POS system access (if true, users can login to POS system)
+  hasPosAccess?: boolean;
 }
 
 export interface Branch {
@@ -108,6 +110,7 @@ export interface User {
   username?: string; // Username for login (for staff users)
   passwordHash?: string; // Hashed password (for staff users)
   assignedBranchId?: string; // Assigned branch ID for staff users
+  allowedIp?: string; // İzin verilen WiFi IP adresi (sadece staff kullanıcılar için)
   isActive: boolean;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -158,16 +161,16 @@ export interface OrderItem {
   movedFromTableNumber?: string; // Ürünün taşındığı kaynak masa numarası
 }
 
-export type OrderStatus = 
+export type OrderStatus =
   | "active" // Aktif (açık sipariş)
   | "closed"; // Kapalı (kapatılmış sipariş)
 
-export type PaymentStatus = 
+export type PaymentStatus =
   | "unpaid" // Ödenmedi
   | "partial" // Kısmi ödendi
   | "paid"; // Ödendi
 
-export type PaymentMethod = 
+export type PaymentMethod =
   | "cash" // Nakit
   | "card" // Kart
   | "mealCard"; // Yemek Kartı
@@ -375,4 +378,3 @@ export interface Stock {
   createdAt: Date;
   updatedAt: Date;
 }
-
