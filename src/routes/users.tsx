@@ -74,10 +74,15 @@ function UsersManagementContent() {
     };
 
     const loadIP = async () => {
-      const ip = await getLocalIP();
-      setLocalIP(ip);
-      if (ip && !formData.allowedIp) {
-        setFormData((prev) => ({ ...prev, allowedIp: ip }));
+      try {
+        const ip = await getLocalIP();
+        setLocalIP(ip);
+        // Form açıldığında veya IP yoksa otomatik doldur
+        if (ip && (!formData.allowedIp || formData.allowedIp === "")) {
+          setFormData((prev) => ({ ...prev, allowedIp: ip }));
+        }
+      } catch (error) {
+        console.error("Error loading IP:", error);
       }
     };
 
@@ -91,8 +96,14 @@ function UsersManagementContent() {
       return;
     }
 
-    if (!formData.allowedIp) {
-      await customAlert("IP adresi gerekli", "Hata", "error");
+    // IP adresi yoksa otomatik olarak mevcut IP'yi kullan
+    const ipToUse = formData.allowedIp.trim() || localIP;
+    if (!ipToUse) {
+      await customAlert(
+        "IP adresi alınamadı. Lütfen manuel olarak girin.",
+        "Hata",
+        "error"
+      );
       return;
     }
 
@@ -100,17 +111,21 @@ function UsersManagementContent() {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
+      await customAlert("Firma veya şube bilgisi bulunamadı", "Hata", "error");
       return;
     }
 
     try {
+      // Username'i trim ve lowercase yap (case-insensitive için)
+      const normalizedUsername = formData.username.trim().toLowerCase();
+
       await createStaffUser(
         effectiveCompanyId,
         effectiveBranchId,
-        formData.username,
+        normalizedUsername,
         formData.password,
-        formData.displayName,
-        formData.allowedIp
+        formData.displayName.trim(),
+        ipToUse
       );
 
       // Reload users
@@ -120,7 +135,7 @@ function UsersManagementContent() {
       );
       setUsers(usersData);
 
-      // Reset form
+      // Reset form with current IP
       setFormData({
         username: "",
         password: "",
@@ -129,8 +144,13 @@ function UsersManagementContent() {
       });
       setShowAddModal(false);
 
-      await customAlert("Garson hesabı oluşturuldu", "Başarılı", "success");
+      await customAlert(
+        `Garson hesabı oluşturuldu. IP: ${ipToUse}`,
+        "Başarılı",
+        "success"
+      );
     } catch (error: any) {
+      console.error("Error creating staff user:", error);
       await customAlert(
         error.message || "Garson hesabı oluşturulamadı",
         "Hata",
@@ -433,15 +453,23 @@ function UsersManagementContent() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Kullanıcı Adı
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
                 <Input
                   value={formData.username}
-                  onChange={(e) =>
-                    setFormData({ ...formData, username: e.target.value })
-                  }
+                  onChange={(e) => {
+                    // Convert to lowercase as user types
+                    const value = e.target.value.toLowerCase().trim();
+                    setFormData({ ...formData, username: value });
+                  }}
                   disabled={!!editingUser}
                   placeholder="garson1"
+                  autoCapitalize="none"
+                  autoComplete="username"
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Küçük harf kullanılacak (otomatik dönüştürülür)
+                </p>
               </div>
 
               <div>
@@ -474,16 +502,41 @@ function UsersManagementContent() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   İzin Verilen IP Adresi
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
-                <Input
-                  value={formData.allowedIp}
-                  onChange={(e) =>
-                    setFormData({ ...formData, allowedIp: e.target.value })
-                  }
-                  placeholder="192.168.1.100"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={formData.allowedIp}
+                    onChange={(e) =>
+                      setFormData({ ...formData, allowedIp: e.target.value })
+                    }
+                    placeholder="192.168.1.100"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const ip = await getLocalIP();
+                      if (ip) {
+                        setLocalIP(ip);
+                        setFormData((prev) => ({ ...prev, allowedIp: ip }));
+                      }
+                    }}
+                    title="Mevcut IP'yi Kullan"
+                  >
+                    Otomatik
+                  </Button>
+                </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Mevcut IP: {localIP || "Yükleniyor..."}
+                  Mevcut IP:{" "}
+                  <span className="font-mono">
+                    {localIP || "Yükleniyor..."}
+                  </span>
+                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  💡 Mobile uygulamada bu IP adresi ile giriş yapılabilir
                 </p>
               </div>
             </div>
