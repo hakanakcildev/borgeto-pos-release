@@ -23,6 +23,7 @@ import {
   Package,
   User,
   Users,
+  Calendar,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 
@@ -300,6 +301,7 @@ export function POSLayout({ children }: POSLayoutProps) {
       href: "/payment-methods",
     },
     { title: "Kullanıcılar", icon: Users, href: "/users" },
+    { title: "Vardiya Kontrol", icon: Calendar, href: "/shifts" },
     { title: "İstatistikler", icon: BarChart3, href: "/statistics" },
     { title: "Masa Geçmişi", icon: History, href: "/table-history" },
     { title: "Kurye Yönetimi", icon: Bike, href: "/couriers" },
@@ -353,6 +355,9 @@ export function POSLayout({ children }: POSLayoutProps) {
           currentPath.startsWith("/statistics/")
         );
       }
+      if (href === "/shifts") {
+        return currentPath === "/shifts" || currentPath.startsWith("/shifts/");
+      }
       return currentPath === href || currentPath === href + "/";
     },
     [currentPath]
@@ -367,82 +372,85 @@ export function POSLayout({ children }: POSLayoutProps) {
             isSidebarExpanded ? "w-64 xl:w-72" : "w-16 xl:w-24"
           } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         >
-          <div className="h-full flex flex-col overflow-hidden shadow-lg">
+          <div className="h-full flex flex-col shadow-lg overflow-hidden">
+            {/* Menü Aç/Kapa Butonu - Menü Öğelerinin Üstünde */}
             <div
-              className={`flex-1 transition-all duration-300 overflow-hidden flex flex-col min-h-0 ${
+              className={`flex-shrink-0 transition-all duration-300 ${
                 isSidebarExpanded
-                  ? "px-3 xl:px-6 py-4 xl:py-6"
-                  : "px-2 xl:px-3 py-3 xl:py-4"
+                  ? "px-3 xl:px-6 pt-4 xl:pt-6 pb-2"
+                  : "px-2 xl:px-3 pt-3 xl:pt-4 pb-2"
               }`}
             >
-              {/* Menü Aç/Kapa Butonu - Menü Öğelerinin Üstünde */}
-              <div className="mb-2 flex-shrink-0">
-                <button
-                  onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-                  className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
-                    isSidebarExpanded
-                      ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
-                      : "justify-center px-2 rounded-lg"
-                  } text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white`}
-                  title={!isSidebarExpanded ? "Menü" : undefined}
-                >
-                  {isSidebarExpanded ? (
-                    <X className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
-                  ) : (
-                    <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
-                  )}
-                  {isSidebarExpanded && (
-                    <span className="font-medium text-xs xl:text-sm">
-                      Menüyü Kapat
-                    </span>
-                  )}
-                </button>
-              </div>
-              <div className="flex-1 overflow-hidden min-h-0 flex flex-col justify-start">
-                {menuItems.map((item, index) => {
-                  const isActive = getIsActive(item.href);
-                  return (
-                    <Link
-                      key={index}
-                      to={item.href as any}
-                      onClick={() => {
-                        setIsSidebarExpanded(false);
-                      }}
-                      className={`flex items-center transition-all duration-200 flex-1 min-h-0 ${
-                        isSidebarExpanded
-                          ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
-                          : "justify-center px-2 rounded-lg"
-                      } ${
-                        isActive
-                          ? isSidebarExpanded
-                            ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-r-4 border-blue-600 dark:border-blue-400 shadow-sm"
-                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
-                      }`}
-                      title={!isSidebarExpanded ? item.title : undefined}
-                    >
-                      <item.icon
-                        className={`h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 ${
-                          isActive
-                            ? "text-blue-600 dark:text-blue-400"
-                            : "text-gray-500 dark:text-gray-400"
-                        }`}
-                      />
-                      {isSidebarExpanded && (
-                        <span
-                          className={`${isActive ? "font-semibold" : "font-medium"} text-xs xl:text-sm`}
-                        >
-                          {item.title}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
+              <button
+                onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+                className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
+                  isSidebarExpanded
+                    ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
+                    : "justify-center px-2 rounded-lg"
+                } text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white`}
+                title={!isSidebarExpanded ? "Menü" : undefined}
+              >
+                {isSidebarExpanded ? (
+                  <X className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                ) : (
+                  <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                )}
+                {isSidebarExpanded && (
+                  <span className="font-medium text-xs xl:text-sm">
+                    Menüyü Kapat
+                  </span>
+                )}
+              </button>
             </div>
-
+            {/* Menü Öğeleri - Scroll Edilebilir */}
             <div
-              className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 mt-auto transition-all duration-300 flex-shrink-0 ${
+              className={`flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col gap-1 ${
+                isSidebarExpanded ? "px-3 xl:px-6" : "px-2 xl:px-3"
+              }`}
+            >
+              {menuItems.map((item, index) => {
+                const isActive = getIsActive(item.href);
+                return (
+                  <Link
+                    key={index}
+                    to={item.href as any}
+                    onClick={() => {
+                      setIsSidebarExpanded(false);
+                    }}
+                    className={`flex items-center transition-all duration-200 flex-shrink-0 ${
+                      isSidebarExpanded
+                        ? "gap-2 xl:gap-4 px-3 xl:px-4 py-2 xl:py-2.5 text-xs xl:text-sm rounded-xl"
+                        : "justify-center px-2 py-2 xl:py-2.5 rounded-lg"
+                    } ${
+                      isActive
+                        ? isSidebarExpanded
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-r-4 border-blue-600 dark:border-blue-400 shadow-sm"
+                          : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                    }`}
+                    title={!isSidebarExpanded ? item.title : undefined}
+                  >
+                    <item.icon
+                      className={`h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 ${
+                        isActive
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-gray-500 dark:text-gray-400"
+                      }`}
+                    />
+                    {isSidebarExpanded && (
+                      <span
+                        className={`${isActive ? "font-semibold" : "font-medium"} text-xs xl:text-sm`}
+                      >
+                        {item.title}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+            {/* Logout Butonu */}
+            <div
+              className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 flex-shrink-0 ${
                 isSidebarExpanded
                   ? "px-3 xl:px-6 py-4 xl:py-6"
                   : "px-2 xl:px-3 py-3 xl:py-4"

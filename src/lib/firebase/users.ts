@@ -147,6 +147,45 @@ export const deleteStaffUser = async (userId: string): Promise<void> => {
   }
 };
 
+// Get users by company (all staff users)
+export const getUsersByCompany = async (
+  companyId: string,
+  branchId?: string
+): Promise<User[]> => {
+  try {
+    let q;
+    if (branchId) {
+      q = query(
+        collection(db, USERS_COLLECTION),
+        where("companyId", "==", companyId),
+        where("assignedBranchId", "==", branchId),
+        where("role", "==", "staff")
+      );
+    } else {
+      q = query(
+        collection(db, USERS_COLLECTION),
+        where("companyId", "==", companyId),
+        where("role", "==", "staff")
+      );
+    }
+    const querySnapshot = await getDocs(q);
+
+    const users = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+      updatedAt: doc.data().updatedAt?.toDate() || new Date(),
+      lastLoginAt: doc.data().lastLoginAt?.toDate(),
+    })) as User[];
+
+    return users.sort((a, b) => {
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
 // Get user by ID
 export const getUserById = async (userId: string): Promise<User | null> => {
   try {

@@ -15,6 +15,7 @@ import { Route as TableHistoryRouteImport } from './routes/table-history'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as StocksRouteImport } from './routes/stocks'
 import { Route as StatisticsRouteImport } from './routes/statistics'
+import { Route as ShiftsRouteImport } from './routes/shifts'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PrintersRouteImport } from './routes/printers'
 import { Route as PosRouteImport } from './routes/pos'
@@ -57,6 +58,11 @@ const StocksRoute = StocksRouteImport.update({
 const StatisticsRoute = StatisticsRouteImport.update({
   id: '/statistics',
   path: '/statistics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShiftsRoute = ShiftsRouteImport.update({
+  id: '/shifts',
+  path: '/shifts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/pos': typeof PosRouteWithChildren
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
+  '/shifts': typeof ShiftsRoute
   '/statistics': typeof StatisticsRoute
   '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/payment-methods': typeof PaymentMethodsRoute
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
+  '/shifts': typeof ShiftsRoute
   '/statistics': typeof StatisticsRoute
   '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/pos': typeof PosRouteWithChildren
   '/printers': typeof PrintersRoute
   '/settings': typeof SettingsRoute
+  '/shifts': typeof ShiftsRoute
   '/statistics': typeof StatisticsRoute
   '/stocks': typeof StocksRoute
   '/support': typeof SupportRoute
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/pos'
     | '/printers'
     | '/settings'
+    | '/shifts'
     | '/statistics'
     | '/stocks'
     | '/support'
@@ -220,6 +230,7 @@ export interface FileRouteTypes {
     | '/payment-methods'
     | '/printers'
     | '/settings'
+    | '/shifts'
     | '/statistics'
     | '/stocks'
     | '/support'
@@ -241,6 +252,7 @@ export interface FileRouteTypes {
     | '/pos'
     | '/printers'
     | '/settings'
+    | '/shifts'
     | '/statistics'
     | '/stocks'
     | '/support'
@@ -263,6 +275,7 @@ export interface RootRouteChildren {
   PosRoute: typeof PosRouteWithChildren
   PrintersRoute: typeof PrintersRoute
   SettingsRoute: typeof SettingsRoute
+  ShiftsRoute: typeof ShiftsRoute
   StatisticsRoute: typeof StatisticsRoute
   StocksRoute: typeof StocksRoute
   SupportRoute: typeof SupportRoute
@@ -315,6 +328,13 @@ declare module '@tanstack/react-router' {
       path: '/statistics'
       fullPath: '/statistics'
       preLoaderRoute: typeof StatisticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shifts': {
+      id: '/shifts'
+      path: '/shifts'
+      fullPath: '/shifts'
+      preLoaderRoute: typeof ShiftsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -433,6 +453,7 @@ const rootRouteChildren: RootRouteChildren = {
   PosRoute: PosRouteWithChildren,
   PrintersRoute: PrintersRoute,
   SettingsRoute: SettingsRoute,
+  ShiftsRoute: ShiftsRoute,
   StatisticsRoute: StatisticsRoute,
   StocksRoute: StocksRoute,
   SupportRoute: SupportRoute,

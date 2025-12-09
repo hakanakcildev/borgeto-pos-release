@@ -378,3 +378,70 @@ export interface Stock {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Vardiya Kontrol Sistemi
+export type DayOfWeek =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export interface ShiftSchedule {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  employeeId: string; // ShiftEmployee ID
+  employeeName: string; // ShiftEmployee name (snapshot)
+  dayOfWeek: DayOfWeek;
+  startTime: string; // HH:mm formatında (örn: "09:00")
+  endTime: string; // HH:mm formatında (örn: "17:00")
+  isOffDay: boolean; // İzinli gün mü?
+  notes?: string; // Notlar
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StoreHours {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  dayOfWeek: DayOfWeek;
+  openTime: string; // HH:mm formatında (örn: "09:00")
+  closeTime: string; // HH:mm formatında (örn: "22:00")
+  isClosed: boolean; // O gün kapalı mı?
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Vardiya Kontrol için Çalışan (Garsonlardan ayrı)
+export interface ShiftEmployee {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  name: string; // Çalışan adı
+  phone?: string; // Telefon
+  email?: string; // Email
+  position?: string; // Pozisyon (örn: "Garson", "Aşçı", "Kasiyer")
+  isActive: boolean; // Aktif mi?
+  notes?: string; // Notlar
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Vardiya Seçenekleri (Önceden tanımlanmış vardiya saatleri)
+export interface ShiftOption {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  name: string; // Vardiya adı (örn: "Sabah Vardiyası", "Akşam Vardiyası")
+  startTime: string; // HH:mm formatında (örn: "08:00")
+  endTime: string; // HH:mm formatında (örn: "16:00")
+  color?: string; // Renk (hex veya Tailwind class) - görsel ayırt etmek için
+  isActive: boolean; // Aktif mi?
+  order: number; // Sıralama
+  createdAt: Date;
+  updatedAt: Date;
+}

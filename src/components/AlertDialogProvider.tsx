@@ -1,14 +1,29 @@
 import { useState, useEffect } from "react";
-import { AlertDialog } from "./ui/alert-dialog";
-import { setAlertCallback } from "./ui/alert-dialog";
+import {
+  AlertDialog,
+  ConfirmDialog,
+  setAlertCallback,
+  setConfirmCallback,
+  resolveConfirm,
+} from "./ui/alert-dialog";
 
 interface AlertState {
   message: string;
   title?: string;
 }
 
-export function AlertDialogProvider({ children }: { children: React.ReactNode }) {
+interface ConfirmState {
+  message: string;
+  title?: string;
+}
+
+export function AlertDialogProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [alert, setAlert] = useState<AlertState | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   useEffect(() => {
     // Register the global alert callback
@@ -16,8 +31,14 @@ export function AlertDialogProvider({ children }: { children: React.ReactNode })
       setAlert(props);
     });
 
+    // Register the global confirm callback
+    setConfirmCallback((props) => {
+      setConfirm(props);
+    });
+
     return () => {
       setAlertCallback(null);
+      setConfirmCallback(null);
     };
   }, []);
 
@@ -31,7 +52,20 @@ export function AlertDialogProvider({ children }: { children: React.ReactNode })
           onClose={() => setAlert(null)}
         />
       )}
+      {confirm && (
+        <ConfirmDialog
+          message={confirm.message}
+          title={confirm.title}
+          onConfirm={() => {
+            setConfirm(null);
+            resolveConfirm(true);
+          }}
+          onCancel={() => {
+            setConfirm(null);
+            resolveConfirm(false);
+          }}
+        />
+      )}
     </>
   );
 }
-

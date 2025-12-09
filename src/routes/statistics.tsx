@@ -5,8 +5,28 @@ import { getOrdersByCompany } from "@/lib/firebase/orders";
 import { clearAllStatistics } from "@/lib/firebase/statistics";
 import { getPaymentMethodsByCompany } from "@/lib/firebase/paymentMethods";
 import { getCourierAssignmentsByCompany } from "@/lib/firebase/couriers";
-import type { Order, OrderItem, Payment, PaymentMethodConfig } from "@/lib/firebase/types";
-import { BarChart3, TrendingUp, Package, Calendar, Trash2, AlertTriangle, CreditCard, Percent, Bike } from "lucide-react";
+import { getUsersByCompany } from "@/lib/firebase/users";
+import type {
+  Order,
+  OrderItem,
+  Payment,
+  PaymentMethodConfig,
+  User,
+} from "@/lib/firebase/types";
+import {
+  BarChart3,
+  TrendingUp,
+  Package,
+  Calendar,
+  Trash2,
+  AlertTriangle,
+  CreditCard,
+  Percent,
+  Bike,
+  Users,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
 
@@ -22,7 +42,7 @@ function Statistics() {
   );
 }
 
-type PeriodType = "daily" | "weekly" | "monthly" | "custom";
+type PeriodType = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
 interface ProductStats {
   menuId: string;
@@ -38,6 +58,19 @@ interface PaymentMethodStats {
   count: number;
 }
 
+interface WaiterProductStats {
+  waiterId: string;
+  waiterName: string;
+  products: Array<{
+    menuId: string;
+    menuName: string;
+    quantity: number;
+    revenue: number;
+  }>;
+  totalQuantity: number;
+  totalRevenue: number;
+}
+
 function StatisticsContent() {
   const { userData, companyId, branchId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -45,45 +78,59 @@ function StatisticsContent() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
+    []
+  );
   const [courierAssignments, setCourierAssignments] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [selectedWaiter, setSelectedWaiter] =
+    useState<WaiterProductStats | null>(null);
+  const [waiterDetailPeriod, setWaiterDetailPeriod] =
+    useState<PeriodType>("daily");
+  const [showWaiterDetail, setShowWaiterDetail] = useState(false);
 
   // Tarih aralığını hesapla
-  const getDateRange = useCallback((period: PeriodType): { start: Date; end: Date } => {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    let start = new Date();
+  const getDateRange = useCallback(
+    (period: PeriodType): { start: Date; end: Date } => {
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      let start = new Date();
 
-    if (period === "daily") {
-      start.setHours(0, 0, 0, 0);
-    } else if (period === "weekly") {
-      start.setDate(start.getDate() - 7);
-      start.setHours(0, 0, 0, 0);
-    } else if (period === "monthly") {
-      start.setMonth(start.getMonth() - 1);
-      start.setHours(0, 0, 0, 0);
-    } else if (period === "custom") {
-      if (startDate && endDate) {
-        start = new Date(startDate);
+      if (period === "daily") {
         start.setHours(0, 0, 0, 0);
-        end.setTime(new Date(endDate).getTime());
-        end.setHours(23, 59, 59, 999);
-      } else {
+      } else if (period === "weekly") {
+        start.setDate(start.getDate() - 7);
         start.setHours(0, 0, 0, 0);
+      } else if (period === "monthly") {
+        start.setMonth(start.getMonth() - 1);
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "yearly") {
+        start.setFullYear(start.getFullYear() - 1);
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "custom") {
+        if (startDate && endDate) {
+          start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          end.setTime(new Date(endDate).getTime());
+          end.setHours(23, 59, 59, 999);
+        } else {
+          start.setHours(0, 0, 0, 0);
+        }
       }
-    }
 
-    return { start, end };
-  }, [startDate, endDate]);
+      return { start, end };
+    },
+    [startDate, endDate]
+  );
 
   // Siparişleri yükle
   useEffect(() => {
     const loadOrders = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) {
         setLoading(false);
         return;
@@ -92,8 +139,13 @@ function StatisticsContent() {
       try {
         setLoading(true);
         const { start, end } = getDateRange(selectedPeriod);
-        
-        const [allOrders, paymentMethodsData, courierAssignmentsData] = await Promise.all([
+
+        const [
+          allOrders,
+          paymentMethodsData,
+          courierAssignmentsData,
+          usersData,
+        ] = await Promise.all([
           // Hem kapalı hem de kısmi ödemesi alınmış (hala açık) siparişleri getiriyoruz.
           // Satış istatistiklerinde sadece gerçekten ödenmiş ürünleri hesaba katıyoruz.
           getOrdersByCompany(effectiveCompanyId, {
@@ -101,18 +153,26 @@ function StatisticsContent() {
             startDate: start,
             endDate: end,
           }),
-          getPaymentMethodsByCompany(effectiveCompanyId, effectiveBranchId || undefined).catch(() => []),
+          getPaymentMethodsByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => []),
           getCourierAssignmentsByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined,
             start,
             end
           ).catch(() => []),
+          getUsersByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => []),
         ]);
 
         setOrders(allOrders);
         setPaymentMethods(paymentMethodsData);
         setCourierAssignments(courierAssignmentsData);
+        setUsers(usersData);
       } catch (error) {
         // Error loading data
       } finally {
@@ -121,16 +181,31 @@ function StatisticsContent() {
     };
 
     loadOrders();
-  }, [companyId, branchId, userData?.companyId, userData?.assignedBranchId, selectedPeriod, startDate, endDate, getDateRange]);
+  }, [
+    companyId,
+    branchId,
+    userData?.companyId,
+    userData?.assignedBranchId,
+    selectedPeriod,
+    startDate,
+    endDate,
+    getDateRange,
+  ]);
 
   // İstatistikleri hesapla
   const calculateStats = useCallback(() => {
     // Yardımcı: Bir siparişte gerçekten ödenmiş tüm ürünleri (kısmi ve tam) topla
     const getPaidItemsForOrder = (order: Order) => {
-      const paidItems: Array<{ menuId: string; menuName: string; quantity: number; subtotal: number }> = [];
+      const paidItems: Array<{
+        menuId: string;
+        menuName: string;
+        quantity: number;
+        subtotal: number;
+      }> = [];
 
       const paymentsWithItems =
-        order.payments?.filter((p) => p.paidItems && p.paidItems.length > 0) ?? [];
+        order.payments?.filter((p) => p.paidItems && p.paidItems.length > 0) ??
+        [];
 
       if (paymentsWithItems.length > 0) {
         // Kısmi veya item bazlı ödemelerde, paidItems'ları ekle
@@ -166,17 +241,24 @@ function StatisticsContent() {
     const allPaidItems = orders.flatMap(getPaidItemsForOrder);
 
     // Toplam satışlar: Ödemesi alınan tüm ürünler
-    const totalRevenue = allPaidItems.reduce((sum, item) => sum + item.subtotal, 0);
-    
+    const totalRevenue = allPaidItems.reduce(
+      (sum, item) => sum + item.subtotal,
+      0
+    );
+
     // Toplam ürün sayısı: Ödemesi alınan tüm ürünler
-    const totalOrders = allPaidItems.reduce((sum, item) => sum + item.quantity, 0);
-    
+    const totalOrders = allPaidItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0
+    );
+
     // Ödemesi alınan sipariş sayısı (ortalama hesaplamak için)
-    const paidOrderCount = orders.filter((order) => 
-      getPaidItemsForOrder(order).length > 0
+    const paidOrderCount = orders.filter(
+      (order) => getPaidItemsForOrder(order).length > 0
     ).length;
-    
-    const averageOrderValue = paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
+
+    const averageOrderValue =
+      paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
 
     // En çok satılan ürünler: Ödemesi alınan tüm ürünler
     const productMap = new Map<string, ProductStats>();
@@ -201,7 +283,7 @@ function StatisticsContent() {
     // İptal edilen ürünleri hesapla: canceledItems + ödemesi alınmayan ürünler
     let cancelledItemCount = 0;
     let cancelledRevenue = 0;
-    
+
     orders.forEach((order) => {
       // canceledItems'ları ekle
       if (order.canceledItems && order.canceledItems.length > 0) {
@@ -210,7 +292,7 @@ function StatisticsContent() {
           cancelledRevenue += item.subtotal;
         });
       }
-      
+
       // Ödemesi alınmayan ürünleri iptal olarak say
       // Eğer sipariş kapalıysa ve ödemesi alınmamış ürünler varsa
       if (order.status === "closed") {
@@ -227,21 +309,24 @@ function StatisticsContent() {
               if (payment.paidItems && payment.paidItems.length > 0) {
                 payment.paidItems.forEach((paidItem) => {
                   const currentQty = paidItemsMap.get(paidItem.menuId) || 0;
-                  paidItemsMap.set(paidItem.menuId, currentQty + paidItem.quantity);
+                  paidItemsMap.set(
+                    paidItem.menuId,
+                    currentQty + paidItem.quantity
+                  );
                 });
               }
             });
           }
-          
+
           // Items içindeki her ürün için kontrol et
           order.items.forEach((item: OrderItem) => {
             const paidQuantity = paidItemsMap.get(item.menuId) || 0;
             const unpaidQuantity = item.quantity - paidQuantity;
-            
+
             if (unpaidQuantity > 0) {
               // Ödemesi alınmayan miktar var, iptal olarak say
               cancelledItemCount += unpaidQuantity;
-              cancelledRevenue += (unpaidQuantity * item.menuPrice);
+              cancelledRevenue += unpaidQuantity * item.menuPrice;
             }
           });
         }
@@ -257,7 +342,7 @@ function StatisticsContent() {
 
     // Ödeme yöntemine göre toplam fiyatlar
     const paymentMethodMap = new Map<string, PaymentMethodStats>();
-    
+
     // Önce tüm ödeme yöntemlerini map'e ekle (0 değerleriyle)
     paymentMethods.forEach((method) => {
       if (method.isActive) {
@@ -269,7 +354,7 @@ function StatisticsContent() {
         });
       }
     });
-    
+
     // Sonra siparişlerden gelen ödemeleri ekle
     orders.forEach((order) => {
       if (order.payments && order.payments.length > 0) {
@@ -280,12 +365,15 @@ function StatisticsContent() {
             existing.count += 1;
           } else {
             // Eğer yöntem listede yoksa ekle
-            const methodName = 
-              payment.method === "cash" ? "Nakit" :
-              payment.method === "card" ? "Kart" :
-              payment.method === "mealCard" ? "Yemek Kartı" :
-              payment.method;
-            
+            const methodName =
+              payment.method === "cash"
+                ? "Nakit"
+                : payment.method === "card"
+                  ? "Kart"
+                  : payment.method === "mealCard"
+                    ? "Yemek Kartı"
+                    : payment.method;
+
             paymentMethodMap.set(payment.method, {
               method: payment.method,
               methodName,
@@ -296,9 +384,10 @@ function StatisticsContent() {
         });
       }
     });
-    
-    const paymentMethodStats = Array.from(paymentMethodMap.values())
-      .sort((a, b) => b.total - a.total);
+
+    const paymentMethodStats = Array.from(paymentMethodMap.values()).sort(
+      (a, b) => b.total - a.total
+    );
 
     // Toplam indirim: Ödemesi alınan siparişlerdeki indirimlerin toplamı
     let totalDiscount = 0;
@@ -320,6 +409,57 @@ function StatisticsContent() {
       0
     );
 
+    // Garson istatistikleri: Her garson için hangi üründen kaç tane satış yapmış
+    const waiterStatsMap = new Map<string, WaiterProductStats>();
+
+    orders.forEach((order) => {
+      if (!order.createdBy) return;
+
+      const paidItems = getPaidItemsForOrder(order);
+      if (paidItems.length === 0) return;
+
+      const waiter = users.find((u) => u.id === order.createdBy);
+      if (!waiter) return;
+
+      let waiterStats = waiterStatsMap.get(order.createdBy);
+      if (!waiterStats) {
+        waiterStats = {
+          waiterId: order.createdBy,
+          waiterName: waiter.displayName || waiter.username || "Bilinmeyen",
+          products: [],
+          totalQuantity: 0,
+          totalRevenue: 0,
+        };
+        waiterStatsMap.set(order.createdBy, waiterStats);
+      }
+
+      paidItems.forEach((item) => {
+        const existingProduct = waiterStats.products.find(
+          (p) => p.menuId === item.menuId
+        );
+        if (existingProduct) {
+          existingProduct.quantity += item.quantity;
+          existingProduct.revenue += item.subtotal;
+        } else {
+          waiterStats.products.push({
+            menuId: item.menuId,
+            menuName: item.menuName,
+            quantity: item.quantity,
+            revenue: item.subtotal,
+          });
+        }
+        waiterStats.totalQuantity += item.quantity;
+        waiterStats.totalRevenue += item.subtotal;
+      });
+    });
+
+    const waiterStats = Array.from(waiterStatsMap.values())
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .map((waiter) => ({
+        ...waiter,
+        products: waiter.products.sort((a, b) => b.quantity - a.quantity),
+      }));
+
     return {
       totalRevenue,
       totalOrders,
@@ -331,21 +471,148 @@ function StatisticsContent() {
       totalDiscount,
       totalCourierPackages,
       totalCourierPackageAmount,
+      waiterStats,
     };
-  }, [orders, paymentMethods, courierAssignments]);
+  }, [orders, paymentMethods, courierAssignments, users]);
 
   const stats = calculateStats();
+
+  // Period'a göre tarih aralığı hesapla (modal için)
+  const getDateRangeForPeriod = useCallback(
+    (period: PeriodType): { start: Date; end: Date } => {
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      let start = new Date();
+
+      if (period === "daily") {
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "weekly") {
+        start.setDate(start.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "monthly") {
+        start.setMonth(start.getMonth() - 1);
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "yearly") {
+        start.setFullYear(start.getFullYear() - 1);
+        start.setHours(0, 0, 0, 0);
+      }
+
+      return { start, end };
+    },
+    []
+  );
+
+  // Garson detay istatistiklerini hesapla (period'a göre)
+  const getWaiterDetailStats = useCallback(
+    (waiterId: string, period: PeriodType) => {
+      const { start, end } = getDateRangeForPeriod(period);
+
+      // Yardımcı: Bir siparişte gerçekten ödenmiş tüm ürünleri (kısmi ve tam) topla
+      const getPaidItemsForOrder = (order: Order) => {
+        const paidItems: Array<{
+          menuId: string;
+          menuName: string;
+          quantity: number;
+          subtotal: number;
+        }> = [];
+
+        const paymentsWithItems =
+          order.payments?.filter(
+            (p) => p.paidItems && p.paidItems.length > 0
+          ) ?? [];
+
+        if (paymentsWithItems.length > 0) {
+          paymentsWithItems.forEach((payment) => {
+            payment.paidItems!.forEach((pi) => {
+              paidItems.push({
+                menuId: pi.menuId,
+                menuName: pi.menuName,
+                quantity: pi.quantity,
+                subtotal: pi.subtotal,
+              });
+            });
+          });
+        }
+
+        if (
+          order.status === "closed" &&
+          order.items &&
+          order.items.length > 0
+        ) {
+          order.items.forEach((item) => {
+            paidItems.push({
+              menuId: item.menuId,
+              menuName: item.menuName,
+              quantity: item.quantity,
+              subtotal: item.subtotal,
+            });
+          });
+        }
+
+        return paidItems;
+      };
+
+      // Seçili garsonun ve period'a uygun siparişlerini filtrele
+      const filteredOrders = orders.filter((order) => {
+        if (order.createdBy !== waiterId) return false;
+
+        // createdAt zaten Date objesi olarak geliyor (convertTimestamp ile)
+        const orderDate =
+          order.createdAt instanceof Date ? order.createdAt : new Date();
+        return orderDate >= start && orderDate <= end;
+      });
+
+      // Ürün istatistiklerini hesapla
+      const productMap = new Map<string, ProductStats>();
+      let totalQuantity = 0;
+      let totalRevenue = 0;
+
+      filteredOrders.forEach((order) => {
+        const paidItems = getPaidItemsForOrder(order);
+        paidItems.forEach((item) => {
+          const existing = productMap.get(item.menuId);
+          if (existing) {
+            existing.quantity += item.quantity;
+            existing.revenue += item.subtotal;
+          } else {
+            productMap.set(item.menuId, {
+              menuId: item.menuId,
+              menuName: item.menuName,
+              quantity: item.quantity,
+              revenue: item.subtotal,
+            });
+          }
+          totalQuantity += item.quantity;
+          totalRevenue += item.subtotal;
+        });
+      });
+
+      const products = Array.from(productMap.values()).sort(
+        (a, b) => b.quantity - a.quantity
+      );
+
+      return {
+        products,
+        totalQuantity,
+        totalRevenue,
+      };
+    },
+    [orders, getDateRange]
+  );
 
   // Tüm verileri temizle
   const handleClearAll = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     if (!effectiveCompanyId) return;
 
     try {
       setIsClearing(true);
-      await clearAllStatistics(effectiveCompanyId, effectiveBranchId || undefined);
+      await clearAllStatistics(
+        effectiveCompanyId,
+        effectiveBranchId || undefined
+      );
       setShowClearConfirm(false);
       // State'i temizle - sayfayı yeniden yükleme
       setOrders([]);
@@ -429,6 +696,17 @@ function StatisticsContent() {
             Aylık
           </button>
           <button
+            onClick={() => setSelectedPeriod("yearly")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+              selectedPeriod === "yearly"
+                ? "bg-blue-600 text-white shadow-md"
+                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+            }`}
+          >
+            <Calendar className="h-4 w-4 inline mr-2" />
+            Yıllık
+          </button>
+          <button
             onClick={() => setSelectedPeriod("custom")}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               selectedPeriod === "custom"
@@ -475,7 +753,9 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Toplam Ciro</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                Toplam Ciro
+              </p>
               <p className="text-base font-bold text-blue-600 dark:text-blue-400 truncate">
                 ₺{stats.totalRevenue.toFixed(2)}
               </p>
@@ -486,8 +766,12 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Toplam Ürün</p>
-              <p className="text-base font-bold text-green-600 dark:text-green-400">{Math.round(stats.totalOrders)}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                Toplam Ürün
+              </p>
+              <p className="text-base font-bold text-green-600 dark:text-green-400">
+                {Math.round(stats.totalOrders)}
+              </p>
             </div>
             <Package className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
           </div>
@@ -495,7 +779,9 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Ortalama</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                Ortalama
+              </p>
               <p className="text-base font-bold text-purple-600 dark:text-purple-400 truncate">
                 ₺{stats.averageOrderValue.toFixed(2)}
               </p>
@@ -506,8 +792,12 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">İptal</p>
-              <p className="text-base font-bold text-red-600 dark:text-red-400">{Math.round(stats.cancelledOrders)}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                İptal
+              </p>
+              <p className="text-base font-bold text-red-600 dark:text-red-400">
+                {Math.round(stats.cancelledOrders)}
+              </p>
             </div>
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
           </div>
@@ -515,7 +805,9 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">İndirim</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                İndirim
+              </p>
               <p className="text-base font-bold text-orange-600 dark:text-orange-400 truncate">
                 ₺{stats.totalDiscount.toFixed(2)}
               </p>
@@ -526,7 +818,9 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Paket</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                Paket
+              </p>
               <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">
                 {Math.round(stats.totalCourierPackages)}
               </p>
@@ -553,8 +847,12 @@ function StatisticsContent() {
                 className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{method.methodName}</p>
-                  <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">{Math.round(method.count)}</span>
+                  <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
+                    {method.methodName}
+                  </p>
+                  <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">
+                    {Math.round(method.count)}
+                  </span>
                 </div>
                 <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                   ₺{method.total.toFixed(2)}
@@ -573,7 +871,9 @@ function StatisticsContent() {
       {/* Top Products */}
       {stats.topProducts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">En Çok Satılan Ürünler</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+            En Çok Satılan Ürünler
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
             {stats.topProducts.map((product, index) => (
               <div
@@ -585,12 +885,56 @@ function StatisticsContent() {
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-white text-xs truncate">{product.menuName}</p>
+                    <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
+                      {product.menuName}
+                    </p>
                     <p className="text-[10px] text-gray-600 dark:text-gray-400">
-                      {Math.round(product.quantity)}x • ₺{product.revenue.toFixed(2)}
+                      {Math.round(product.quantity)}x • ₺
+                      {product.revenue.toFixed(2)}
                     </p>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Waiter Statistics */}
+      {stats.waiterStats && stats.waiterStats.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Garson İstatistikleri
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {stats.waiterStats.map((waiter) => (
+              <div
+                key={waiter.waiterId}
+                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-gray-900 dark:text-white text-sm">
+                    {waiter.waiterName}
+                  </h3>
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                  {Math.round(waiter.totalQuantity)} ürün • ₺
+                  {waiter.totalRevenue.toFixed(2)}
+                </p>
+                <Button
+                  onClick={() => {
+                    setSelectedWaiter(waiter);
+                    setWaiterDetailPeriod("daily");
+                    setShowWaiterDetail(true);
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  Detay
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             ))}
           </div>
@@ -601,10 +945,145 @@ function StatisticsContent() {
       {orders.length === 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
           <BarChart3 className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-          <p className="text-gray-500 dark:text-gray-400">Henüz istatistik bulunmuyor</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            Henüz istatistik bulunmuyor
+          </p>
           <p className="text-sm mt-2 text-gray-400 dark:text-gray-500">
             Siparişler kapandıkça istatistikler burada görünecek
           </p>
+        </div>
+      )}
+
+      {/* Garson Detay Modalı */}
+      {showWaiterDetail && selectedWaiter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                {selectedWaiter.waiterName} - Detaylı İstatistikler
+              </h2>
+              <button
+                onClick={() => setShowWaiterDetail(false)}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Period Seçimi */}
+            <div className="mb-6">
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                <button
+                  onClick={() => setWaiterDetailPeriod("daily")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    waiterDetailPeriod === "daily"
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 inline mr-2" />
+                  Günlük
+                </button>
+                <button
+                  onClick={() => setWaiterDetailPeriod("weekly")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    waiterDetailPeriod === "weekly"
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 inline mr-2" />
+                  Haftalık
+                </button>
+                <button
+                  onClick={() => setWaiterDetailPeriod("monthly")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    waiterDetailPeriod === "monthly"
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 inline mr-2" />
+                  Aylık
+                </button>
+                <button
+                  onClick={() => setWaiterDetailPeriod("yearly")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    waiterDetailPeriod === "yearly"
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 inline mr-2" />
+                  Yıllık
+                </button>
+              </div>
+            </div>
+
+            {/* Detay İstatistikler */}
+            {(() => {
+              const detailStats = getWaiterDetailStats(
+                selectedWaiter.waiterId,
+                waiterDetailPeriod
+              );
+              return (
+                <>
+                  {/* Özet Bilgiler */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        Toplam Ürün
+                      </p>
+                      <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                        {Math.round(detailStats.totalQuantity)}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        Toplam Ciro
+                      </p>
+                      <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                        ₺{detailStats.totalRevenue.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Ürün Listesi */}
+                  {detailStats.products.length > 0 ? (
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
+                        Satılan Ürünler
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {detailStats.products.map((product) => (
+                          <div
+                            key={product.menuId}
+                            className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
+                          >
+                            <p className="font-medium text-gray-900 dark:text-white text-sm mb-1">
+                              {product.menuName}
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              {Math.round(product.quantity)}x • ₺
+                              {product.revenue.toFixed(2)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Package className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                      <p className="text-gray-500 dark:text-gray-400">
+                        Bu dönemde satış bulunmuyor
+                      </p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </div>
       )}
 
@@ -612,9 +1091,12 @@ function StatisticsContent() {
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Tüm Verileri Temizle</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Tüm Verileri Temizle
+            </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              Bu işlem tüm istatistik verilerini kalıcı olarak silecektir. Bu işlem geri alınamaz. Emin misiniz?
+              Bu işlem tüm istatistik verilerini kalıcı olarak silecektir. Bu
+              işlem geri alınamaz. Emin misiniz?
             </p>
             <div className="flex gap-3">
               <Button
