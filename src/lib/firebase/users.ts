@@ -56,13 +56,10 @@ export const createStaffUser = async (
   allowedIp: string
 ): Promise<{ userId: string; username: string; password: string }> => {
   try {
-    // Normalize username to lowercase for case-insensitive matching
-    const normalizedUsername = username.trim().toLowerCase();
-
-    // Check if username already exists (case-insensitive)
+    // Check if username already exists
     const existingUserQuery = query(
       collection(db, USERS_COLLECTION),
-      where("username", "==", normalizedUsername),
+      where("username", "==", username),
       where("companyId", "==", companyId)
     );
     const existingUserSnapshot = await getDocs(existingUserQuery);
@@ -76,14 +73,14 @@ export const createStaffUser = async (
 
     // Create user document
     const userData = {
-      email: `${normalizedUsername}@${companyId}.local`, // Placeholder email
-      displayName: displayName.trim(),
-      username: normalizedUsername, // Store as lowercase
+      email: `${username}@${companyId}.local`, // Placeholder email
+      displayName,
+      username,
       passwordHash,
       role: "staff" as const,
       companyId,
       assignedBranchId: branchId,
-      allowedIp: allowedIp.trim(), // İzin verilen IP adresi
+      allowedIp, // İzin verilen IP adresi
       isActive: true,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
@@ -93,7 +90,7 @@ export const createStaffUser = async (
 
     return {
       userId: docRef.id,
-      username: normalizedUsername,
+      username,
       password,
     };
   } catch (error) {

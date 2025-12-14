@@ -10,7 +10,6 @@ import {
   where,
   Timestamp,
   deleteField,
-  onSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Table, TableStats } from "./types";
@@ -83,7 +82,7 @@ export const getTablesByCompany = async (
       // Otherwise sort alphabetically
       return a.tableNumber.localeCompare(b.tableNumber, undefined, {
         numeric: true,
-        sensitivity: "base",
+        sensitivity: 'base'
       });
     });
   } catch (error) {
@@ -159,8 +158,7 @@ export const createDefaultTables = async (
     
     // Hızlı Satış masası var mı kontrol et
     const hasHizliSatisTable = uniqueTables.some(
-      (table) =>
-        table.area === "Hızlı Satış" && table.tableNumber === "Hızlı Satış"
+      (table) => table.area === "Hızlı Satış" && table.tableNumber === "Hızlı Satış"
     );
     
     // Paket masası yoksa oluştur
@@ -259,91 +257,3 @@ export const getTableStats = async (
   }
 };
 
-// Real-time listener for tables
-export const subscribeToTables = (
-  companyId: string,
-  branchId: string | undefined,
-  callback: (tables: Table[]) => void
-): (() => void) => {
-  try {
-    let q;
-    if (branchId) {
-      q = query(
-        collection(db, COLLECTION_NAME),
-        where("companyId", "==", companyId),
-        where("branchId", "==", branchId)
-      );
-    } else {
-      q = query(
-        collection(db, COLLECTION_NAME),
-        where("companyId", "==", companyId)
-      );
-    }
-
-    return onSnapshot(
-      q,
-      (querySnapshot) => {
-        const tables = querySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...convertTimestamp(doc.data()),
-            }) as Table
-        );
-
-        // Client-side sorting by tableNumber
-        const sortedTables = tables.sort((a, b) => {
-          const aNum = parseInt(a.tableNumber);
-          const bNum = parseInt(b.tableNumber);
-
-          if (!isNaN(aNum) && !isNaN(bNum)) {
-            return aNum - bNum;
-          }
-
-          return a.tableNumber.localeCompare(b.tableNumber, undefined, {
-            numeric: true,
-            sensitivity: "base",
-          });
-        });
-
-        callback(sortedTables);
-      },
-      (error) => {
-        console.error("Error in tables subscription:", error);
-      }
-    );
-  } catch (error) {
-    console.error("Error setting up tables subscription:", error);
-    return () => {};
-  }
-};
-
-// Real-time listener for a single table
-export const subscribeToTable = (
-  id: string,
-  callback: (table: Table | null) => void
-): (() => void) => {
-  try {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    return onSnapshot(
-      docRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          callback({
-            id: docSnap.id,
-            ...convertTimestamp(docSnap.data()),
-          } as Table);
-        } else {
-          callback(null);
-        }
-      },
-      (error) => {
-        console.error("Error in table subscription:", error);
-        callback(null);
-      }
-    );
-  } catch (error) {
-    console.error("Error setting up table subscription:", error);
-    return () => {};
-  }
-};

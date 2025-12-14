@@ -73,7 +73,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    strictPort: true,
+    strictPort: false,
   },
   base: "./", // Use relative paths for Electron
   build: {

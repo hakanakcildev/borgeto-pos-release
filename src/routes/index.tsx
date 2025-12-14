@@ -8,14 +8,12 @@ import {
   updateTableStatus,
   getTable,
   createDefaultTables,
-  subscribeToTables,
 } from "@/lib/firebase/tables";
 import {
   getOrdersByCompany,
   updateOrder,
   addOrder,
   updateOrderStatus,
-  subscribeToOrders,
 } from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
@@ -346,34 +344,76 @@ function TablesView() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    const loadData = async () => {
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
 
-    if (!effectiveCompanyId) {
-      setLoading(false);
-      return;
-    }
-
-    // İlk yükleme için default masaları oluştur
-    createDefaultTables(
-      effectiveCompanyId,
-      effectiveBranchId || undefined
-    ).catch(() => {});
-
-    // Real-time listener'ları kur
-    const unsubscribeTables = subscribeToTables(
-      effectiveCompanyId,
-      effectiveBranchId || undefined,
-      (tablesData) => {
-        const uniqueTables = removeDuplicateTables(tablesData);
-        setTables(uniqueTables);
+      if (!effectiveCompanyId) {
         setLoading(false);
+        return;
+      }
 
-        // İlk yüklemede alan seçimi
-        if (uniqueTables.length > 0 && !selectedArea) {
+      try {
+        // Standart masaları oluştur (yoksa)
+        await createDefaultTables(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ).catch(() => {
+          // Hata olsa bile devam et
+        });
+
+        const [tablesData, ordersData] = await Promise.all([
+          getTablesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => {
+            return [];
+          }),
+          getOrdersByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchId || undefined,
+          }).catch(() => {
+            return [];
+          }),
+        ]);
+
+        const activeOrdersData = ordersData.filter(
+          (order) => order.status === "active"
+        );
+        setActiveOrders(activeOrdersData);
+
+        const tablesToUpdate: Promise<void>[] = [];
+        tablesData.forEach((table) => {
+          if (table.status === "occupied") {
+            const hasActiveOrder = activeOrdersData.some(
+              (order) => order.tableId === table.id && order.status === "active"
+            );
+            if (!hasActiveOrder) {
+              tablesToUpdate.push(
+                updateTableStatus(table.id!, "available", undefined).catch(
+                  () => {}
+                )
+              );
+            }
+          }
+        });
+
+        if (tablesToUpdate.length > 0) {
+          await Promise.all(tablesToUpdate);
+          const updatedTables = await getTablesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          );
+          const uniqueTables = removeDuplicateTables(updatedTables);
+          setTables(uniqueTables);
+        } else {
+          const uniqueTables = removeDuplicateTables(tablesData);
+          setTables(uniqueTables);
+        }
+
+        if (tablesData.length > 0 && !selectedArea) {
           const areas = Array.from(
             new Set(
-              uniqueTables
+              tablesData
                 .map((t) => t.area)
                 .filter((area) => area && area.trim() !== "")
             )
@@ -382,32 +422,20 @@ function TablesView() {
             setSelectedArea(areas[0]);
           }
         }
+      } catch (error) {
+      } finally {
+        setLoading(false);
       }
-    );
-
-    const unsubscribeOrders = subscribeToOrders(
-      effectiveCompanyId,
-      {
-        branchId: effectiveBranchId || undefined,
-      },
-      (ordersData) => {
-        const activeOrdersData = ordersData.filter(
-          (order) => order.status === "active"
-        );
-        setActiveOrders(activeOrdersData);
-
-        // Masa durumlarını kontrol et ve güncelle
-        // Not: Bu işlem tables state'i güncellendiğinde otomatik olarak yapılacak
-        // Çünkü tables listener'ı zaten aktif
-      }
-    );
-
-    // Cleanup function
-    return () => {
-      unsubscribeTables();
-      unsubscribeOrders();
     };
-  }, [companyId, branchId, userData?.companyId, userData?.assignedBranchId]);
+
+    loadData();
+  }, [
+    companyId,
+    branchId,
+    userData?.companyId,
+    userData?.assignedBranchId,
+    selectedArea,
+  ]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {

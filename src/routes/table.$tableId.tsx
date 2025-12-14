@@ -6,7 +6,6 @@ import {
   updateTableStatus,
   getTablesByCompany,
   addTable,
-  subscribeToTable,
 } from "@/lib/firebase/tables";
 import {
   getOrder,
@@ -15,7 +14,6 @@ import {
   addPayment,
   updateOrderStatus,
   getOrdersByCompany,
-  subscribeToOrder,
 } from "@/lib/firebase/orders";
 import {
   getMenusByCompany,
@@ -329,6 +327,7 @@ function TableDetailContent() {
   );
 
   useEffect(() => {
+    const loadData = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
 
@@ -337,60 +336,60 @@ function TableDetailContent() {
         return;
       }
 
-    // İlk yükleme için gerekli verileri al
-    const loadInitialData = async () => {
       try {
         // Önce standart ödeme yöntemlerini oluştur (yoksa)
         await createDefaultPaymentMethods(
           effectiveCompanyId,
           effectiveBranchId || undefined
-        ).catch(() => {});
+        ).catch(() => {
+          // Error creating default payment methods
+        });
 
-        const [menusData, categoriesData, paymentMethodsData] =
-          await Promise.all([
+        const [
+          menusData,
+          categoriesData,
+          tableData,
+          allOrders,
+          paymentMethodsData,
+        ] = await Promise.all([
           getMenusByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
-            ).catch(() => []),
+          ).catch(() => {
+            return [];
+          }),
           getCategoriesByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
-            ).catch(() => []),
+          ).catch(() => {
+            return [];
+          }),
+          getTable(table.id!).catch(() => {
+            return null;
+          }),
+          getOrdersByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchId || undefined,
+          }).catch(() => {
+            return [];
+          }),
           getPaymentMethodsByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
-            ).catch(() => []),
+          ).catch(() => {
+            return [];
+          }),
         ]);
+
+        // Bu masa için sadece aktif siparişi bul
+        const orderData = allOrders.find(
+          (o) => o.tableId === table.id && o.status === "active"
+        );
 
         setMenus(menusData);
         setCategories(categoriesData);
-
-        // Aktif ödeme yöntemlerini filtrele ve yükle
-        const activePaymentMethods = paymentMethodsData.filter(
-          (pm) => pm.isActive
-        );
-        setPaymentMethods(activePaymentMethods);
-
-        // İlk ödeme yöntemini seç
-        if (activePaymentMethods.length > 0 && !paymentMethod) {
-          setPaymentMethod(activePaymentMethods[0].code);
+        if (tableData) {
+          setCurrentTable(tableData);
         }
-
-        // İlk kategoriyi seç
-        if (categoriesData.length > 0 && !selectedCategoryId) {
-          setSelectedCategoryId(categoriesData[0].id!);
-          setSelectedCategoryName(categoriesData[0].name);
-        }
-
-        // Kuryeleri yükle
-        try {
-          const couriersData = await getCouriersByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          );
-          const activeCouriers = couriersData.filter((c) => c.isActive);
-          setCouriers(activeCouriers);
-        } catch (error) {}
 
         // Yazıcıları yükle
         try {
@@ -410,64 +409,62 @@ function TableDetailContent() {
           }
         } catch (error) {}
 
-        setLoading(false);
-      } catch (error) {
-        setLoading(false);
-      }
-    };
+        // Aktif ödeme yöntemlerini filtrele ve yükle
+        const activePaymentMethods = paymentMethodsData.filter(
+          (pm) => pm.isActive
+        );
+        setPaymentMethods(activePaymentMethods);
 
-    loadInitialData();
-
-    let unsubscribeOrder: (() => void) | null = null;
-
-    // Real-time listener'ları kur
-    const unsubscribeTable = subscribeToTable(table.id!, (tableData) => {
-      if (tableData) {
-        setCurrentTable(tableData);
-
-        // Önceki order listener'ı temizle
-        if (unsubscribeOrder) {
-          unsubscribeOrder();
-          unsubscribeOrder = null;
+        // İlk ödeme yöntemini seç
+        if (activePaymentMethods.length > 0 && !paymentMethod) {
+          setPaymentMethod(activePaymentMethods[0].code);
         }
 
-        // Masa güncellendiğinde siparişi de kontrol et
-        if (tableData.currentOrderId) {
-          unsubscribeOrder = subscribeToOrder(
-            tableData.currentOrderId,
-            (orderData) => {
+        // Kuryeleri yükle
+        try {
+          const couriersData = await getCouriersByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          );
+          const activeCouriers = couriersData.filter((c) => c.isActive);
+          setCouriers(activeCouriers);
+        } catch (error) {
+          // Error loading couriers
+        }
+
+        // Sadece aktif sipariş varsa göster, yoksa temizle
         if (orderData && orderData.status === "active") {
           setOrder(orderData);
+          // Cart'ı temiz tut - sadece yeni eklenen ürünler cart'ta olacak
           setCart([]);
           setNotes("");
         } else {
+          // Aktif sipariş yoksa temizle
           setOrder(null);
           setCart([]);
           setNotes("");
         }
-            }
-          );
-        } else {
-          setOrder(null);
-          setCart([]);
-          setNotes("");
-        }
-      }
-    });
 
-    // Cleanup function
-    return () => {
-      unsubscribeTable();
-      if (unsubscribeOrder) {
-        unsubscribeOrder();
+        // İlk kategoriyi seç
+        if (categoriesData.length > 0 && !selectedCategoryId) {
+          setSelectedCategoryId(categoriesData[0].id!);
+          setSelectedCategoryName(categoriesData[0].name);
+        }
+      } catch (error) {
+        // Error loading data
+      } finally {
+        setLoading(false);
       }
     };
+
+    loadData();
   }, [
     companyId,
     branchId,
     userData?.companyId,
     userData?.assignedBranchId,
     table.id,
+    currentTable.currentOrderId,
   ]);
 
   // Seçili kategorinin ürünlerini filtrele

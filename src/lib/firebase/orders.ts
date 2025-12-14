@@ -9,16 +9,9 @@ import {
   query,
   where,
   Timestamp,
-  onSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type {
-  Order,
-  OrderItem,
-  OrderStatus,
-  PaymentStatus,
-  Payment,
-} from "./types";
+import type { Order, OrderItem, OrderStatus, PaymentStatus, Payment } from "./types";
 import { updateTableStatus } from "./tables";
 import { updateStatsOnOrderClose } from "./statistics";
 import { decreaseStockOnOrderClose } from "./stocks";
@@ -68,7 +61,7 @@ const convertToFirestore = (data: Partial<Order>) => {
     if (Array.isArray(obj)) {
       return obj.map(cleanData).filter((item) => item !== undefined);
     }
-    if (typeof obj === "object" && !(obj instanceof Date)) {
+    if (typeof obj === 'object' && !(obj instanceof Date)) {
       const cleaned: any = {};
       for (const [key, value] of Object.entries(obj)) {
         const cleanedValue = cleanData(value);
@@ -101,10 +94,7 @@ const convertToFirestore = (data: Partial<Order>) => {
   if (filteredData.payments && Array.isArray(filteredData.payments)) {
     firestoreData.payments = filteredData.payments.map((p: Payment) => ({
       ...p,
-      paidAt:
-        p.paidAt instanceof Date
-          ? Timestamp.fromDate(p.paidAt)
-          : Timestamp.now(),
+      paidAt: p.paidAt instanceof Date ? Timestamp.fromDate(p.paidAt) : Timestamp.now(),
     }));
   }
 
@@ -156,8 +146,7 @@ const convertToFirestore = (data: Partial<Order>) => {
 
   // CanceledItems array'indeki undefined değerleri temizle
   if (filteredData.canceledItems && Array.isArray(filteredData.canceledItems)) {
-    firestoreData.canceledItems = filteredData.canceledItems.map(
-      (item: OrderItem) => {
+    firestoreData.canceledItems = filteredData.canceledItems.map((item: OrderItem) => {
       const cleanedItem: any = {
         menuId: item.menuId,
         menuName: item.menuName,
@@ -179,19 +168,15 @@ const convertToFirestore = (data: Partial<Order>) => {
       if (item.canceledAt instanceof Date) {
         cleanedItem.canceledAt = Timestamp.fromDate(item.canceledAt);
       } else if (item.canceledAt) {
-          cleanedItem.canceledAt = Timestamp.fromDate(
-            new Date(item.canceledAt)
-          );
+        cleanedItem.canceledAt = Timestamp.fromDate(new Date(item.canceledAt));
       }
       return cleanedItem;
-      }
-    );
+    });
   }
 
   // MovedItems array'indeki undefined değerleri temizle
   if (filteredData.movedItems && Array.isArray(filteredData.movedItems)) {
-    firestoreData.movedItems = filteredData.movedItems.map(
-      (item: OrderItem) => {
+    firestoreData.movedItems = filteredData.movedItems.map((item: OrderItem) => {
       const cleanedItem: any = {
         menuId: item.menuId,
         menuName: item.menuName,
@@ -232,8 +217,7 @@ const convertToFirestore = (data: Partial<Order>) => {
         cleanedItem.movedFromTableNumber = item.movedFromTableNumber;
       }
       return cleanedItem;
-      }
-    );
+    });
   }
 
   return firestoreData;
@@ -242,14 +226,15 @@ const convertToFirestore = (data: Partial<Order>) => {
 // Generate order number
 const generateOrderNumber = (): string => {
   const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 10000)
-    .toString()
-    .padStart(4, "0");
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
   return `ORD-${year}-${random}`;
 };
 
 // Calculate order totals
-const calculateTotals = (items: OrderItem[], discount: number = 0) => {
+const calculateTotals = (
+  items: OrderItem[],
+  discount: number = 0
+) => {
   const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
   const total = subtotal - discount;
 
@@ -258,16 +243,7 @@ const calculateTotals = (items: OrderItem[], discount: number = 0) => {
 
 // Add new order
 export const addOrder = async (
-  order: Omit<
-    Order,
-    | "id"
-    | "orderNumber"
-    | "createdAt"
-    | "updatedAt"
-    | "subtotal"
-    | "tax"
-    | "total"
-  >
+  order: Omit<Order, "id" | "orderNumber" | "createdAt" | "updatedAt" | "subtotal" | "tax" | "total">
 ): Promise<string> => {
   try {
     // Generate order number
@@ -441,11 +417,7 @@ export const updateOrderStatus = async (
       
       // İstatistikleri güncelle (güncellenmiş order ile)
       const updatedOrder = { ...order, ...updates, closedAt: new Date() };
-      await updateStatsOnOrderClose(
-        order.companyId,
-        updatedOrder,
-        order.branchId
-      ).catch(() => {
+      await updateStatsOnOrderClose(order.companyId, updatedOrder, order.branchId).catch(() => {
         // İstatistik hatası sipariş kapatmayı engellemesin
       });
 
@@ -476,19 +448,12 @@ export const updateOrderStatus = async (
       
       // Tüm ödenen ürünleri stok düşümü için hazırla
       if (paidItemsMap.size > 0) {
-        const orderItems = Array.from(paidItemsMap.entries()).map(
-          ([menuId, quantity]) => ({
+        const orderItems = Array.from(paidItemsMap.entries()).map(([menuId, quantity]) => ({
           menuId,
           quantity,
-          })
-        );
+        }));
         
-        await decreaseStockOnOrderClose(
-          order.companyId,
-          orderItems,
-          order.branchId,
-          order.createdBy
-        ).catch(() => {
+        await decreaseStockOnOrderClose(order.companyId, orderItems, order.branchId, order.createdBy).catch(() => {
           // Stok hatası sipariş kapatmayı engellemesin
         });
       }
@@ -510,8 +475,7 @@ export const addPayment = async (
     if (!order) throw new Error("Order not found");
 
     const payments = order.payments || [];
-    const totalPaid =
-      payments.reduce((sum, p) => sum + p.amount, 0) + payment.amount;
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0) + payment.amount;
 
     let paymentStatus: PaymentStatus = "unpaid";
     if (totalPaid >= order.total) {
@@ -560,79 +524,3 @@ export const deleteOrder = async (id: string): Promise<void> => {
   }
 };
 
-// Real-time listener for orders
-export const subscribeToOrders = (
-  companyId: string,
-  options: {
-    branchId?: string;
-    status?: OrderStatus;
-  } = {},
-  callback: (orders: Order[]) => void
-): (() => void) => {
-  try {
-    let q = query(
-      collection(db, COLLECTION_NAME),
-      where("companyId", "==", companyId)
-    );
-
-    if (options.branchId) {
-      q = query(q, where("branchId", "==", options.branchId));
-    }
-
-    if (options.status) {
-      q = query(q, where("status", "==", options.status));
-    }
-
-    return onSnapshot(
-      q,
-      (querySnapshot) => {
-        const orders = querySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...convertTimestamp(doc.data()),
-            }) as Order
-        );
-
-        orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        callback(orders);
-      },
-      (error) => {
-        console.error("Error in orders subscription:", error);
-      }
-    );
-  } catch (error) {
-    console.error("Error setting up orders subscription:", error);
-    return () => {};
-  }
-};
-
-// Real-time listener for a single order
-export const subscribeToOrder = (
-  id: string,
-  callback: (order: Order | null) => void
-): (() => void) => {
-  try {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    return onSnapshot(
-      docRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          callback({
-            id: docSnap.id,
-            ...convertTimestamp(docSnap.data()),
-          } as Order);
-        } else {
-          callback(null);
-        }
-      },
-      (error) => {
-        console.error("Error in order subscription:", error);
-        callback(null);
-      }
-    );
-  } catch (error) {
-    console.error("Error setting up order subscription:", error);
-    return () => {};
-  }
-};
