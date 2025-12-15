@@ -318,6 +318,7 @@ function TablesView() {
   const [showActiveOnly, setShowActiveOnly] = useState<boolean>(
     activeOnly || false
   );
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // URL search params değiştiğinde state'i güncelle
   useEffect(() => {
@@ -410,7 +411,8 @@ function TablesView() {
           setTables(uniqueTables);
         }
 
-        if (tablesData.length > 0 && !selectedArea) {
+        // Sadece ilk yüklemede ve URL'de area yoksa ve selectedArea boşsa otomatik alan seç
+        if (isInitialLoad && tablesData.length > 0 && !selectedArea && !area) {
           const areas = Array.from(
             new Set(
               tablesData
@@ -421,6 +423,9 @@ function TablesView() {
           if (areas.length > 0) {
             setSelectedArea(areas[0]);
           }
+          setIsInitialLoad(false);
+        } else if (isInitialLoad) {
+          setIsInitialLoad(false);
         }
       } catch (error) {
       } finally {
@@ -434,7 +439,7 @@ function TablesView() {
     branchId,
     userData?.companyId,
     userData?.assignedBranchId,
-    selectedArea,
+    area,
   ]);
 
   useEffect(() => {
@@ -504,15 +509,34 @@ function TablesView() {
   }, [userData]);
 
   const removeDuplicateTables = (tables: Table[]): Table[] => {
-    const tableMap = new Map<string, Table>();
-
+    // Önce id bazlı duplicate kontrolü yap
+    const idMap = new Map<string, Table>();
     tables.forEach((table) => {
+      if (table.id) {
+        const existing = idMap.get(table.id);
+        if (!existing) {
+          idMap.set(table.id, table);
+        } else {
+          // Aynı id'ye sahip masalar varsa, daha yeni olanı al
+          const existingDate = existing.updatedAt || existing.createdAt;
+          const currentDate = table.updatedAt || table.createdAt;
+          if (currentDate > existingDate) {
+            idMap.set(table.id, table);
+          }
+        }
+      }
+    });
+
+    // Sonra area-tableNumber kombinasyonuna göre duplicate kontrolü yap
+    const tableMap = new Map<string, Table>();
+    Array.from(idMap.values()).forEach((table) => {
       const key = `${table.area}-${table.tableNumber}`;
       const existing = tableMap.get(key);
 
       if (!existing) {
         tableMap.set(key, table);
       } else {
+        // Aynı area-tableNumber kombinasyonuna sahip masalar varsa, daha yeni olanı al
         const existingDate = existing.updatedAt || existing.createdAt;
         const currentDate = table.updatedAt || table.createdAt;
 

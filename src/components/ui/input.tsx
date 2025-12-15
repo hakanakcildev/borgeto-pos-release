@@ -22,7 +22,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
-    const inputRef = React.useRef<HTMLInputElement>(null);
+    const inputRef = React.useRef<HTMLInputElement | null>(null);
     const { openKeyboard, closeKeyboard, isOpen } = useTouchKeyboard();
 
     // Ref callback ile hem internal hem external ref'i senkronize et
@@ -97,12 +97,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             // Touch event kontrolü - eğer son event touch ise klavyeyi aç
             const lastEventWasTouch = (window as any).__lastTouchEvent;
             if (lastEventWasTouch) {
-            // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
-            setTimeout(() => {
-              if (currentInput === document.activeElement) {
-                handleOpenKeyboard();
-              }
-            }, 50);
+              // Kısa bir gecikme ile klavyeyi aç (focus'un tamamlanması için)
+              setTimeout(() => {
+                if (currentInput === document.activeElement) {
+                  handleOpenKeyboard();
+                }
+              }, 50);
             }
           } else if (isOpen) {
             // Klavye zaten açıksa (örneğin klavye butonu ile açıldıysa), klavyeyi güncelle
@@ -190,9 +190,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
     // autoCapitalize: Login sayfası hariç tüm input'larda "sentences" (ilk harf büyük)
     // Eğer props'ta autoCapitalize belirtilmişse onu kullan, yoksa varsayılan olarak "sentences"
-    const autoCapitalizeValue = props.autoCapitalize !== undefined 
-      ? props.autoCapitalize 
-      : (type === "password" || type === "email" ? "none" : "sentences");
+    const autoCapitalizeValue =
+      props.autoCapitalize !== undefined
+        ? props.autoCapitalize
+        : type === "password" || type === "email"
+          ? "none"
+          : "sentences";
 
     return (
       <div className="relative w-full">

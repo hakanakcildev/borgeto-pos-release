@@ -5,32 +5,51 @@ import { getAuth } from "firebase/auth";
 
 // Firebase configuration - QR Menü sistemi ile aynı
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_APP_API_KEY || "demo-api-key",
+  apiKey:
+    import.meta.env.VITE_apiKey ||
+    import.meta.env.VITE_APP_API_KEY ||
+    "demo-api-key",
   authDomain:
-    import.meta.env.VITE_APP_AUTH_DOMAIN || "demo-project.firebaseapp.com",
-  projectId: import.meta.env.VITE_APP_PROJECT_ID || "demo-project",
+    import.meta.env.VITE_authDomain ||
+    import.meta.env.VITE_APP_AUTH_DOMAIN ||
+    "demo-project.firebaseapp.com",
+  projectId:
+    import.meta.env.VITE_projectID ||
+    import.meta.env.VITE_APP_PROJECT_ID ||
+    "demo-project",
   storageBucket:
-    import.meta.env.VITE_APP_STORAGE_BUCKET || "demo-project.appspot.com",
+    import.meta.env.VITE_storageBucket ||
+    import.meta.env.VITE_APP_STORAGE_BUCKET ||
+    "demo-project.appspot.com",
   messagingSenderId:
-    import.meta.env.VITE_APP_MESSAGING_SENDER_ID || "123456789",
-  appId: import.meta.env.VITE_APP_APP_ID || "1:123456789:web:demo",
-  measurementId: import.meta.env.VITE_APP_MEASUREMENT_ID || "G-DEMO",
+    import.meta.env.VITE_messagingSenderID ||
+    import.meta.env.VITE_APP_MESSAGING_SENDER_ID ||
+    "123456789",
+  appId:
+    import.meta.env.VITE_appID ||
+    import.meta.env.VITE_APP_APP_ID ||
+    "1:123456789:web:demo",
+  measurementId:
+    import.meta.env.VITE_measurementId ||
+    import.meta.env.VITE_APP_MEASUREMENT_ID ||
+    "G-DEMO",
 };
 
-// Environment kontrolü
-const requiredEnvVars = [
-  "VITE_APP_API_KEY",
-  "VITE_APP_AUTH_DOMAIN",
-  "VITE_APP_PROJECT_ID",
-  "VITE_APP_STORAGE_BUCKET",
-];
+// Yeni veya eski değişken isimlerinden en az birinin olması gerekiyor
+const hasApiKey =
+  import.meta.env.VITE_apiKey || import.meta.env.VITE_APP_API_KEY;
+const hasAuthDomain =
+  import.meta.env.VITE_authDomain || import.meta.env.VITE_APP_AUTH_DOMAIN;
+const hasProjectId =
+  import.meta.env.VITE_projectID || import.meta.env.VITE_APP_PROJECT_ID;
+const hasStorageBucket =
+  import.meta.env.VITE_storageBucket || import.meta.env.VITE_APP_STORAGE_BUCKET;
 
-const missingEnvVars = requiredEnvVars.filter(
-  (varName) => !import.meta.env[varName]
-);
-
-if (missingEnvVars.length > 0) {
+if (!hasApiKey || !hasAuthDomain || !hasProjectId || !hasStorageBucket) {
   // Firebase konfigürasyon hatası - eksik environment variables
+  console.warn(
+    "Firebase yapılandırması eksik. Lütfen .env dosyasını kontrol edin."
+  );
 }
 
 // Initialize Firebase
@@ -74,4 +93,3 @@ if (import.meta.env.DEV) {
 }
 
 export default app;
-

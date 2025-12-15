@@ -93,9 +93,10 @@ export const hasCompanyAccess = async (
   }
 };
 
-// Sign in with staff username and password
+// Sign in with manager username/email and password
+// Sadece users koleksiyonunu kontrol eder
 export const signInWithStaffCredentials = async (
-  username: string,
+  usernameOrEmail: string,
   password: string
 ): Promise<{
   user: User;
@@ -103,14 +104,34 @@ export const signInWithStaffCredentials = async (
   branchId?: string;
 }> => {
   try {
-    // Find user by username
-    const usersQuery = query(
-      collection(db, USERS_COLLECTION),
-      where("username", "==", username)
+    console.log(
+      "[signInWithStaffCredentials] Kullanıcı aranıyor:",
+      usernameOrEmail
     );
-    const usersSnapshot = await getDocs(usersQuery);
+
+    // Önce email ile ara (oms-borgeto-com'da manager'lar email ile kaydediliyor)
+    let usersSnapshot = await getDocs(
+      query(
+        collection(db, USERS_COLLECTION),
+        where("email", "==", usernameOrEmail)
+      )
+    );
+
+    // Email ile bulunamazsa username ile dene
+    if (usersSnapshot.empty) {
+      console.log(
+        "[signInWithStaffCredentials] Email ile bulunamadı, username ile deneniyor..."
+      );
+      usersSnapshot = await getDocs(
+        query(
+          collection(db, USERS_COLLECTION),
+          where("username", "==", usernameOrEmail)
+        )
+      );
+    }
 
     if (usersSnapshot.empty) {
+      console.error("[signInWithStaffCredentials] Kullanıcı bulunamadı");
       throw new Error("Geçersiz kullanıcı adı veya şifre");
     }
 
@@ -124,42 +145,58 @@ export const signInWithStaffCredentials = async (
       lastLoginAt: userData.lastLoginAt?.toDate(),
     } as User;
 
-    // Verify password
+    console.log(
+      "[signInWithStaffCredentials] Kullanıcı bulundu:",
+      user.id,
+      "Rol:",
+      user.role
+    );
+
+    // Sadece manager rolündeki kullanıcılar giriş yapabilir
+    if (user.role !== "manager") {
+      throw new Error("Sadece manager rolündeki kullanıcılar giriş yapabilir");
+    }
+
+    // Şifre kontrolü
     if (!user.passwordHash) {
+      console.error("[signInWithStaffCredentials] Şifre hash yok");
       throw new Error("Kullanıcı şifresi yapılandırılmamış");
     }
 
+    console.log("[signInWithStaffCredentials] Şifre doğrulanıyor...");
     const isValidPassword = await verifyPassword(password, user.passwordHash);
 
     if (!isValidPassword) {
+      console.error("[signInWithStaffCredentials] Şifre yanlış");
       throw new Error("Geçersiz kullanıcı adı veya şifre");
     }
 
-    // Check if user is active
-    if (!user.isActive) {
+    // Kullanıcı aktif mi kontrol et
+    if (user.isActive === false) {
       throw new Error("Kullanıcı hesabı aktif değil");
     }
 
-    // Check if user has company
+    // companyId kontrolü
     if (!user.companyId) {
+      console.error(
+        "[signInWithStaffCredentials] Kullanıcının companyId'si yok"
+      );
       throw new Error("Kullanıcının atanmış bir firması yok");
     }
 
-    // IP kontrolü (sadece staff kullanıcılar için)
-    if (user.role === "staff" && user.allowedIp) {
-      const { getLocalIP } = await import("../utils/ip");
-      const currentIP = await getLocalIP();
-
-      if (!currentIP || currentIP !== user.allowedIp) {
-        throw new Error(
-          `Bu cihazdan giriş yapılamaz. İzin verilen IP: ${user.allowedIp}, Mevcut IP: ${currentIP || "Bilinmiyor"}`
-        );
-      }
+    const companyIdString = String(user.companyId).trim();
+    if (!companyIdString) {
+      throw new Error("Kullanıcının atanmış bir firması yok");
     }
+
+    console.log(
+      "[signInWithStaffCredentials] Giriş başarılı, companyId:",
+      companyIdString
+    );
 
     return {
       user,
-      companyId: user.companyId,
+      companyId: companyIdString,
       branchId: user.assignedBranchId,
     };
   } catch (error) {
@@ -236,12 +273,7 @@ export const signInWithBranchCredentials = async (
   }
 };
 
-// Check if string is a valid email format
-const isValidEmail = (email: string): boolean => {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-};
-
-// Sign in with email/username and password (tries all methods)
+// Sign in with username and password (only manager role)
 export const signInWithCredentials = async (
   emailOrUsername: string,
   password: string
@@ -256,231 +288,66 @@ export const signInWithCredentials = async (
 }> => {
   const trimmedInput = emailOrUsername.trim();
 
-  // If input is a valid email, try Firebase Auth first
-  if (isValidEmail(trimmedInput)) {
-    try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        trimmedInput,
-        password
+  console.log("[signInWithCredentials] Başlangıç:", trimmedInput);
+
+  // Manager ve staff kullanıcılar Firebase Auth'da değil, önce Firestore'dan kontrol et
+  // Önce staff/manager credentials'ı dene (email veya username ile)
+  try {
+    console.log("[signInWithCredentials] Staff credentials deneniyor...");
+    const { user, companyId, branchId } = await signInWithStaffCredentials(
+      trimmedInput,
+      password
+    );
+    console.log(
+      "[signInWithCredentials] Staff credentials başarılı:",
+      user.role,
+      companyId
+    );
+
+    // Check POS access
+    console.log(
+      "[signInWithCredentials] Company bilgileri yükleniyor...",
+      companyId
+    );
+    const { getCompany } = await import("./companies");
+    const company = await getCompany(companyId);
+    if (!company) {
+      console.error("[signInWithCredentials] Company bulunamadı:", companyId);
+      console.error(
+        "[signInWithCredentials] Kullanıcı companyId:",
+        user.companyId
       );
-
-      const userData = await getCurrentUserData(userCredential.user.uid);
-      if (!userData || !userData.companyId) {
-        throw new Error("Kullanıcı bilgileri bulunamadı");
-      }
-
-      // Check POS access
-      const { getCompany } = await import("./companies");
-      const company = await getCompany(userData.companyId);
-      if (!company) {
-        throw new Error("Firma bilgileri bulunamadı");
-      }
-
-      // Check if company has POS access
-      if (company.hasPosAccess === false) {
-        throw new Error(
-          "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-        );
-      }
-
-      return {
-        type: "firebase",
-        firebaseUser: userCredential.user,
-        user: userData,
-        company: company,
-        companyId: userData.companyId,
-        branchId: userData.assignedBranchId,
-      };
-    } catch (firebaseError: any) {
-      // If Firebase Auth fails with user-not-found or wrong-password,
-      // it might be a staff user, so try staff credentials
-      if (
-        firebaseError.code === "auth/user-not-found" ||
-        firebaseError.code === "auth/wrong-password"
-      ) {
-        // Try staff credentials as fallback
-        try {
-          const { user, companyId, branchId } =
-            await signInWithStaffCredentials(trimmedInput, password);
-
-          // Check POS access
-          const { getCompany } = await import("./companies");
-          const company = await getCompany(companyId);
-          if (!company) {
-            throw new Error("Firma bilgileri bulunamadı");
-          }
-
-          // Check if company has POS access
-          if (company.hasPosAccess === false) {
-            throw new Error(
-              "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-            );
-          }
-
-          return {
-            type: "staff",
-            user,
-            company: company,
-            companyId,
-            branchId,
-          };
-        } catch (staffError) {
-          // If staff credentials fail, try branch credentials
-          try {
-            const { branch, company } = await signInWithBranchCredentials(
-              trimmedInput,
-              password
-            );
-
-            // Check if company has POS access
-            if (company.hasPosAccess === false) {
-              throw new Error(
-                "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-              );
-            }
-
-            return {
-              type: "branch",
-              branch,
-              company,
-              companyId: company.id!,
-              branchId: branch.id,
-            };
-          } catch (branchError) {
-            // If branch error is about POS access, throw it directly
-            if (
-              branchError instanceof Error &&
-              branchError.message.includes("POS Sistemine erişiminiz yok")
-            ) {
-              throw branchError;
-            }
-            throw new Error("Geçersiz kullanıcı adı veya şifre");
-          }
-        }
-      }
-      // For other Firebase errors (like invalid-email), try staff/branch credentials
-      try {
-        const { user, companyId, branchId } = await signInWithStaffCredentials(
-          trimmedInput,
-          password
-        );
-
-        // Check POS access
-        const { getCompany } = await import("./companies");
-        const company = await getCompany(companyId);
-        if (!company) {
-          throw new Error("Firma bilgileri bulunamadı");
-        }
-
-        // Check if company has POS access
-        if (company.hasPosAccess === false) {
-          throw new Error(
-            "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-          );
-        }
-
-        return {
-          type: "staff",
-          user,
-          company: company,
-          companyId,
-          branchId,
-        };
-      } catch (staffError) {
-        try {
-          const { branch, company } = await signInWithBranchCredentials(
-            trimmedInput,
-            password
-          );
-
-          // Check if company has POS access
-          if (company.hasPosAccess === false) {
-            throw new Error(
-              "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-            );
-          }
-
-          return {
-            type: "branch",
-            branch,
-            company,
-            companyId: company.id!,
-            branchId: branch.id,
-          };
-        } catch (branchError) {
-          // If branch error is about POS access, throw it directly
-          if (
-            branchError instanceof Error &&
-            branchError.message.includes("POS Sistemine erişiminiz yok")
-          ) {
-            throw branchError;
-          }
-          throw firebaseError;
-        }
-      }
-    }
-  } else {
-    // If input is not a valid email, try staff credentials first, then branch credentials
-    try {
-      const { user, companyId, branchId } = await signInWithStaffCredentials(
-        trimmedInput,
-        password
+      throw new Error(
+        `Firma bilgileri bulunamadı. Lütfen sistem yöneticinizle iletişime geçin. (Company ID: ${companyId})`
       );
-
-      // Check POS access
-      const { getCompany } = await import("./companies");
-      const company = await getCompany(companyId);
-      if (!company) {
-        throw new Error("Firma bilgileri bulunamadı");
-      }
-
-      // Check if company has POS access
-      if (company.hasPosAccess === false) {
-        throw new Error(
-          "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-        );
-      }
-
-      return {
-        type: "staff",
-        user,
-        company: company,
-        companyId,
-        branchId,
-      };
-    } catch (staffError) {
-      // If staff credentials fail, try branch credentials
-      try {
-        const { branch, company } = await signInWithBranchCredentials(
-          trimmedInput,
-          password
-        );
-
-        // Check if company has POS access
-        if (company.hasPosAccess === false) {
-          throw new Error(
-            "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
-          );
-        }
-
-        return {
-          type: "branch",
-          branch,
-          company,
-          companyId: company.id!,
-          branchId: branch.id,
-        };
-      } catch (branchError) {
-        // If branch error is about POS access, throw it directly
-        if (
-          branchError instanceof Error &&
-          branchError.message.includes("POS Sistemine erişiminiz yok")
-        ) {
-          throw branchError;
-        }
-        throw new Error("Geçersiz kullanıcı adı veya şifre");
-      }
     }
+
+    // Check if company has POS access
+    if (company.hasPosAccess === false) {
+      console.error("[signInWithCredentials] POS erişimi yok");
+      throw new Error(
+        "POS Sistemine erişiminiz yok. Lütfen QR Menü sistemini kullanın."
+      );
+    }
+
+    console.log("[signInWithCredentials] Giriş başarılı (staff)");
+    return {
+      type: "staff",
+      user,
+      company: company,
+      companyId,
+      branchId,
+    };
+  } catch (staffError) {
+    console.log(
+      "[signInWithCredentials] Manager credentials başarısız:",
+      staffError
+    );
+    // Manager credentials başarısız oldu, direkt hata fırlat
+    // Sadece manager rolündeki kullanıcılar giriş yapabilir
+    if (staffError instanceof Error) {
+      throw staffError;
+    }
+    throw new Error("Geçersiz kullanıcı adı veya şifre");
   }
 };

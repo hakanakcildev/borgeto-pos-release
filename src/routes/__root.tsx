@@ -1,4 +1,10 @@
-import { createRootRoute, Outlet, useLocation, useRouter, useNavigate } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  Outlet,
+  useLocation,
+  useRouter,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useEffect } from "react";
 import { NetworkStatus } from "@/components/NetworkStatus";
 import TouchKeyboard from "@/components/ui/TouchKeyboard";
@@ -58,39 +64,55 @@ function RootComponent() {
 
   // AGRES İF ROUTE KONTROLÜ - Her durumda doğru sayfaya yönlendir
   useEffect(() => {
-    // Auth yüklenene kadar bekle
-    if (authLoading) {
-      return;
+    try {
+      // Auth yüklenene kadar bekle
+      if (authLoading) {
+        return;
+      }
+
+      const isLoginPage =
+        location.pathname === "/auth/login" || location.pathname === "/auth";
+      const hasRouteMatch = router.state.matches.length > 0;
+
+      // Eğer kullanıcı giriş yapmışsa
+      if (isAuthenticated) {
+        // Login sayfasındaysa ANINDA ana sayfaya yönlendir
+        if (isLoginPage) {
+          navigate({
+            to: "/",
+            search: { area: undefined, activeOnly: false },
+            replace: true,
+          });
+          return;
+        }
+
+        // Route match YOKSA ANINDA ana sayfaya yönlendir
+        if (!hasRouteMatch) {
+          navigate({
+            to: "/",
+            search: { area: undefined, activeOnly: false },
+            replace: true,
+          });
+          return;
+        }
+      } else {
+        // Eğer kullanıcı giriş yapmamışsa
+        // Login sayfasında değilse ANINDA login'e yönlendir
+        if (!isLoginPage) {
+          navigate({ to: "/auth/login", replace: true });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Route kontrolü hatası:", error);
     }
-
-    const isLoginPage = location.pathname === "/auth/login" || location.pathname === "/auth";
-    const hasRouteMatch = router.state.matches.length > 0;
-
-
-    // Eğer kullanıcı giriş yapmışsa
-    if (isAuthenticated) {
-      // Login sayfasındaysa ANINDA ana sayfaya yönlendir
-      if (isLoginPage) {
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-        return;
-      }
-      
-      // Route match YOKSA ANINDA ana sayfaya yönlendir
-      if (!hasRouteMatch) {
-        navigate({ to: "/", search: { area: undefined, activeOnly: false }, replace: true });
-        return;
-      }
-      
-    } else {
-      // Eğer kullanıcı giriş yapmamışsa
-      // Login sayfasında değilse ANINDA login'e yönlendir
-      if (!isLoginPage) {
-        navigate({ to: "/auth/login", replace: true });
-        return;
-      }
-      
-    }
-  }, [authLoading, isAuthenticated, location.pathname, router.state.matches.length, navigate]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    location.pathname,
+    router.state.matches.length,
+    navigate,
+  ]);
 
   return (
     <>

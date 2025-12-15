@@ -20,8 +20,10 @@ const convertTimestamp = (data: any) => ({
 });
 
 // Get company by ID
+// Eğer companies collection'ında yoksa, users collection'ından admin kullanıcısını bul
 export const getCompany = async (id: string): Promise<Company | null> => {
   try {
+    // Önce companies collection'ından dene
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);
 
@@ -31,6 +33,72 @@ export const getCompany = async (id: string): Promise<Company | null> => {
         ...convertTimestamp(docSnap.data()),
       } as Company;
     }
+
+    // Eğer companies'de yoksa, users collection'ından admin kullanıcısını bul
+    // (oms-borgeto-com'da companyId, admin'in user ID'si veya companyId field'ı olabilir)
+    const usersQuery = query(
+      collection(db, "users"),
+      where("companyId", "==", id),
+      where("role", "==", "admin"),
+      limit(1)
+    );
+    const usersSnapshot = await getDocs(usersQuery);
+
+    if (!usersSnapshot.empty) {
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data();
+
+      // Admin kullanıcısından company bilgilerini oluştur
+      return {
+        id: id,
+        name: userData.companyName || userData.name || "",
+        slug: userData.companySlug || "",
+        logoUrl: userData.logoUrl || null,
+        phone: userData.phone || "",
+        website: userData.website || "",
+        address: userData.address || "",
+        taxNumber: userData.taxNumber || "",
+        email: userData.email || "",
+        ownerName: userData.name || "",
+        status: "active" as const,
+        price: 0,
+        hasPosAccess:
+          userData.packageType === "pos-qr" ||
+          userData.packageType === undefined, // Default true
+        createdAt: userData.createdAt?.toDate() || new Date(),
+        updatedAt: userData.updatedAt?.toDate() || new Date(),
+      } as Company;
+    }
+
+    // Fallback: Eğer companyId direkt user ID ise (eski sistem için)
+    const userDocRef = doc(db, "users", id);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (userDocSnap.exists()) {
+      const userData = userDocSnap.data();
+      if (userData.role === "admin") {
+        return {
+          id: id,
+          name: userData.companyName || userData.name || "",
+          slug: userData.companySlug || "",
+          logoUrl: userData.logoUrl || null,
+          phone: userData.phone || "",
+          website: userData.website || "",
+          address: userData.address || "",
+          taxNumber: userData.taxNumber || "",
+          email: userData.email || "",
+          ownerName: userData.name || "",
+          status: "active" as const,
+          price: 0,
+          hasPosAccess:
+            userData.packageType === "pos-qr" ||
+            userData.packageType === undefined,
+          createdAt: userData.createdAt?.toDate() || new Date(),
+          updatedAt: userData.updatedAt?.toDate() || new Date(),
+        } as Company;
+      }
+    }
+
     return null;
   } catch (error) {
     throw error;
@@ -61,4 +129,3 @@ export const getCompanyBySlug = async (
     throw error;
   }
 };
-

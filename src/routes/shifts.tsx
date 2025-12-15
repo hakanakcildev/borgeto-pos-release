@@ -39,7 +39,6 @@ import {
   Calendar,
   Users,
   Edit,
-  Settings,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { customAlert, customConfirm } from "@/components/ui/alert-dialog";
@@ -106,9 +105,7 @@ function ShiftManagementContent() {
     position: "",
   });
   const [showStoreHoursModal, setShowStoreHoursModal] = useState(false);
-  const [editingStoreHours, setEditingStoreHours] = useState<StoreHours | null>(
-    null
-  );
+  const [, setEditingStoreHours] = useState<StoreHours | null>(null);
   const [storeHoursForm, setStoreHoursForm] = useState({
     dayOfWeek: "monday" as DayOfWeek,
     openTime: "09:00",
@@ -274,78 +271,15 @@ function ShiftManagementContent() {
     }
   };
 
-  const handleSaveShift = async (
-    employeeId: string,
-    dayOfWeek: DayOfWeek,
-    startTime: string,
-    endTime: string,
-    isOffDay: boolean
-  ) => {
-    const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
-
-    if (!effectiveCompanyId || !effectiveBranchId) {
-      await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
-      return;
-    }
-
-    const employee = employees.find((e) => e.id === employeeId);
-    if (!employee) return;
-
-    try {
-      // Mevcut vardiyayı kontrol et
-      const existing = shiftSchedules.find(
-        (s) => s.employeeId === employeeId && s.dayOfWeek === dayOfWeek
-      );
-
-      if (existing) {
-        await updateShiftSchedule(existing.id!, {
-          startTime,
-          endTime,
-          isOffDay,
-          employeeName: employee.name,
-        });
-      } else {
-        await createShiftSchedule({
-          companyId: effectiveCompanyId,
-          branchId: effectiveBranchId,
-          employeeId,
-          employeeName: employee.name,
-          dayOfWeek,
-          startTime,
-          endTime,
-          isOffDay,
-        });
-      }
-      loadData();
-    } catch (error) {
-      console.error("Error saving shift:", error);
-      await customAlert(
-        "Vardiya kaydedilirken bir hata oluştu",
-        "Hata",
-        "error"
-      );
-    }
-  };
-
-  const handleDeleteShift = async (id: string) => {
-    const confirmed = await customConfirm(
-      "Bu vardiyayı silmek istediğinize emin misiniz?",
-      "Onay"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await deleteShiftSchedule(id);
-      await loadData();
-    } catch (error) {
-      console.error("Error deleting shift:", error);
-      await customAlert("Vardiya silinirken bir hata oluştu", "Hata", "error");
-    }
-  };
+  // TODO: Bu fonksiyonlar ileride kullanılacak
+  // const handleSaveShift = async (
+  //   employeeId: string,
+  //   dayOfWeek: DayOfWeek,
+  //   startTime: string,
+  //   endTime: string,
+  //   isOffDay: boolean
+  // ) => { ... };
+  // const handleDeleteShift = async (id: string) => { ... };
 
   const handleSaveEmployeeShifts = async (employeeId: string) => {
     const effectiveCompanyId = companyId || userData?.companyId;
@@ -446,6 +380,8 @@ function ShiftManagementContent() {
     }
   };
 
+  // TODO: Bu fonksiyon ileride kullanılacak
+  /*
   const handleCopyMondayToAllWeek = async (employeeId: string) => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
@@ -519,6 +455,7 @@ function ShiftManagementContent() {
       );
     }
   };
+  */
 
   const getShiftForEmployeeAndDay = (
     employeeId: string,
@@ -741,11 +678,11 @@ function ShiftManagementContent() {
                 </thead>
                 <tbody>
                   {employees.map((employee, empIndex) => {
-                    const mondayShift = getShiftForEmployeeAndDay(
-                      employee.id!,
-                      "monday"
-                    );
-                    const hasMondayShift = !!mondayShift;
+                    // const mondayShift = getShiftForEmployeeAndDay(
+                    //   employee.id!,
+                    //   "monday"
+                    // );
+                    // const hasMondayShift = !!mondayShift; // TODO: Kullanılacak
                     return (
                       <tr
                         key={employee.id}
@@ -962,11 +899,7 @@ function ShiftManagementContent() {
                   setEditingEmployee(null);
                   setEmployeeForm({
                     name: "",
-                    phone: "",
-                    email: "",
                     position: "",
-                    notes: "",
-                    isActive: true,
                   });
                 }}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
@@ -1438,7 +1371,7 @@ function ShiftCell({
   employee,
   day,
   shift,
-  storeHours,
+  storeHours: _storeHours, // Kullanılmıyor ama prop olarak geçiliyor
   shiftOptions,
   employeeShifts,
   setEmployeeShifts,

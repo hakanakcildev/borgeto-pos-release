@@ -8,6 +8,58 @@ import { promisify } from "util";
 import { writeFileSync, unlinkSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 
+// EN ÖNCE: stdout/stderr'i güvenli hale getir - console hatalarını önlemek için
+// Bu, tüm kod çalıştırmadan ÖNCE yapılmalı
+try {
+  // stdout'un write metodunu güvenli hale getir
+  if (process.stdout && typeof process.stdout.write === "function") {
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = function (chunk: any, encoding?: any, cb?: any): boolean {
+      try {
+        if (process.stdout.writable && !process.stdout.destroyed) {
+          return originalStdoutWrite(chunk, encoding, cb);
+        }
+        // Yazılamazsa callback'i çağır (varsa) ve true döndür
+        if (typeof cb === "function") {
+          cb(null);
+        }
+        return true;
+      } catch (error) {
+        // Hata oluşursa callback'i çağır (varsa) ve true döndür
+        if (typeof cb === "function") {
+          cb(error);
+        }
+        return true;
+      }
+    };
+  }
+
+  // stderr'in write metodunu güvenli hale getir
+  if (process.stderr && typeof process.stderr.write === "function") {
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = function (chunk: any, encoding?: any, cb?: any): boolean {
+      try {
+        if (process.stderr.writable && !process.stderr.destroyed) {
+          return originalStderrWrite(chunk, encoding, cb);
+        }
+        // Yazılamazsa callback'i çağır (varsa) ve true döndür
+        if (typeof cb === "function") {
+          cb(null);
+        }
+        return true;
+      } catch (error) {
+        // Hata oluşursa callback'i çağır (varsa) ve true döndür
+        if (typeof cb === "function") {
+          cb(error);
+        }
+        return true;
+      }
+    };
+  }
+} catch (error) {
+  // stdout/stderr override hatası - sessizce geç
+}
+
 const execAsync = promisify(exec);
 
 // ES Module compatibility for __dirname
@@ -15,6 +67,68 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+
+// Güvenli logging fonksiyonu - stdout/stderr hatalarını önler
+// Önce orijinal console'u sakla
+const originalConsole = {
+  log: console.log.bind(console),
+  error: console.error.bind(console),
+  warn: console.warn.bind(console),
+  info: console.info.bind(console),
+  debug: console.debug.bind(console),
+};
+
+function safeLog(...args: any[]): void {
+  try {
+    if (process.stdout && process.stdout.writable && !process.stdout.destroyed) {
+      originalConsole.log(...args);
+    }
+  } catch (error) {
+    // stdout'a yazma hatası - sessizce geç
+  }
+}
+
+function safeError(...args: any[]): void {
+  try {
+    if (process.stderr && process.stderr.writable && !process.stderr.destroyed) {
+      originalConsole.error(...args);
+    }
+  } catch (error) {
+    // stderr'a yazma hatası - sessizce geç
+  }
+}
+
+function safeWarn(...args: any[]): void {
+  try {
+    if (process.stderr && process.stderr.writable && !process.stderr.destroyed) {
+      originalConsole.warn(...args);
+    }
+  } catch (error) {
+    // stderr'a yazma hatası - sessizce geç
+  }
+}
+
+// Console'u güvenli hale getir - tüm console çağrıları güvenli olacak
+console.log = safeLog;
+console.error = safeError;
+console.warn = safeWarn;
+console.info = safeLog;
+console.debug = safeLog;
+
+// Uncaught exception handler'ları EN BAŞTA tanımla - process crash'lerini önlemek için
+// Bu handler'lar app.on("ready")'den ÖNCE tanımlanmalı
+process.on("uncaughtException", (error: Error) => {
+  safeError("❌ Uncaught Exception:", error);
+  safeError("- Message:", error.message);
+  safeError("- Stack:", error.stack);
+  // Process'i kapatma, sadece log'la (uygulama çalışmaya devam etsin)
+});
+
+process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
+  safeError("❌ Unhandled Rejection at:", promise);
+  safeError("- Reason:", reason);
+  // Process'i kapatma, sadece log'la (uygulama çalışmaya devam etsin)
+});
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -488,11 +602,11 @@ function registerIpcHandlers() {
         type?: "order" | "cancel" | "payment";
       }
     ) => {
-      console.log(
+      safeLog(
         `🖨️ Print request: ${data.type || "order"} to "${data.printerName}"`
       );
-      console.log(`📄 Content length: ${data.content.length} bytes`);
-      console.log(
+      safeLog(`📄 Content length: ${data.content.length} bytes`);
+      safeLog(
         `📄 Content preview (first 100 chars): ${data.content.substring(0, 100).replace(/[\x00-\x1F]/g, ".")}`
       );
 
@@ -503,13 +617,23 @@ function registerIpcHandlers() {
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
 
           // Düz metin olarak kaydet (UTF-8 with BOM)
-          writeFileSync(tempFile, "\uFEFF" + data.content, "utf-8");
-          console.log(`📁 Temp file created: ${tempFile}`);
+          try {
+            writeFileSync(tempFile, "\uFEFF" + data.content, "utf-8");
+            safeLog(`📁 Temp file created: ${tempFile}`);
+          } catch (writeError) {
+                safeError("❌ Error writing temp file:", writeError);
+            const errorMessage =
+              writeError instanceof Error ? writeError.message : String(writeError);
+            return {
+              success: false,
+              error: `Dosya yazma hatası: ${errorMessage}`,
+            };
+          }
 
           try {
             // Notepad /PT komutu ile yazdır (sessiz yazdırma)
             // /PT: Print to printer without dialog
-            console.log(
+            safeLog(
               `📤 Attempting to print via notepad to: ${data.printerName}`
             );
 
@@ -532,15 +656,63 @@ Write-Output "SUCCESS";`;
                 tmpdir(),
                 `print_script_${Date.now()}.ps1`
               );
-              writeFileSync(psScriptFile, psScript, "utf-8");
+              try {
+                writeFileSync(psScriptFile, psScript, "utf-8");
+              } catch (writeError) {
+                safeError("❌ Error writing PowerShell script:", writeError);
+                const errorMessage =
+                  writeError instanceof Error ? writeError.message : String(writeError);
+                // Temp dosyayı temizle
+                try {
+                  setTimeout(() => {
+                    try {
+                      unlinkSync(tempFile);
+                    } catch (e) {
+                      // Ignore
+                    }
+                  }, 2000);
+                } catch (e) {
+                  // Ignore
+                }
+                return {
+                  success: false,
+                  error: `Script dosyası yazma hatası: ${errorMessage}`,
+                };
+              }
 
-              const { stdout, stderr } = await execAsync(
-                `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptFile}"`,
-                { maxBuffer: 1024 * 1024, timeout: 30000 }
-              );
+              let stdout: string, stderr: string;
+              try {
+                const result = await execAsync(
+                  `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptFile}"`,
+                  { maxBuffer: 1024 * 1024, timeout: 30000 }
+                );
+                stdout = result.stdout;
+                stderr = result.stderr || "";
+              } catch (execError: any) {
+                safeError("❌ PowerShell execution error:", execError);
+                // Script ve temp dosyayı temizle
+                try {
+                  unlinkSync(psScriptFile);
+                  setTimeout(() => {
+                    try {
+                      unlinkSync(tempFile);
+                    } catch (e) {
+                      // Ignore
+                    }
+                  }, 2000);
+                } catch (e) {
+                  safeWarn("Could not delete files:", e);
+                }
+                const errorMessage =
+                  execError instanceof Error ? execError.message : String(execError);
+                return {
+                  success: false,
+                  error: `PowerShell hatası: ${errorMessage}`,
+                };
+              }
 
-              console.log(`📤 PowerShell stdout: ${stdout}`);
-              if (stderr) console.log(`⚠️ PowerShell stderr: ${stderr}`);
+              safeLog(`📤 PowerShell stdout: ${stdout}`);
+              if (stderr) safeLog(`⚠️ PowerShell stderr: ${stderr}`);
 
               // Script ve temp dosyayı temizle
               try {
@@ -557,12 +729,12 @@ Write-Output "SUCCESS";`;
                 console.warn("Could not delete files:", e);
               }
 
-              console.log(
+              safeLog(
                 `✅ Printed successfully to ${data.printerName} (notepad)`
               );
               return { success: true };
             } catch (notepadError) {
-              console.warn(
+              safeWarn(
                 "notepad command failed, trying alternative:",
                 notepadError
               );
@@ -609,15 +781,63 @@ try {
   exit 1;
 }`;
 
-              writeFileSync(psScriptFile, psScriptContent, "utf-8");
+              try {
+                writeFileSync(psScriptFile, psScriptContent, "utf-8");
+              } catch (writeError) {
+                safeError("❌ Error writing PowerShell script:", writeError);
+                const errorMessage =
+                  writeError instanceof Error ? writeError.message : String(writeError);
+                // Temp dosyayı temizle
+                try {
+                  setTimeout(() => {
+                    try {
+                      unlinkSync(tempFile);
+                    } catch (e) {
+                      // Ignore
+                    }
+                  }, 2000);
+                } catch (e) {
+                  // Ignore
+                }
+                return {
+                  success: false,
+                  error: `Script dosyası yazma hatası: ${errorMessage}`,
+                };
+              }
 
-              const { stdout, stderr } = await execAsync(
-                `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptFile}"`,
-                { maxBuffer: 1024 * 1024, timeout: 30000 }
-              );
+              let stdout: string, stderr: string;
+              try {
+                const result = await execAsync(
+                  `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptFile}"`,
+                  { maxBuffer: 1024 * 1024, timeout: 30000 }
+                );
+                stdout = result.stdout;
+                stderr = result.stderr || "";
+              } catch (execError: any) {
+                safeError("❌ PowerShell execution error:", execError);
+                // Script ve temp dosyayı temizle
+                try {
+                  unlinkSync(psScriptFile);
+                  setTimeout(() => {
+                    try {
+                      unlinkSync(tempFile);
+                    } catch (e) {
+                      // Ignore
+                    }
+                  }, 2000);
+                } catch (e) {
+                  safeWarn("Could not delete files:", e);
+                }
+                const errorMessage =
+                  execError instanceof Error ? execError.message : String(execError);
+                return {
+                  success: false,
+                  error: `PowerShell hatası: ${errorMessage}`,
+                };
+              }
 
-              console.log(`📤 PowerShell stdout: ${stdout}`);
-              if (stderr) console.log(`⚠️ PowerShell stderr: ${stderr}`);
+              safeLog(`📤 PowerShell stdout: ${stdout}`);
+              if (stderr) safeLog(`⚠️ PowerShell stderr: ${stderr}`);
 
               // Script dosyasını temizle
               try {
@@ -634,14 +854,17 @@ try {
               }
 
               if (stdout && stdout.includes("SUCCESS")) {
-                console.log(
+                safeLog(
                   `✅ Printed successfully to ${data.printerName} (Out-Printer)`
                 );
                 return { success: true };
               } else {
                 const errorMsg = stdout || stderr || "Print command failed";
-                console.error(`❌ Print failed: ${errorMsg}`);
-                throw new Error(errorMsg);
+                safeError(`❌ Print failed: ${errorMsg}`);
+                return {
+                  success: false,
+                  error: errorMsg,
+                };
               }
             }
           } catch (error) {
@@ -658,7 +881,7 @@ try {
               console.warn("Could not delete temp file:", e);
             }
 
-            console.error("❌ Print error:", error);
+            safeError("❌ Print error:", error);
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             throw new Error(`Print failed: ${errorMessage}`);
@@ -666,30 +889,76 @@ try {
         } else if (process.platform === "darwin") {
           // macOS için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
-          writeFileSync(tempFile, data.content, "utf-8");
+          try {
+            writeFileSync(tempFile, data.content, "utf-8");
+          } catch (writeError) {
+                safeError("❌ Error writing temp file:", writeError);
+            const errorMessage =
+              writeError instanceof Error ? writeError.message : String(writeError);
+            return {
+              success: false,
+              error: `Dosya yazma hatası: ${errorMessage}`,
+            };
+          }
 
           try {
             await execAsync(`lp -d "${data.printerName}" "${tempFile}"`);
-            unlinkSync(tempFile);
-            console.log(`✅ Printed successfully to ${data.printerName}`);
+            try {
+              unlinkSync(tempFile);
+            } catch (e) {
+              console.warn("Could not delete temp file:", e);
+            }
+            safeLog(`✅ Printed successfully to ${data.printerName}`);
             return { success: true };
           } catch (error) {
-            unlinkSync(tempFile);
-            throw error;
+            try {
+              unlinkSync(tempFile);
+            } catch (e) {
+              console.warn("Could not delete temp file:", e);
+            }
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            return {
+              success: false,
+              error: `Yazdırma hatası: ${errorMessage}`,
+            };
           }
         } else {
           // Linux için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
-          writeFileSync(tempFile, data.content, "utf-8");
+          try {
+            writeFileSync(tempFile, data.content, "utf-8");
+          } catch (writeError) {
+                safeError("❌ Error writing temp file:", writeError);
+            const errorMessage =
+              writeError instanceof Error ? writeError.message : String(writeError);
+            return {
+              success: false,
+              error: `Dosya yazma hatası: ${errorMessage}`,
+            };
+          }
 
           try {
             await execAsync(`lp -d "${data.printerName}" "${tempFile}"`);
-            unlinkSync(tempFile);
-            console.log(`✅ Printed successfully to ${data.printerName}`);
+            try {
+              unlinkSync(tempFile);
+            } catch (e) {
+              console.warn("Could not delete temp file:", e);
+            }
+            safeLog(`✅ Printed successfully to ${data.printerName}`);
             return { success: true };
           } catch (error) {
-            unlinkSync(tempFile);
-            throw error;
+            try {
+              unlinkSync(tempFile);
+            } catch (e) {
+              console.warn("Could not delete temp file:", e);
+            }
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            return {
+              success: false,
+              error: `Yazdırma hatası: ${errorMessage}`,
+            };
           }
         }
       } catch (error) {
@@ -828,6 +1097,37 @@ if (!isDev) {
 }
 
 const createWindow = (): void => {
+  // Eğer zaten bir window varsa, yeni window oluşturma
+  if (mainWindow) {
+    // Window zaten var, destroy edilmiş mi kontrol et
+    if (!mainWindow.isDestroyed()) {
+      // Window var ve destroy edilmemiş, sadece focus et
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+      return;
+    } else {
+      // Window destroy edilmiş, null yap
+      mainWindow = null;
+    }
+  }
+
+  // Tüm açık window'ları kontrol et (ekstra güvenlik)
+  const allWindows = BrowserWindow.getAllWindows();
+  if (allWindows.length > 0) {
+    // Zaten bir window var, onu kullan
+    const existingWindow = allWindows[0];
+    if (!existingWindow.isDestroyed()) {
+      mainWindow = existingWindow;
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+      return;
+    }
+  }
+
   // Create the browser window
   const preloadPath = join(__dirname, "preload.js");
   // Icon path - Windows için .ico, diğer platformlar için PNG
@@ -1144,20 +1444,44 @@ autoUpdater.on(
   }
 );
 
-// This method will be called when Electron has finished initialization
-app.on("ready", () => {
-  // Windows için app user model ID ayarla
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.borgeto.pos");
+// Single instance lock - uygulamanın sadece bir instance'ının çalışmasını sağla
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Eğer başka bir instance zaten çalışıyorsa, bu instance'ı kapat
+  app.quit();
+  process.exit(0);
+}
+
+// İkinci instance açıldığında (kullanıcı uygulamayı tekrar açtığında)
+app.on("second-instance", () => {
+  // Eğer window varsa, focus et
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.focus();
+  } else {
+    // Window yoksa yeni bir tane oluştur
+    createWindow();
   }
+});
 
-  // Register IPC handlers on app ready
-  registerIpcHandlers();
+// This method will be called when Electron has finished initialization
+// app.whenReady() kullan - app.on("ready") yerine (daha güvenli, tek sefer çalışır)
+app.whenReady().then(() => {
+    // Windows için app user model ID ayarla
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.borgeto.pos");
+    }
 
-  // Setup table history cleanup cron job
-  setupTableHistoryCleanupCron();
+    // Register IPC handlers on app ready
+    registerIpcHandlers();
 
-  createWindow();
+    // Setup table history cleanup cron job
+    setupTableHistoryCleanupCron();
+
+    createWindow();
 
   // Otomatik güncelleme kontrolü - production'da çalışır
   if (!isDev) {

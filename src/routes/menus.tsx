@@ -61,10 +61,12 @@ function MenuManagementContent() {
     isAvailable: true,
     extras: [] as MenuExtra[],
   });
-  
+
   // Extra form states
   const [showExtraForm, setShowExtraForm] = useState(false);
-  const [editingExtraIndex, setEditingExtraIndex] = useState<number | null>(null);
+  const [editingExtraIndex, setEditingExtraIndex] = useState<number | null>(
+    null
+  );
   const [extraForm, setExtraForm] = useState({
     name: "",
     price: "",
@@ -94,7 +96,7 @@ function MenuManagementContent() {
     const loadData = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) {
         setLoading(false);
         return;
@@ -102,14 +104,26 @@ function MenuManagementContent() {
 
       try {
         setLoading(true);
+        // Manager kullanıcısının ID'si (QR menü branchId'si olarak kullanılacak)
+        const managerUserId = userData?.id || undefined;
+
         const [menusData, categoriesData] = await Promise.all([
-          getAllMenusByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-          getAllCategoriesByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+          getAllMenusByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined,
+            managerUserId
+          ),
+          getAllCategoriesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined,
+            managerUserId
+          ),
         ]);
 
         setMenus(menusData);
         setCategories(categoriesData);
       } catch (error) {
+        console.error("Veri yükleme hatası:", error);
         customAlert("Veriler yüklenirken bir hata oluştu", "Hata", "error");
       } finally {
         setLoading(false);
@@ -188,13 +202,21 @@ function MenuManagementContent() {
 
   const handleEditMenu = (menu: Menu) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Sadece aynı şubeye ait ürünleri düzenleyebilir
-    if (effectiveBranchId && menu.branchId && menu.branchId !== effectiveBranchId) {
-      customAlert("Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini düzenleyebilirsiniz.", "Uyarı", "warning");
+    if (
+      effectiveBranchId &&
+      menu.branchId &&
+      menu.branchId !== effectiveBranchId
+    ) {
+      customAlert(
+        "Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini düzenleyebilirsiniz.",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     setEditingMenu(menu);
     setMenuForm({
       name: menu.name,
@@ -210,8 +232,13 @@ function MenuManagementContent() {
   const handleSaveMenu = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
-    if (!effectiveCompanyId || !menuForm.name || !menuForm.price || !menuForm.category) {
+
+    if (
+      !effectiveCompanyId ||
+      !menuForm.name ||
+      !menuForm.price ||
+      !menuForm.category
+    ) {
       customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
       return;
     }
@@ -241,9 +268,18 @@ function MenuManagementContent() {
       }
 
       // Reload data
+      const managerUserId = userData?.id || undefined;
       const [menusData, categoriesData] = await Promise.all([
-        getAllMenusByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        getAllCategoriesByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+        getAllMenusByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
+        getAllCategoriesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
       ]);
 
       setMenus(menusData);
@@ -279,14 +315,19 @@ function MenuManagementContent() {
 
   const handleSaveExtra = () => {
     if (!extraForm.name || !extraForm.price) {
-      customAlert("Lütfen ekstra malzeme adı ve fiyatını girin", "Uyarı", "warning");
+      customAlert(
+        "Lütfen ekstra malzeme adı ve fiyatını girin",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
 
     const newExtra: MenuExtra = {
-      id: editingExtraIndex !== null 
-        ? menuForm.extras[editingExtraIndex].id 
-        : `extra-${Date.now()}`,
+      id:
+        editingExtraIndex !== null
+          ? menuForm.extras[editingExtraIndex].id
+          : `extra-${Date.now()}`,
       name: extraForm.name,
       price: parseFloat(extraForm.price),
       isRequired: extraForm.isRequired,
@@ -311,24 +352,34 @@ function MenuManagementContent() {
 
   const handleDeleteMenu = async (menu: Menu) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Sadece aynı şubeye ait ürünleri silebilir
-    if (effectiveBranchId && menu.branchId && menu.branchId !== effectiveBranchId) {
-      customAlert("Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini silebilirsiniz.", "Uyarı", "warning");
+    if (
+      effectiveBranchId &&
+      menu.branchId &&
+      menu.branchId !== effectiveBranchId
+    ) {
+      customAlert(
+        "Bu ürün başka bir şubeye ait.\nSadece kendi şubenizin ürünlerini silebilirsiniz.",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     if (!confirm(`${menu.name} ürününü silmek istediğinize emin misiniz?`)) {
       return;
     }
 
     try {
       const effectiveCompanyId = companyId || userData?.companyId;
-      
+
       await deleteMenu(menu.id!);
+      const managerUserId = userData?.id || undefined;
       const menusData = await getAllMenusByCompany(
         effectiveCompanyId!,
-        effectiveBranchId || undefined
+        effectiveBranchId || undefined,
+        managerUserId
       );
       setMenus(menusData);
     } catch (error) {
@@ -350,13 +401,21 @@ function MenuManagementContent() {
 
   const handleEditCategory = (category: Category) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Sadece aynı şubeye ait kategorileri düzenleyebilir
-    if (effectiveBranchId && category.branchId && category.branchId !== effectiveBranchId) {
-      customAlert("Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini düzenleyebilirsiniz.", "Uyarı", "warning");
+    if (
+      effectiveBranchId &&
+      category.branchId &&
+      category.branchId !== effectiveBranchId
+    ) {
+      customAlert(
+        "Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini düzenleyebilirsiniz.",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     setEditingCategory(category);
     setCategoryForm({
       name: category.name,
@@ -370,7 +429,7 @@ function MenuManagementContent() {
   const handleSaveCategory = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     if (!effectiveCompanyId || !categoryForm.name) {
       customAlert("Lütfen kategori adını girin", "Uyarı", "warning");
       return;
@@ -399,9 +458,18 @@ function MenuManagementContent() {
       }
 
       // Reload data
+      const managerUserId = userData?.id || undefined;
       const [menusData, categoriesData] = await Promise.all([
-        getAllMenusByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        getAllCategoriesByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+        getAllMenusByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
+        getAllCategoriesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
       ]);
 
       setMenus(menusData);
@@ -416,7 +484,7 @@ function MenuManagementContent() {
   const handleBulkPriceUpdate = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     if (!effectiveCompanyId) {
       customAlert("Firma bilgisi bulunamadı", "Hata", "error");
       return;
@@ -429,15 +497,21 @@ function MenuManagementContent() {
     }
 
     if (bulkPriceForm.type === "percentage" && (value < -100 || value > 1000)) {
-      customAlert("Yüzde değeri -100 ile 1000 arasında olmalıdır", "Uyarı", "warning");
+      customAlert(
+        "Yüzde değeri -100 ile 1000 arasında olmalıdır",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
 
-    if (!confirm(
-      bulkPriceForm.type === "percentage"
-        ? `Tüm ürünlerin fiyatlarını %${value} oranında güncellemek istediğinize emin misiniz?`
-        : `Tüm ürünlerin fiyatlarına ₺${value} eklemek istediğinize emin misiniz?`
-    )) {
+    if (
+      !confirm(
+        bulkPriceForm.type === "percentage"
+          ? `Tüm ürünlerin fiyatlarını %${value} oranında güncellemek istediğinize emin misiniz?`
+          : `Tüm ürünlerin fiyatlarına ₺${value} eklemek istediğinize emin misiniz?`
+      )
+    ) {
       return;
     }
 
@@ -445,7 +519,11 @@ function MenuManagementContent() {
       setIsUpdatingPrices(true);
       const menusToUpdate = filteredMenus.filter((menu) => {
         // Sadece aynı şubeye ait ürünleri güncelle
-        if (effectiveBranchId && menu.branchId && menu.branchId !== effectiveBranchId) {
+        if (
+          effectiveBranchId &&
+          menu.branchId &&
+          menu.branchId !== effectiveBranchId
+        ) {
           return false;
         }
         return true;
@@ -460,7 +538,7 @@ function MenuManagementContent() {
       // Her ürünü güncelle
       const updatePromises = menusToUpdate.map(async (menu) => {
         let newPrice: number;
-        
+
         if (bulkPriceForm.type === "percentage") {
           newPrice = menu.price * (1 + value / 100);
         } else {
@@ -486,16 +564,29 @@ function MenuManagementContent() {
       await Promise.all(updatePromises);
 
       // Verileri yeniden yükle
+      const managerUserId = userData?.id || undefined;
       const [menusData, categoriesData] = await Promise.all([
-        getAllMenusByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        getAllCategoriesByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+        getAllMenusByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
+        getAllCategoriesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined,
+          managerUserId
+        ),
       ]);
 
       setMenus(menusData);
       setCategories(categoriesData);
       setShowBulkPriceForm(false);
       setBulkPriceForm({ type: "percentage", value: "" });
-      customAlert(`${menusToUpdate.length} ürünün fiyatı başarıyla güncellendi`, "Başarılı", "success");
+      customAlert(
+        `${menusToUpdate.length} ürünün fiyatı başarıyla güncellendi`,
+        "Başarılı",
+        "success"
+      );
     } catch (error) {
       customAlert("Fiyatlar güncellenirken bir hata oluştu", "Hata", "error");
     } finally {
@@ -505,13 +596,21 @@ function MenuManagementContent() {
 
   const handleDeleteCategory = async (category: Category) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Sadece aynı şubeye ait kategorileri silebilir
-    if (effectiveBranchId && category.branchId && category.branchId !== effectiveBranchId) {
-      customAlert("Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini silebilirsiniz.", "Uyarı", "warning");
+    if (
+      effectiveBranchId &&
+      category.branchId &&
+      category.branchId !== effectiveBranchId
+    ) {
+      customAlert(
+        "Bu kategori başka bir şubeye ait.\nSadece kendi şubenizin kategorilerini silebilirsiniz.",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     // Check if category has menus
     const categoryMenus = menus.filter((m) => m.category === category.name);
     if (categoryMenus.length > 0) {
@@ -523,17 +622,23 @@ function MenuManagementContent() {
       return;
     }
 
-    if (!confirm(`${category.name} kategorisini silmek istediğinize emin misiniz?`)) {
+    if (
+      !confirm(
+        `${category.name} kategorisini silmek istediğinize emin misiniz?`
+      )
+    ) {
       return;
     }
 
     try {
       const effectiveCompanyId = companyId || userData?.companyId;
-      
+
       await deleteCategory(category.id!);
+      const managerUserId = userData?.id || undefined;
       const categoriesData = await getAllCategoriesByCompany(
         effectiveCompanyId!,
-        effectiveBranchId || undefined
+        effectiveBranchId || undefined,
+        managerUserId
       );
       setCategories(categoriesData);
     } catch (error) {
@@ -608,24 +713,22 @@ function MenuManagementContent() {
             </div>
             <select
               value={selectedCategory || ""}
-              onChange={(e) =>
-                setSelectedCategory(e.target.value || null)
-              }
+              onChange={(e) => setSelectedCategory(e.target.value || null)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             >
-                  <option value="">Tüm Kategoriler</option>
-                  {displayCategories.map((cat) => (
-                    <option key={cat.id} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))}
+              <option value="">Tüm Kategoriler</option>
+              {displayCategories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
             </select>
             <Button onClick={handleAddMenu} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
               Ürün Ekle
             </Button>
-            <Button 
-              onClick={() => setShowBulkPriceForm(true)} 
+            <Button
+              onClick={() => setShowBulkPriceForm(true)}
               variant="outline"
               className="flex items-center gap-2"
             >
@@ -709,7 +812,10 @@ function MenuManagementContent() {
       {activeTab === "categories" && (
         <div>
           <div className="mb-4 flex justify-end">
-            <Button onClick={handleAddCategory} className="flex items-center gap-2">
+            <Button
+              onClick={handleAddCategory}
+              className="flex items-center gap-2"
+            >
               <Plus className="h-4 w-4" />
               Kategori Ekle
             </Button>
@@ -963,7 +1069,10 @@ function MenuManagementContent() {
                 >
                   İptal
                 </Button>
-                <Button onClick={handleSaveMenu} className="flex items-center gap-2">
+                <Button
+                  onClick={handleSaveMenu}
+                  className="flex items-center gap-2"
+                >
                   <Save className="h-4 w-4" />
                   Kaydet
                 </Button>
@@ -1154,7 +1263,10 @@ function MenuManagementContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {bulkPriceForm.type === "percentage" ? "Yüzde Değeri (%)" : "Miktar (₺)"} *
+                  {bulkPriceForm.type === "percentage"
+                    ? "Yüzde Değeri (%)"
+                    : "Miktar (₺)"}{" "}
+                  *
                 </label>
                 <Input
                   type="number"
@@ -1229,7 +1341,9 @@ function MenuManagementContent() {
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                {editingExtraIndex !== null ? "Ekstra Malzeme Düzenle" : "Yeni Ekstra Malzeme Ekle"}
+                {editingExtraIndex !== null
+                  ? "Ekstra Malzeme Düzenle"
+                  : "Yeni Ekstra Malzeme Ekle"}
               </h2>
               <button
                 onClick={() => {
@@ -1301,7 +1415,10 @@ function MenuManagementContent() {
                 >
                   İptal
                 </Button>
-                <Button onClick={handleSaveExtra} className="flex items-center gap-2">
+                <Button
+                  onClick={handleSaveExtra}
+                  className="flex items-center gap-2"
+                >
                   <Save className="h-4 w-4" />
                   Kaydet
                 </Button>
@@ -1313,4 +1430,3 @@ function MenuManagementContent() {
     </div>
   );
 }
-

@@ -70,6 +70,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    dedupe: ["react", "react-dom"],
+    conditions: ["development", "browser", "module", "import", "default"],
+    mainFields: ["module", "jsnext:main", "jsnext", "main"],
+  },
+  optimizeDeps: {
+    include: ["bcryptjs"],
+    exclude: ["electron"],
   },
   server: {
     port: 5173,
@@ -79,5 +86,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    commonjsOptions: {
+      include: [/bcryptjs/],
+      transformMixedEsModules: true,
+    },
+    rollupOptions: {
+      output: {
+        format: "es",
+      },
+    },
   },
 });

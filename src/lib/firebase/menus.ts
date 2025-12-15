@@ -15,6 +15,9 @@ import type { Menu, Category } from "./types";
 
 const MENUS_COLLECTION = "menus";
 const CATEGORIES_COLLECTION = "categories";
+const QR_MENUS_COLLECTION = "qrMenus";
+const MENU_CATEGORIES_COLLECTION = "menuCategories";
+const MENU_ITEMS_COLLECTION = "menuItems";
 
 // Convert Firestore timestamp to Date
 const convertTimestamp = (data: any) => ({
@@ -27,19 +30,20 @@ const convertTimestamp = (data: any) => ({
 const convertToFirestore = (data: any) => {
   const firestoreData: any = {
     ...data,
-    createdAt: data.createdAt instanceof Date 
-      ? Timestamp.fromDate(data.createdAt) 
-      : Timestamp.now(),
+    createdAt:
+      data.createdAt instanceof Date
+        ? Timestamp.fromDate(data.createdAt)
+        : Timestamp.now(),
     updatedAt: Timestamp.now(),
   };
-  
+
   // Remove undefined values
-  Object.keys(firestoreData).forEach(key => {
+  Object.keys(firestoreData).forEach((key) => {
     if (firestoreData[key] === undefined) {
       delete firestoreData[key];
     }
   });
-  
+
   return firestoreData;
 };
 
@@ -151,7 +155,8 @@ export const getCategoriesByCompany = async (
     // Remove duplicate categories by name (case-insensitive)
     const uniqueCategories = categories.reduce((acc, category) => {
       const existing = acc.find(
-        (c) => c.name.trim().toLowerCase() === category.name.trim().toLowerCase()
+        (c) =>
+          c.name.trim().toLowerCase() === category.name.trim().toLowerCase()
       );
       if (!existing) {
         acc.push(category);
@@ -175,31 +180,83 @@ export const getCategoriesByCompany = async (
 };
 
 // Get all categories (including inactive ones) for management
+// Önce QR menüden yükler, yoksa normal categories collection'ından yükler
 export const getAllCategoriesByCompany = async (
   companyId: string,
-  branchId?: string
+  branchId?: string,
+  managerUserId?: string
 ): Promise<Category[]> => {
   try {
-    let q = query(
-      collection(db, CATEGORIES_COLLECTION),
-      where("companyId", "==", companyId)
-    );
+    let categories: Category[] = [];
 
-    const querySnapshot = await getDocs(q);
+    // Önce QR menüden yüklemeyi dene (manager kullanıcısına atanmış QR menü varsa)
+    if (managerUserId) {
+      try {
+        // Manager kullanıcısına atanmış QR menüyü bul (branchId = managerUserId)
+        const qrMenusQuery = query(
+          collection(db, QR_MENUS_COLLECTION),
+          where("companyId", "==", companyId),
+          where("branchId", "==", managerUserId)
+        );
+        const qrMenusSnapshot = await getDocs(qrMenusQuery);
 
-    let categories = querySnapshot.docs.map(
-      (doc) =>
-        ({
-          id: doc.id,
-          ...convertTimestamp(doc.data()),
-        }) as Category
-    );
+        if (!qrMenusSnapshot.empty) {
+          const qrMenuDoc = qrMenusSnapshot.docs[0];
+          const qrMenuId = qrMenuDoc.id;
 
-    // Client-side filtering by branchId if provided
-    if (branchId) {
-      categories = categories.filter(
-        (cat) => !cat.branchId || cat.branchId === branchId
+          // QR menüye ait kategorileri yükle
+          const categoriesQuery = query(
+            collection(db, MENU_CATEGORIES_COLLECTION),
+            where("qrMenuId", "==", qrMenuId)
+          );
+          const categoriesSnapshot = await getDocs(categoriesQuery);
+
+          categories = categoriesSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.name || "",
+              description: data.description || "",
+              sortOrder: data.sortOrder || 0,
+              isActive: data.isActive !== false,
+              companyId: companyId,
+              branchId: branchId || managerUserId,
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date(),
+            } as Category;
+          });
+        }
+      } catch (qrError) {
+        console.warn(
+          "QR menü kategorileri yükleme hatası, normal categories collection'ından yükleniyor:",
+          qrError
+        );
+      }
+    }
+
+    // Eğer QR menüden veri yüklenmediyse, normal categories collection'ından yükle
+    if (categories.length === 0) {
+      let q = query(
+        collection(db, CATEGORIES_COLLECTION),
+        where("companyId", "==", companyId)
       );
+
+      const querySnapshot = await getDocs(q);
+
+      categories = querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...convertTimestamp(doc.data()),
+          }) as Category
+      );
+
+      // Client-side filtering by branchId if provided
+      if (branchId) {
+        categories = categories.filter(
+          (cat) => !cat.branchId || cat.branchId === branchId
+        );
+      }
     }
 
     // Remove duplicates by name (case-insensitive)
@@ -237,31 +294,101 @@ export const getAllCategoriesByCompany = async (
 };
 
 // Get all menus (including unavailable ones) for management
+// Önce QR menüden yükler, yoksa normal menus collection'ından yükler
 export const getAllMenusByCompany = async (
   companyId: string,
-  branchId?: string
+  branchId?: string,
+  managerUserId?: string
 ): Promise<Menu[]> => {
   try {
-    const q = query(
-      collection(db, MENUS_COLLECTION),
-      where("companyId", "==", companyId)
-    );
+    let menus: Menu[] = [];
 
-    const querySnapshot = await getDocs(q);
+    // Önce QR menüden yüklemeyi dene (manager kullanıcısına atanmış QR menü varsa)
+    if (managerUserId) {
+      try {
+        // Manager kullanıcısına atanmış QR menüyü bul (branchId = managerUserId)
+        const qrMenusQuery = query(
+          collection(db, QR_MENUS_COLLECTION),
+          where("companyId", "==", companyId),
+          where("branchId", "==", managerUserId)
+        );
+        const qrMenusSnapshot = await getDocs(qrMenusQuery);
 
-    let menus = querySnapshot.docs.map(
-      (doc) =>
-        ({
-          id: doc.id,
-          ...convertTimestamp(doc.data()),
-        }) as Menu
-    );
+        if (!qrMenusSnapshot.empty) {
+          const qrMenuDoc = qrMenusSnapshot.docs[0];
+          const qrMenuId = qrMenuDoc.id;
 
-    // Client-side filtering by branchId if provided
-    if (branchId) {
-      menus = menus.filter(
-        (menu) => !menu.branchId || menu.branchId === branchId
+          // QR menüye ait kategorileri yükle
+          const categoriesQuery = query(
+            collection(db, MENU_CATEGORIES_COLLECTION),
+            where("qrMenuId", "==", qrMenuId)
+          );
+          const categoriesSnapshot = await getDocs(categoriesQuery);
+          const categoryMap = new Map<string, string>(); // categoryId -> categoryName
+          categoriesSnapshot.forEach((doc) => {
+            const data = doc.data();
+            categoryMap.set(doc.id, data.name || "");
+          });
+
+          // QR menüye ait ürünleri yükle
+          const itemsQuery = query(
+            collection(db, MENU_ITEMS_COLLECTION),
+            where("qrMenuId", "==", qrMenuId)
+          );
+          const itemsSnapshot = await getDocs(itemsQuery);
+
+          menus = itemsSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            const categoryId = data.categoryId || "";
+            const categoryName =
+              categoryMap.get(categoryId) || data.categoryName || "";
+
+            return {
+              id: doc.id,
+              name: data.name || "",
+              description: data.description || "",
+              price: data.price || 0,
+              category: categoryName,
+              isAvailable: data.isAvailable !== false,
+              companyId: companyId,
+              branchId: branchId || managerUserId,
+              extras: data.extras || [],
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date(),
+            } as Menu;
+          });
+        }
+      } catch (qrError) {
+        console.warn(
+          "QR menü yükleme hatası, normal menus collection'ından yükleniyor:",
+          qrError
+        );
+      }
+    }
+
+    // Eğer QR menüden veri yüklenmediyse, normal menus collection'ından yükle
+    if (menus.length === 0) {
+      const q = query(
+        collection(db, MENUS_COLLECTION),
+        where("companyId", "==", companyId)
       );
+
+      const querySnapshot = await getDocs(q);
+
+      menus = querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...convertTimestamp(doc.data()),
+          }) as Menu
+      );
+
+      // Client-side filtering by branchId if provided
+      if (branchId) {
+        menus = menus.filter(
+          (menu) => !menu.branchId || menu.branchId === branchId
+        );
+      }
     }
 
     // Remove duplicates by name + category + price combination
@@ -392,4 +519,3 @@ export const deleteCategory = async (id: string): Promise<void> => {
     throw error;
   }
 };
-

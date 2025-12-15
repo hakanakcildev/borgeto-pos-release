@@ -232,7 +232,7 @@ function TableHistoryContent() {
             Masa Geçmişi
           </h1>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
-            Tüm adisyon geçmişini görüntüleyin
+          Tüm adisyon geçmişini görüntüleyin
           </p>
         </div>
         {bills.length > 0 && (

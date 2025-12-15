@@ -1,7 +1,6 @@
 import {
   collection,
   getDocs,
-  getDoc,
   doc,
   addDoc,
   updateDoc,
@@ -11,7 +10,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { ShiftSchedule, StoreHours, DayOfWeek } from "./types";
+import type { ShiftSchedule, StoreHours } from "./types";
 
 const SHIFTS_COLLECTION = "shiftSchedules";
 const STORE_HOURS_COLLECTION = "storeHours";
