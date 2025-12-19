@@ -16,8 +16,8 @@ import {
   getOrdersByCompany,
 } from "@/lib/firebase/orders";
 import {
-  getMenusByCompany,
-  getCategoriesByCompany,
+  getAllMenusByCompany,
+  getAllCategoriesByCompany,
 } from "@/lib/firebase/menus";
 import {
   getPaymentMethodsByCompany,
@@ -68,6 +68,7 @@ import {
   X,
   CreditCard,
   Check,
+  CheckCircle,
   Clock,
   Loader2,
   Utensils,
@@ -82,20 +83,41 @@ export const Route = createFileRoute("/table/$tableId")({
     return {
       area: (search.area as string) || undefined,
       activeOnly: search.activeOnly === "true" || search.activeOnly === true,
+      payment: (search.payment as string) || undefined,
     };
   },
-  loader: async ({ params }) => {
-    const table = await getTable(params.tableId);
-    if (!table) {
+  loader: async ({ params, context }) => {
+    try {
+      const table = await getTable(params.tableId);
+      if (!table) {
+        // Masa bulunamazsa ana sayfaya yönlendir (hata verme)
+        // Bu, ödeme işleminden sonra yönlendirme yapılırken route loader'ın çalışması durumunda olabilir
+        throw new Error("Table not found");
+      }
+      return { table };
+    } catch (error) {
+      console.error("Masa yüklenirken hata:", error);
+      // Eğer masa bulunamazsa, ana sayfaya yönlendir
+      // Bu, ödeme işleminden sonra yönlendirme yapılırken route loader'ın çalışması durumunda olabilir
       throw new Error("Table not found");
     }
-    return { table };
   },
 });
 
 function TableDetail() {
+  const { table } = Route.useLoaderData();
+  const search = Route.useSearch();
+
   return (
-    <POSLayout>
+    <POSLayout
+      backTo={{
+        path: "/",
+        search: {
+          area: search.area,
+          activeOnly: search.activeOnly,
+        },
+      }}
+    >
       <TableDetailContent />
     </POSLayout>
   );
@@ -141,6 +163,7 @@ function TableDetailContent() {
     return `${days} gün önce`;
   }, []);
   const [order, setOrder] = useState<Order | null>(null);
+  const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
@@ -171,6 +194,7 @@ function TableDetailContent() {
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showFullScreenPayment, setShowFullScreenPayment] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showCancelItemModal, setShowCancelItemModal] = useState(false);
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
@@ -181,19 +205,24 @@ function TableDetailContent() {
   const itemNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { openKeyboard } = useTouchKeyboard();
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<string>("cash");
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
     []
   );
+  const [appliedPayments, setAppliedPayments] = useState<
+    Array<{ method: string; methodName: string; amount: number; id: string }>
+  >([]);
   const [cancelItemOptions, setCancelItemOptions] = useState<
     Array<{ item: OrderItem; index: number }>
   >([]);
   const [discountType, setDiscountType] = useState<
-    "percentage" | "amount" | "manual"
+    "percentage" | "amount"
   >("percentage");
   const [discountValue, setDiscountValue] = useState<string>("");
-  const [manualDiscount, setManualDiscount] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set()); // Seçili ürün index'leri
+  const [selectedCartItems, setSelectedCartItems] = useState<Set<string>>(
+    new Set()
+  ); // Seçili cart item ID'leri
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [selectedCourierId, setSelectedCourierId] = useState<string>("");
   const [packageCount, setPackageCount] = useState<string>("1");
@@ -285,6 +314,9 @@ function TableDetailContent() {
   const [selectedCancelQuantities, setSelectedCancelQuantities] = useState<
     Map<string, number>
   >(new Map());
+  const [selectedItemsForCancel, setSelectedItemsForCancel] = useState<
+    Set<number>
+  >(new Set());
 
   // Taşıma için state'ler (ödeme gibi)
   const [pendingMoveItems, setPendingMoveItems] = useState<
@@ -326,6 +358,23 @@ function TableDetailContent() {
     null
   );
 
+  // Masa değiştiğinde sipariş state'ini hemen temizle - eski siparişlerin görünmesini engelle
+  useEffect(() => {
+    // Masa değiştiğinde hemen temizle
+    setOrder(null);
+    setCart([]);
+    setNotes("");
+    setSelectedItems(new Set());
+    setSelectedCartItems(new Set());
+    setPendingPaymentItems([]);
+    setPendingPaymentQuantity(null);
+    setSelectedQuantities(new Map());
+    setShowPaymentModal(false);
+    setPaymentAmount("");
+    setPaymentMethod("");
+    setAppliedPayments([]);
+  }, [table?.id]);
+
   useEffect(() => {
     const loadData = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
@@ -345,6 +394,9 @@ function TableDetailContent() {
           // Error creating default payment methods
         });
 
+        // Manager kullanıcısının ID'si (QR menü branchId'si olarak kullanılacak)
+        const managerUserId = userData?.id || undefined;
+
         const [
           menusData,
           categoriesData,
@@ -352,15 +404,17 @@ function TableDetailContent() {
           allOrders,
           paymentMethodsData,
         ] = await Promise.all([
-          getMenusByCompany(
+          getAllMenusByCompany(
             effectiveCompanyId,
-            effectiveBranchId || undefined
+            effectiveBranchId || undefined,
+            managerUserId
           ).catch(() => {
             return [];
           }),
-          getCategoriesByCompany(
+          getAllCategoriesByCompany(
             effectiveCompanyId,
-            effectiveBranchId || undefined
+            effectiveBranchId || undefined,
+            managerUserId
           ).catch(() => {
             return [];
           }),
@@ -385,8 +439,13 @@ function TableDetailContent() {
           (o) => o.tableId === table.id && o.status === "active"
         );
 
-        setMenus(menusData);
-        setCategories(categoriesData);
+        // Sadece müsait ürünleri göster
+        const availableMenus = menusData.filter((menu) => menu.isAvailable);
+        setMenus(availableMenus);
+
+        // Sadece aktif kategorileri göster
+        const activeCategories = categoriesData.filter((cat) => cat.isActive);
+        setCategories(activeCategories);
         if (tableData) {
           setCurrentTable(tableData);
         }
@@ -415,10 +474,7 @@ function TableDetailContent() {
         );
         setPaymentMethods(activePaymentMethods);
 
-        // İlk ödeme yöntemini seç
-        if (activePaymentMethods.length > 0 && !paymentMethod) {
-          setPaymentMethod(activePaymentMethods[0].code);
-        }
+        // Ödeme yöntemi otomatik seçilmeyecek, kullanıcı manuel seçecek
 
         // Kuryeleri yükle
         try {
@@ -446,16 +502,23 @@ function TableDetailContent() {
         }
 
         // İlk kategoriyi seç
-        if (categoriesData.length > 0 && !selectedCategoryId) {
-          setSelectedCategoryId(categoriesData[0].id!);
-          setSelectedCategoryName(categoriesData[0].name);
+        if (activeCategories.length > 0 && !selectedCategoryId) {
+          setSelectedCategoryId(activeCategories[0].id!);
+          setSelectedCategoryName(activeCategories[0].name);
         }
       } catch (error) {
-        // Error loading data
+        console.error("Error loading data:", error);
+        // Error loading data - still set loading to false
+        setLoading(false);
       } finally {
         setLoading(false);
       }
     };
+
+    if (!table?.id) {
+      setLoading(false);
+      return;
+    }
 
     loadData();
   }, [
@@ -463,9 +526,104 @@ function TableDetailContent() {
     branchId,
     userData?.companyId,
     userData?.assignedBranchId,
-    table.id,
-    currentTable.currentOrderId,
+    userData?.id,
+    table?.id,
+    // order?.id kaldırıldı - masa değiştiğinde sipariş state'i zaten temizleniyor
   ]);
+
+  // Ödeme modalı açıldığında tüm ürünleri göster
+  // NOT: Eğer pendingPaymentItems zaten doluysa (seçili ürünler varsa), yeniden oluşturma
+  useEffect(() => {
+    if (showPaymentModal && order && order.items.length > 0) {
+      // Eğer pendingPaymentItems zaten doluysa ve seçili ürünler varsa, koru
+      // (indirim uygulandıktan sonra seçili ürünlerin korunması için)
+      if (pendingPaymentItems.length > 0) {
+        // Seçili ürünler var, sadece index'leri güncelle (order değişmiş olabilir)
+        const updatedPendingItems = pendingPaymentItems.map(pendingItem => {
+          // Yeni order'da aynı menuId'ye sahip ürünlerin index'lerini bul
+          const newIndices: number[] = [];
+          order.items.forEach((item, index) => {
+            if (item.menuId === pendingItem.menuId) {
+              newIndices.push(index);
+            }
+          });
+          
+          // Toplam miktarı hesapla
+          const totalQuantity = order.items
+            .filter(item => item.menuId === pendingItem.menuId)
+            .reduce((sum, item) => sum + item.quantity, 0);
+          
+          return {
+            ...pendingItem,
+            totalQuantity,
+            indices: newIndices,
+            menuPrice: order.items.find(item => item.menuId === pendingItem.menuId)?.menuPrice || pendingItem.menuPrice,
+          };
+        }).filter(item => item.indices.length > 0); // Sadece hala order'da olan ürünleri tut
+        
+        setPendingPaymentItems(updatedPendingItems);
+        return; // Seçili ürünler korunuyor, çık
+      }
+      
+      // Tüm ürünleri menuId'ye göre grupla (seçili ürün yoksa)
+      const groupedItems = new Map<
+        string,
+        {
+          menuName: string;
+          totalQuantity: number;
+          menuPrice: number;
+          indices: number[];
+        }
+      >();
+
+      order.items.forEach((item, index) => {
+        const existing = groupedItems.get(item.menuId);
+        if (existing) {
+          existing.totalQuantity += item.quantity;
+          existing.indices.push(index);
+        } else {
+          groupedItems.set(item.menuId, {
+            menuName: item.menuName,
+            totalQuantity: item.quantity,
+            menuPrice: item.menuPrice,
+            indices: [index],
+          });
+        }
+      });
+
+      // pendingPaymentItems'ı güncelle (tüm ürünler)
+      const newPendingItems = Array.from(groupedItems.values());
+      setPendingPaymentItems(newPendingItems);
+
+      // Mevcut selectedQuantities'yi koru, yeni ürünler için 0 başlat
+      setSelectedQuantities((prev) => {
+        const newMap = new Map(prev);
+        newPendingItems.forEach((item) => {
+          if (!newMap.has(item.menuId)) {
+            newMap.set(item.menuId, 0); // Başlangıçta seçili miktar 0
+          }
+        });
+        return newMap;
+      });
+    } else if (showPaymentModal) {
+      // Sipariş yoksa temizle
+      setPendingPaymentItems([]);
+      setSelectedQuantities(new Map());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPaymentModal, order?.id, order?.items?.length]);
+
+  // URL'den ödeme modalı durumunu kontrol et
+  useEffect(() => {
+    if (
+      search.payment === "true" &&
+      order &&
+      order.items &&
+      order.items.length > 0
+    ) {
+      setShowPaymentModal(true);
+    }
+  }, [search.payment, order]);
 
   // Seçili kategorinin ürünlerini filtrele
   // menu.category alanı kategori adını (name) tutuyor, ID değil
@@ -517,40 +675,51 @@ function TableDetailContent() {
   );
 
   // Ürün ekleme butonuna tıklandığında ekstra malzeme kontrolü yap
-  const handleAddToCart = useCallback((menu: Menu) => {
-    // Eğer üründe ekstra malzeme varsa modal göster
-    if (menu.extras && menu.extras.length > 0) {
-      setSelectedMenuForExtra(menu);
-      // Zorunlu ekstraları otomatik seç
-      const requiredExtras = new Set(
-        menu.extras.filter((extra) => extra.isRequired).map((extra) => extra.id)
-      );
-      setSelectedExtras(requiredExtras);
-      setShowExtraModal(true);
-    } else {
-      // Ekstra malzeme yoksa direkt sepete ekle
-      setCart((prev) => {
-        const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
-        return [
-          ...prev,
-          {
-            cartItemId,
-            menuId: menu.id!,
-            menuName: menu.name,
-            menuPrice: menu.price,
-            quantity: 1,
-            subtotal: menu.price,
-            addedAt: new Date(),
-          },
-        ];
-      });
-      setShowCart(true);
-    }
-  }, []);
+  const handleAddToCart = useCallback(
+    (menu: Menu) => {
+      // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
+      if (isRefreshingOrder) return;
+
+      // Eğer üründe ekstra malzeme varsa modal göster
+      if (menu.extras && menu.extras.length > 0) {
+        setSelectedMenuForExtra(menu);
+        // Zorunlu ekstraları otomatik seç
+        const requiredExtras = new Set(
+          menu.extras
+            .filter((extra) => extra.isRequired)
+            .map((extra) => extra.id)
+        );
+        setSelectedExtras(requiredExtras);
+        setShowExtraModal(true);
+      } else {
+        // Ekstra malzeme yoksa direkt sepete ekle
+        setCart((prev) => {
+          const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
+          return [
+            ...prev,
+            {
+              cartItemId,
+              menuId: menu.id!,
+              menuName: menu.name,
+              menuPrice: menu.price,
+              quantity: 1,
+              subtotal: menu.price,
+              addedAt: new Date(),
+            },
+          ];
+        });
+        setShowCart(true);
+      }
+    },
+    [isRefreshingOrder]
+  );
 
   // Ekstra malzemeleri seçip sepete ekle
   const handleAddToCartWithExtras = useCallback(() => {
     if (!selectedMenuForExtra) return;
+
+    // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
+    if (isRefreshingOrder) return;
 
     const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
       .map((extraId) => {
@@ -596,7 +765,7 @@ function TableDetailContent() {
     setSelectedMenuForExtra(null);
     setSelectedExtras(new Set());
     setShowCart(true);
-  }, [selectedMenuForExtra, selectedExtras]);
+  }, [selectedMenuForExtra, selectedExtras, isRefreshingOrder]);
 
   // Long press başlat (miktar girme modalı için)
   const handleLongPressStart = useCallback((menu: Menu) => {
@@ -721,6 +890,207 @@ function TableDetailContent() {
     setCart((prev) => prev.filter((item) => item.cartItemId !== cartItemId));
   }, []);
 
+  // Cart içindeki ürünler için miktar artırma
+  const increaseCartItemQuantity = useCallback((menuId: string) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.menuId === menuId) {
+          const newQuantity = item.quantity + 1;
+          return {
+            ...item,
+            quantity: newQuantity,
+            subtotal: newQuantity * item.menuPrice,
+          };
+        }
+        return item;
+      })
+    );
+  }, []);
+
+  // Cart içindeki ürünler için miktar azaltma
+  const decreaseCartItemQuantity = useCallback((menuId: string) => {
+    setCart((prev) =>
+      prev
+        .map((item) => {
+          if (item.menuId === menuId) {
+            const newQuantity = Math.max(1, item.quantity - 1);
+            return {
+              ...item,
+              quantity: newQuantity,
+              subtotal: newQuantity * item.menuPrice,
+            };
+          }
+          return item;
+        })
+        .filter((item) => {
+          // Miktarı 0 olan ürünleri kaldır
+          if (item.menuId === menuId) {
+            return item.quantity > 0;
+          }
+          return true;
+        })
+    );
+  }, []);
+
+  // Cart içindeki ürünleri silme
+  const removeCartItem = useCallback((menuId: string) => {
+    setCart((prev) => prev.filter((item) => item.menuId !== menuId));
+  }, []);
+
+  // Gönderilmemiş ürünler için miktar artırma
+  const increaseUnsentItemQuantity = useCallback(
+    async (menuId: string) => {
+      if (!order) return;
+
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+      // Gönderilmemiş ürünleri bul (sentItems içinde olmayan)
+      const unsentItems = order.items.filter(
+        (item) => !item.canceledAt && !order.sentItems?.includes(item.menuId)
+      );
+
+      // İlgili ürünü bul ve miktarını artır
+      const updatedItems = order.items.map((item) => {
+        if (
+          item.menuId === menuId &&
+          !item.canceledAt &&
+          !order.sentItems?.includes(item.menuId)
+        ) {
+          const newQuantity = item.quantity + 1;
+          return {
+            ...item,
+            quantity: newQuantity,
+            subtotal: newQuantity * item.menuPrice,
+          };
+        }
+        return item;
+      });
+
+      // Toplam hesapla
+      const subtotal = updatedItems.reduce(
+        (sum, item) => sum + item.subtotal,
+        0
+      );
+      const total = subtotal - (order.discount || 0);
+
+      // Firebase'e kaydet
+      await updateOrder(order.id!, {
+        items: updatedItems,
+        subtotal: subtotal,
+        total: total,
+      });
+
+      // Order'ı güncelle
+      const updatedOrder = await getOrder(order.id!);
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+    },
+    [order, companyId, userData, branchId]
+  );
+
+  // Gönderilmemiş ürünler için miktar azaltma
+  const decreaseUnsentItemQuantity = useCallback(
+    async (menuId: string) => {
+      if (!order) return;
+
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+      // İlgili ürünü bul ve miktarını azalt
+      const updatedItems = order.items
+        .map((item) => {
+          if (
+            item.menuId === menuId &&
+            !item.canceledAt &&
+            !order.sentItems?.includes(item.menuId)
+          ) {
+            const newQuantity = Math.max(1, item.quantity - 1);
+            return {
+              ...item,
+              quantity: newQuantity,
+              subtotal: newQuantity * item.menuPrice,
+            };
+          }
+          return item;
+        })
+        .filter((item) => {
+          // Miktarı 0 olan gönderilmemiş ürünleri kaldır
+          if (
+            item.menuId === menuId &&
+            !item.canceledAt &&
+            !order.sentItems?.includes(item.menuId)
+          ) {
+            return item.quantity > 0;
+          }
+          return true;
+        });
+
+      // Toplam hesapla
+      const subtotal = updatedItems.reduce(
+        (sum, item) => sum + item.subtotal,
+        0
+      );
+      const total = subtotal - (order.discount || 0);
+
+      // Firebase'e kaydet
+      await updateOrder(order.id!, {
+        items: updatedItems,
+        subtotal: subtotal,
+        total: total,
+      });
+
+      // Order'ı güncelle
+      const updatedOrder = await getOrder(order.id!);
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+    },
+    [order, companyId, userData, branchId]
+  );
+
+  // Gönderilmemiş ürünleri silme
+  const removeUnsentItem = useCallback(
+    async (menuId: string) => {
+      if (!order) return;
+
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+      // İlgili gönderilmemiş ürünleri kaldır
+      const updatedItems = order.items.filter(
+        (item) =>
+          !(
+            item.menuId === menuId &&
+            !item.canceledAt &&
+            !order.sentItems?.includes(item.menuId)
+          )
+      );
+
+      // Toplam hesapla
+      const subtotal = updatedItems.reduce(
+        (sum, item) => sum + item.subtotal,
+        0
+      );
+      const total = subtotal - (order.discount || 0);
+
+      // Firebase'e kaydet
+      await updateOrder(order.id!, {
+        items: updatedItems,
+        subtotal: subtotal,
+        total: total,
+      });
+
+      // Order'ı güncelle
+      const updatedOrder = await getOrder(order.id!);
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+    },
+    [order, companyId, userData, branchId]
+  );
+
   // Toplam hesapla
   const cartTotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -733,8 +1103,18 @@ function TableDetailContent() {
 
     setIsSendingOrder(true);
     try {
-      // Mevcut siparişin items'ını al (varsa)
-      const existingItems = order?.items || [];
+      // Mevcut siparişin items'ını al (varsa) - güncel order'ı al
+      let currentOrder = order;
+      if (order?.id) {
+        // Güncel order'ı al (ödemelerden sonra güncellenmiş olabilir)
+        try {
+          currentOrder = await getOrder(order.id);
+        } catch (error) {
+          // Hata durumunda mevcut order'ı kullan
+          currentOrder = order;
+        }
+      }
+      const existingItems = currentOrder?.items || [];
 
       // Tüm ürünleri birleştir (mevcut + yeni) - menuId'ye göre birleştir
       const itemMap = new Map<string, OrderItem>();
@@ -790,17 +1170,17 @@ function TableDetailContent() {
 
       // Toplam hesapla
       const subtotal = finalItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const total = subtotal - (order?.discount || 0);
+      const total = subtotal - (currentOrder?.discount || 0);
 
       // Gönderilen ürün ID'lerini kaydet (yeni eklenenler)
       const newItemIds = cart.map((item) => item.menuId);
-      const existingSentItems = order?.sentItems || [];
+      const existingSentItems = currentOrder?.sentItems || [];
       const sentItemIds = Array.from(
         new Set([...existingSentItems, ...newItemIds])
       );
 
       let updatedOrder: Order | null = null;
-      if (order) {
+      if (currentOrder) {
         // Mevcut siparişi güncelle (eski + yeni ürünler)
         const updateData: any = {
           items: finalItems,
@@ -809,11 +1189,11 @@ function TableDetailContent() {
           sentItems: sentItemIds, // Gönderilen ürünleri kaydet
         };
         // Sadece notes varsa ekle (undefined gönderme)
-        if (order.notes) {
-          updateData.notes = order.notes;
+        if (currentOrder.notes) {
+          updateData.notes = currentOrder.notes;
         }
-        await updateOrder(order.id!, updateData);
-        updatedOrder = await getOrder(order.id!);
+        await updateOrder(currentOrder.id!, updateData);
+        updatedOrder = await getOrder(currentOrder.id!);
       } else {
         // Yeni sipariş oluştur
         const newOrderData: any = {
@@ -834,17 +1214,22 @@ function TableDetailContent() {
       const newItems = [...cart];
 
       // Siparişi güncelle ve sepeti temizle
+      // updatedOrder zaten tüm cart öğelerini içeriyor, bu yüzden cart'ı hemen temizleyebiliriz
       setOrder(updatedOrder);
       setCart([]);
       setNotes("");
       setShowCart(false);
 
       // Masayı dolu yap ve currentOrderId'yi güncelle
-      if (updatedOrder) {
-        await updateTableStatus(currentTable.id!, "occupied", updatedOrder.id);
-        const tableData = await getTable(currentTable.id!);
-        if (tableData) {
-          setCurrentTable(tableData);
+      if (updatedOrder && currentTable.id) {
+        try {
+          await updateTableStatus(currentTable.id, "occupied", updatedOrder.id);
+          const tableData = await getTable(currentTable.id);
+          if (tableData) {
+            setCurrentTable(tableData);
+          }
+        } catch (error) {
+          console.error("Masa güncellenirken hata:", error);
         }
 
         // Yeni eklenen ürünleri yazdır (kategori yazıcılarına - tek adisyon)
@@ -971,6 +1356,7 @@ function TableDetailContent() {
     notes,
     currentTable,
     navigate,
+    isRefreshingOrder,
     menus,
     categories,
     printers,
@@ -1003,18 +1389,55 @@ function TableDetailContent() {
       const paymentMethodToUse = overridePaymentMethod || paymentMethod;
 
       // Eğer override değerler verilmişse onları kullan, yoksa state'ten oku
-      const itemsToUse =
-        overrideSelectedItems !== undefined
-          ? overrideSelectedItems
-          : selectedItems;
-      const pendingItemsToUse =
-        overridePendingPaymentItems !== undefined
-          ? overridePendingPaymentItems
-          : pendingPaymentItems;
       const quantitiesToUse =
         overrideSelectedQuantities !== undefined
           ? overrideSelectedQuantities
           : selectedQuantities;
+      const pendingItemsToUse =
+        overridePendingPaymentItems !== undefined
+          ? overridePendingPaymentItems
+          : pendingPaymentItems;
+
+      // Eğer selectedQuantities ile ürün seçildiyse, itemsToUse'u oluştur
+      let itemsToUse: Set<number>;
+      if (overrideSelectedItems !== undefined) {
+        itemsToUse = overrideSelectedItems;
+      } else if (quantitiesToUse.size > 0 && pendingItemsToUse.length > 0) {
+        // selectedQuantities ile seçilen ürünler için indices'leri topla
+        // Sadece seçilen miktar kadar index ekle (tüm indices'leri değil)
+        itemsToUse = new Set<number>();
+        pendingItemsToUse.forEach((paymentItem) => {
+          const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+          if (selectedQty > 0) {
+            // Bu ürün için seçilen miktar varsa, sadece seçilen miktar kadar index ekle
+            let remainingQty = selectedQty;
+            for (const index of paymentItem.indices) {
+              if (remainingQty <= 0) break;
+              const item = order.items[index];
+              if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
+              
+              itemsToUse.add(index);
+              
+              // Seçilen miktardan bu item'ın miktarını düş
+              remainingQty -= item.quantity;
+            }
+          }
+        });
+      } else if (pendingItemsToUse.length > 0) {
+        // Eğer pendingItemsToUse varsa ama quantitiesToUse yoksa, tüm pendingItemsToUse'u kullan
+        itemsToUse = new Set<number>();
+        pendingItemsToUse.forEach((paymentItem) => {
+          paymentItem.indices.forEach((index) => {
+            const item = order.items[index];
+            if (item && item.menuId === paymentItem.menuId) { // menuId kontrolü ekle
+              itemsToUse.add(index);
+            }
+          });
+        });
+      } else {
+        // Hiç seçili ürün yoksa, selectedItems state'ini kullan
+        itemsToUse = selectedItems;
+      }
 
       if (
         !order ||
@@ -1034,9 +1457,79 @@ function TableDetailContent() {
       setIsProcessingPayment(true);
       try {
         const amount = parseFloat(amountToUse);
-        const isPartialPayment = itemsToUse.size > 0;
+
+        // Önce kalan tutarı hesapla (seçili ürün varsa onların toplamı, yoksa tüm masanın toplamı)
+        // İndirim dikkate alınmalı
+        const orderSubtotal = (order.items || []).reduce(
+          (sum, item) => sum + item.subtotal,
+          0
+        );
+        const orderDiscount = order.discount || 0;
+        const orderTotal = order.total || orderSubtotal - orderDiscount;
 
         let remaining: number;
+        if (itemsToUse.size > 0) {
+          // Seçili ürünlerin toplamı - quantitiesToUse ile seçilen miktarı dikkate al
+          let selectedSubtotal = 0;
+          
+          // Eğer quantitiesToUse ile miktar seçildiyse, sadece seçilen miktar kadar hesapla
+          if (quantitiesToUse.size > 0 && pendingItemsToUse.length > 0) {
+            pendingItemsToUse.forEach((paymentItem) => {
+              const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+              if (selectedQty > 0) {
+                let remainingQty = selectedQty;
+                for (const index of paymentItem.indices) {
+                  if (remainingQty <= 0) break;
+                  const item = order.items[index];
+                  if (!item) continue;
+                  
+                  const qtyToUse = Math.min(item.quantity, remainingQty);
+                  selectedSubtotal += qtyToUse * item.menuPrice;
+                  remainingQty -= qtyToUse;
+                }
+              }
+            });
+          } else {
+            // Eğer quantitiesToUse yoksa, itemsToUse içindeki tüm items'ları kullan
+            const selectedItemsArray = Array.from(itemsToUse);
+            const mergedSelectedItems = new Map<
+              string,
+              { quantity: number; subtotal: number }
+            >();
+            selectedItemsArray.forEach((index) => {
+              const item = order.items[index];
+              if (!item) return;
+              const existing = mergedSelectedItems.get(item.menuId);
+              if (existing) {
+                existing.quantity += item.quantity;
+                existing.subtotal += item.subtotal;
+              } else {
+                mergedSelectedItems.set(item.menuId, {
+                  quantity: item.quantity,
+                  subtotal: item.subtotal,
+                });
+              }
+            });
+            selectedSubtotal = Array.from(
+              mergedSelectedItems.values()
+            ).reduce((sum, { subtotal }) => sum + subtotal, 0);
+          }
+          
+          // Seçili ürünlerin toplamından orantılı indirim düş
+          const discountRatio =
+            orderSubtotal > 0 ? orderDiscount / orderSubtotal : 0;
+          remaining = Math.max(
+            0,
+            selectedSubtotal - selectedSubtotal * discountRatio
+          );
+        } else {
+          // Tüm masanın toplamı (indirimli)
+          remaining = orderTotal;
+        }
+
+        // Kısmi ödeme kontrolü: Seçili ürün varsa VEYA girilen tutar toplamdan azsa
+        const isPartialPayment = itemsToUse.size > 0 || amount < remaining;
+
         let paidItems:
           | Array<{
               menuId: string;
@@ -1046,7 +1539,7 @@ function TableDetailContent() {
             }>
           | undefined;
 
-        if (isPartialPayment) {
+        if (isPartialPayment && itemsToUse.size > 0) {
           // Kısmi ödeme: Seçili ürünlerin toplamı
           const selectedItemsArray = Array.from(itemsToUse);
 
@@ -1068,8 +1561,11 @@ function TableDetailContent() {
 
               for (const index of paymentItem.indices) {
                 if (remainingQuantity <= 0) break;
+                // Sadece itemsToUse içindeki index'leri işle
+                if (!itemsToUse.has(index)) continue;
+                
                 const item = order.items[index];
-                if (!item) continue;
+                if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
 
                 const paidQuantity =
                   item.quantity <= remainingQuantity
@@ -1170,7 +1666,7 @@ function TableDetailContent() {
           );
           remaining = selectedTotal;
 
-          // Ödenen ürünler listesi
+          // Ödenen ürünler listesi - mergedSelectedItems zaten doğru miktarları içeriyor
           paidItems = Array.from(mergedSelectedItems.values()).map(
             ({ item, quantity, subtotal }) => ({
               menuId: item.menuId,
@@ -1180,35 +1676,102 @@ function TableDetailContent() {
             })
           );
         } else {
-          // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
-          remaining = (order.items || []).reduce(
-            (sum, item) => sum + item.subtotal,
-            0
-          );
+          // Tam ödeme veya numerik keypad ile kısmi ödeme: Mevcut ürünlerin toplamı (indirimli)
+          remaining = orderTotal;
+
+          // Eğer numerik keypad ile girilen tutar toplamdan azsa VE ürün seçilmemişse
+          // Sadece ödeme kaydı yap, ürün miktarlarında değişiklik yapma
+          if (isPartialPayment && amount < remaining && itemsToUse.size === 0) {
+            // Ürün seçilmemişse, paidItems undefined olarak kalacak
+            // Böylece sadece ödeme kaydı yapılacak, ürün miktarları değişmeyecek
+            paidItems = undefined;
+          }
         }
 
-        // İndirim hesapla (kalan tutara göre)
+        // İndirim hesapla
         let discountAmount = 0;
+        let discountBaseAmount = 0; // İndirim hesaplanacak tutar (seçili ürünler varsa onların toplamı, yoksa remaining)
+        
+        // Eğer seçili ürünler varsa, indirimi seçili ürünlerin toplamı üzerinden hesapla
+        if (itemsToUse.size > 0) {
+          // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
+          const selectedItemsArray = Array.from(itemsToUse);
+          selectedItemsArray.forEach((index) => {
+            const item = order.items[index];
+            if (item) {
+              // Orijinal fiyatları kullan
+              discountBaseAmount += item.menuPrice * item.quantity;
+            }
+          });
+        } else {
+          // Seçili ürün yoksa, tüm siparişin toplamını kullan
+          discountBaseAmount = remaining;
+        }
+
+        // İndirim miktarını hesapla
         if (discountType === "percentage" && discountValue) {
           const percentage = parseFloat(discountValue);
-          discountAmount = (remaining * percentage) / 100;
+          discountAmount = (discountBaseAmount * percentage) / 100;
         } else if (discountType === "amount" && discountValue) {
-          discountAmount = Math.min(parseFloat(discountValue), remaining);
-        } else if (discountType === "manual" && manualDiscount) {
-          discountAmount = Math.min(parseFloat(manualDiscount), remaining);
+          discountAmount = Math.min(parseFloat(discountValue), discountBaseAmount);
         }
 
-        // İndirim varsa siparişe uygula (sadece tam ödeme için)
-        if (discountAmount > 0 && !isPartialPayment) {
-          const currentDiscount = order.discount || 0;
-          const newDiscount = currentDiscount + discountAmount;
-          const newSubtotal = order.subtotal;
-          const newTotal = Math.max(0, newSubtotal - newDiscount);
+        // İndirim varsa uygula
+        if (discountAmount > 0) {
+          // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlere uygula
+          if (itemsToUse.size > 0) {
+            const selectedItemsArray = Array.from(itemsToUse);
+            
+            // İndirimi seçili ürünlere orantılı olarak uygula
+            const discountRatio = discountBaseAmount > 0 
+              ? discountAmount / discountBaseAmount 
+              : 0;
 
-          await updateOrder(order.id!, {
-            discount: newDiscount,
-            total: newTotal,
-          });
+            // Seçili ürünlerin subtotal değerlerini güncelle
+            const updatedItems = [...order.items];
+            selectedItemsArray.forEach((index) => {
+              const item = updatedItems[index];
+              if (item) {
+                const originalSubtotal = item.menuPrice * item.quantity;
+                const itemDiscount = originalSubtotal * discountRatio;
+                updatedItems[index] = {
+                  ...item,
+                  subtotal: Math.max(0, originalSubtotal - itemDiscount),
+                };
+              }
+            });
+
+            // Sipariş toplamlarını güncelle
+            // order.subtotal her zaman orijinal fiyatların toplamı olmalı
+            const newSubtotal = updatedItems.reduce(
+              (sum, item) => sum + (item.menuPrice * item.quantity),
+              0
+            );
+            // order.total ise indirimli toplam olmalı
+            const newTotal = updatedItems.reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+
+            await updateOrder(order.id!, {
+              items: updatedItems,
+              subtotal: newSubtotal,
+              total: newTotal,
+            });
+          } else {
+            // Seçili ürün yoksa, indirimi tüm siparişe uygula (sadece tam ödeme için)
+            if (!isPartialPayment) {
+              const currentDiscount = order.discount || 0;
+              const newDiscount = currentDiscount + discountAmount;
+              const newSubtotal = order.subtotal;
+              const newTotal = Math.max(0, newSubtotal - newDiscount);
+
+              await updateOrder(order.id!, {
+                discount: newDiscount,
+                total: newTotal,
+              });
+            }
+          }
         }
 
         const payment: Payment = {
@@ -1219,6 +1782,7 @@ function TableDetailContent() {
         };
 
         // Kısmi ödeme ise seçili ürünleri order'dan kaldır (önce kaldır, sonra ödeme ekle)
+        // Eğer ürün seçilmemişse (itemsToUse.size === 0), ürün miktarlarında değişiklik yapma
         if (isPartialPayment && itemsToUse.size > 0) {
           const updatedItems = [...order.items];
           const itemsToUpdate: Array<{
@@ -1229,9 +1793,13 @@ function TableDetailContent() {
           const indicesToRemove = new Set<number>();
 
           // Eğer birden fazla ürün için miktar seçildiyse, her ürün için seçilen miktar kadar kaldır
+          // allPendingIndices: Sadece işlenen (seçilen miktar kadar) index'leri tutar
           const allPendingIndices = new Set<number>();
+          
+          // itemsToUse içindeki index'leri kullan - zaten sadece seçilen miktar kadar index içeriyor
+          const processedIndices = new Set<number>();
 
-          if (pendingItemsToUse.length > 0) {
+          if (pendingItemsToUse.length > 0 && quantitiesToUse.size > 0) {
             // Tüm ürünler için seçilen miktarları kullan
             pendingItemsToUse.forEach((paymentItem) => {
               // Eğer bu ürün için miktar seçildiyse kullan, yoksa tüm miktarı kullan
@@ -1242,11 +1810,17 @@ function TableDetailContent() {
 
               for (const index of paymentItem.indices) {
                 if (remainingQuantity <= 0) break;
+                // Sadece itemsToUse içindeki index'leri işle
+                if (!itemsToUse.has(index)) continue;
+                
                 const item = order.items[index];
-                if (!item) continue;
+                if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
 
+                // Sadece işlenen (seçilen miktar kadar) index'leri allPendingIndices'e ekle
+                processedIndices.add(index);
                 allPendingIndices.add(index);
-
+                
+                // Eğer item'ın tamamı ödendiyse veya bir kısmı ödendiyse, index'i ekle
                 if (item.quantity <= remainingQuantity) {
                   // Tüm item'ı kaldır (tamamı ödendi)
                   indicesToRemove.add(index);
@@ -1263,6 +1837,16 @@ function TableDetailContent() {
                   remainingQuantity = 0;
                 }
               }
+            });
+          } else if (pendingItemsToUse.length > 0) {
+            // Eğer pendingItemsToUse varsa ama quantitiesToUse yoksa, itemsToUse içindeki tüm index'leri kullan
+            itemsToUse.forEach((index) => {
+              const item = order.items[index];
+              if (!item) return;
+              
+              processedIndices.add(index);
+              allPendingIndices.add(index);
+              indicesToRemove.add(index);
             });
           }
           // Eğer sadece pendingPaymentQuantity varsa (tek ürün için miktar seçildiyse)
@@ -1294,17 +1878,28 @@ function TableDetailContent() {
             }
           }
 
-          // Diğer seçili ürünleri tamamen kaldır (pendingIndices içinde olmayan)
-          const selectedItemsArray = Array.from(itemsToUse);
-          const otherSelectedIndices = selectedItemsArray
-            .filter((index) => !allPendingIndices.has(index))
-            .sort((a, b) => b - a);
+          // Eğer quantitiesToUse ile miktar seçildiyse, sadece allPendingIndices içindeki ürünleri işle
+          // itemsToUse zaten sadece seçilen miktar kadar index içeriyor
+          // allPendingIndices de sadece işlenen (seçilen miktar kadar) index'leri içeriyor
+          // Bu yüzden otherSelectedIndices mantığına gerek yok - sadece allPendingIndices içindeki ürünler işlendi
+          
+          // Eğer pendingItemsToUse veya pendingPaymentQuantity yoksa ve selectedItems varsa, 
+          // o zaman itemsToUse içindeki tüm index'leri kaldır (otherSelectedIndices mantığı)
+          if (pendingItemsToUse.length === 0 && !pendingPaymentQuantity && itemsToUse.size > 0) {
+            // Eğer quantitiesToUse yoksa ve selectedItems varsa, tüm seçili ürünleri kaldır
+            const selectedItemsArray = Array.from(itemsToUse);
+            const otherSelectedIndices = selectedItemsArray
+              .filter((index) => !allPendingIndices.has(index))
+              .sort((a, b) => b - a);
 
-          otherSelectedIndices.forEach((index) => {
-            if (index >= 0 && index < updatedItems.length) {
-              indicesToRemove.add(index);
-            }
-          });
+            otherSelectedIndices.forEach((index) => {
+              if (index >= 0 && index < updatedItems.length) {
+                indicesToRemove.add(index);
+              }
+            });
+          }
+          // Eğer pendingItemsToUse veya pendingPaymentQuantity varsa, 
+          // allPendingIndices içindeki ürünler zaten işlendi, başka bir şey yapmaya gerek yok
 
           // Önce quantity güncellemelerini yap (kısmi ödeme için)
           if (itemsToUpdate.length > 0) {
@@ -1335,19 +1930,67 @@ function TableDetailContent() {
             (sum, item) => sum + item.subtotal,
             0
           );
-          const newTotal = Math.max(0, newSubtotal - (order.discount || 0));
+          
+          // Seçili ürünlere indirim uygulanıp uygulanmadığını kontrol et
+          // Seçili ürünlerin subtotal'larının orijinal fiyatlarından düşük olup olmadığını kontrol et
+          let hasSelectedItemsDiscount = false;
+          if (itemsToUse.size > 0) {
+            const selectedItemsOriginalTotal = Array.from(itemsToUse).reduce((sum, index) => {
+              const item = order.items[index];
+              if (item) {
+                return sum + (item.menuPrice * item.quantity);
+              }
+              return sum;
+            }, 0);
+            
+            const selectedItemsDiscountedTotal = Array.from(itemsToUse).reduce((sum, index) => {
+              const item = order.items[index];
+              if (item) {
+                return sum + item.subtotal;
+              }
+              return sum;
+            }, 0);
+            
+            // Eğer seçili ürünlerin indirimli toplamı orijinal toplamından düşükse, indirim uygulanmış demektir
+            hasSelectedItemsDiscount = selectedItemsDiscountedTotal < selectedItemsOriginalTotal;
+          }
+          
+          // Seçili ürünlere indirim uygulanmışsa, order.discount'ı sıfırla
+          // Çünkü indirim sadece seçili ürünlere uygulanmıştır ve ödemesi alındıktan sonra masada indirim kalmamalı
+          const discountToApply = hasSelectedItemsDiscount ? 0 : (order.discount || 0);
+          const newTotal = Math.max(0, newSubtotal - discountToApply);
 
           // Order'ı güncelle (ürünleri kaldır)
           await updateOrder(order.id!, {
             items: updatedItems,
             subtotal: newSubtotal,
             total: newTotal,
+            discount: discountToApply, // Seçili ürünlere indirim uygulanmışsa, masada indirim kalmamalı
           });
 
           // Seçili ürünleri temizle
           setSelectedItems(new Set());
           setPendingPaymentQuantity(null);
           // NOT: pendingPaymentItems ve selectedQuantities ödeme işleminde kullanılacak, şimdi temizleme
+        }
+        // Eğer itemsToUse.size === 0 ise (ürün seçilmemişse), ürün miktarlarında değişiklik yapma
+        // Ancak tag'ların ödemesini aldığında (kısmi ödeme ve ürün seçilmemişse), order'ın total'ini güncelle
+        if (isPartialPayment && itemsToUse.size === 0) {
+          // Tag'ların ödemesini aldığında, order'ın total'inden ödeme tutarını düş
+          const currentSubtotal = (order.items || []).reduce(
+            (sum, item) => sum + item.subtotal,
+            0
+          );
+          const currentDiscount = order.discount || 0;
+          const currentTotal = order.total || currentSubtotal - currentDiscount;
+          
+          // Yeni total'i hesapla (ödeme tutarını düş)
+          const newTotal = Math.max(0, currentTotal - amount);
+          
+          // Order'ı güncelle (sadece total'i güncelle, items değişmeyecek)
+          await updateOrder(order.id!, {
+            total: newTotal,
+          });
         }
 
         // Ödemeyi ekle
@@ -1410,8 +2053,9 @@ function TableDetailContent() {
               }
 
               // Adisyon toplamlarını hesapla
+              // Orijinal fiyatları kullan (indirim öncesi)
               const billSubtotal = billItems.reduce(
-                (sum, item) => sum + item.subtotal,
+                (sum, item) => sum + (item.menuPrice * item.quantity),
                 0
               );
               const billDiscount = isPartialPayment ? 0 : order.discount || 0;
@@ -1605,47 +2249,167 @@ function TableDetailContent() {
           }
         })();
 
+        // Tüm ödemelerin toplamını hesapla
+        const totalPaidAmount = (updatedOrder?.payments || []).reduce(
+          (sum, payment) => sum + payment.amount,
+          0
+        );
+        // Order total'ini hesapla (subtotal - discount)
+        const updatedOrderSubtotal = (updatedOrder?.items || []).reduce(
+          (sum, item) => sum + item.subtotal,
+          0
+        );
+        const updatedOrderDiscount = updatedOrder?.discount || 0;
+        const orderTotalAmount =
+          updatedOrder?.total || updatedOrderSubtotal - updatedOrderDiscount;
+        const isFullyPaid =
+          totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0;
+
         // Eğer TAM ödeme alındıysa (ve partial ödeme değilse) veya tüm ürünler kaldırıldıysa siparişi kapat
         // Not: Kısmi ödemede (seçilen ürünlerin belli adetleri) masada ürün kaldığı sürece sipariş açık kalmalı
         // Kurye atandıysa siparişi kapat
+        // VEYA tüm ödemelerin toplamı order total'ine eşit veya fazlaysa VE kısmi ödeme değilse siparişi kapat
+        const isFullyPaidCheck =
+          totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0 && !isPartialPayment;
+        
         if (
           (!isPartialPayment && updatedOrder?.paymentStatus === "paid") ||
           (updatedOrder && updatedOrder.items.length === 0) ||
-          courierIdToUse
+          courierIdToUse ||
+          (isFullyPaidCheck && updatedOrder && orderTotalAmount > 0)
         ) {
+          // Tam ödeme alındıysa, refresh sırasında loading göster ve ürün eklemeyi engelle
+
           // Tüm ürünler kaldırıldıysa ya da tam ödeme alındıysa veya kurye atandıysa siparişi kapat
-          if (updatedOrder) {
+          if (updatedOrder && currentTable.id) {
             await updateOrderStatus(updatedOrder.id!, "closed");
             // Masa durumunu güncelle
-            await updateTableStatus(currentTable.id!, "available", undefined);
-            // Sipariş state'ini güncelle (masalara dönmese bile)
-            setOrder(null);
+            try {
+              await updateTableStatus(currentTable.id, "available", undefined);
+            } catch (error) {
+              console.error("Masa durumu güncellenirken hata:", error);
+            }
+            // Siparişi boş olarak güncelle (liste görünür kalır ama boş olur)
+            await updateOrder(updatedOrder.id!, {
+              items: [],
+              subtotal: 0,
+              total: 0,
+              discount: 0,
+            });
+
+            // Tam ödeme alındıysa hemen order state'ini null yap - UI'ı temizle
+            if (isFullyPaidCheck) {
+              setIsRefreshingOrder(true);
+              setOrder(null); // Hemen null yap ki eski ürünler görünmesin
+              setCart([]); // Cart'ı da temizle
+              setNotes(""); // Notes'u da temizle
+            }
+
+            // Modal'ı kapat
+            setShowPaymentModal(false);
+            setPaymentAmount("0");
+            setPaymentMethod("");
+            setAppliedPayments([]);
           }
 
-          // Navigation ayarını kontrol et
+          // Her ödeme alındığında (kısmi veya tam) masayı refresh et ve masada kal
+          // Eğer tam ödeme alındıysa, önce refresh yap sonra masaya dön
+          try {
+            // Önce güncel order'ı al (updatedOrder zaten güncel)
+            // Eğer updatedOrder varsa onu kullan, yoksa getOrdersByCompany ile al
+            let finalOrder: Order | null = null;
+            
+            if (updatedOrder && updatedOrder.items && updatedOrder.items.length > 0) {
+              // updatedOrder güncel, onu kullan
+              finalOrder = updatedOrder;
+            } else {
+              // updatedOrder yoksa veya items boşsa, getOrdersByCompany ile kontrol et
+              const allOrders = await getOrdersByCompany(
+                companyId || userData?.companyId || "",
+                {
+                  branchId: branchId || userData?.assignedBranchId || undefined,
+                }
+              );
+              // Sadece items'ı olan ve active olan order'ı bul
+              const activeOrder = allOrders.find(
+                (o) =>
+                  o.tableId === currentTable.id &&
+                  o.status === "active" &&
+                  o.items &&
+                  o.items.length > 0
+              );
+              if (activeOrder) {
+                finalOrder = activeOrder;
+              }
+            }
+
+            // Masa bilgilerini de yeniden yükle
+            if (currentTable.id) {
+              try {
+                const refreshedTable = await getTable(currentTable.id);
+                if (refreshedTable) {
+                  setCurrentTable(refreshedTable);
+                }
+              } catch (error) {
+                // Masa bulunamazsa hata verme, sadece logla
+                console.error("Masa güncellenirken hata:", error);
+              }
+            }
+
+            // Eğer tam ödeme alındıysa kesinlikle null yap - yeni adisyon için hazır
+            if (isFullyPaidCheck) {
+              setOrder(null);
+              setCart([]);
+              setNotes("");
+            } else if (finalOrder && finalOrder.items && finalOrder.items.length > 0) {
+              // Güncel order varsa ve items'ı varsa göster
+              setOrder(finalOrder);
+            } else {
+              // Order yoksa veya items boşsa null yap
+              setOrder(null);
+              setCart([]);
+              setNotes("");
+            }
+          } catch (error) {
+            // Hata durumunda null yap
+            setOrder(null);
+            setCart([]);
+            setNotes("");
+          } finally {
+            // Loading state'ini her durumda kapat - yeni ürün eklenebilsin
+            setIsRefreshingOrder(false);
+          }
+
+          // Navigation ayarını kontrol et - eğer returnAfterPayment açıksa, URL'yi güncelleme
           const navSettings = localStorage.getItem("navigationSettings");
+          let shouldReturnAfterPayment = false;
           if (navSettings) {
             try {
               const settings = JSON.parse(navSettings);
-              if (
-                settings.returnAfterPayment ||
-                settings.returnAfterOrderClose
-              ) {
-                navigateToHome();
-                return;
-              }
-              // Masalara dönmüyorsa bile state'i güncelle (zaten yukarıda güncellendi)
-              return;
+              shouldReturnAfterPayment = settings.returnAfterPayment === true;
             } catch (error) {
-              // Hata durumunda varsayılan davranış (masalara dön)
-              navigateToHome();
-              return;
+              // Hata durumunda devam et
             }
-          } else {
-            // Ayar yoksa varsayılan davranış (masalara dön)
-            navigateToHome();
-            return;
           }
+
+          // Eğer returnAfterPayment açıksa, URL'yi güncelleme ve doğrudan yönlendirme yap
+          if (shouldReturnAfterPayment) {
+            // Yönlendirme yapmadan önce kısa bir gecikme ekle
+            setTimeout(() => {
+              navigateToHome();
+            }, 100);
+            return; // Hemen return yap, diğer işlemleri yapma
+          }
+
+          // URL'den payment parametresini kaldır (sadece returnAfterPayment kapalıysa)
+          navigate({
+            to: Route.fullPath,
+            search: (prev) => ({
+              ...prev,
+              payment: undefined,
+            }),
+            replace: true,
+          });
         }
 
         // Kısmi ödeme durumunda siparişi güncelle
@@ -1654,7 +2418,6 @@ function TableDetailContent() {
         setPaymentAmount("");
         setDiscountType("percentage");
         setDiscountValue("");
-        setManualDiscount("");
 
         // Kurye atama state'lerini temizle
         setSelectedCourierId("");
@@ -1668,16 +2431,35 @@ function TableDetailContent() {
 
         // Navigation ayarını kontrol et (kısmi ödeme için)
         const navSettings = localStorage.getItem("navigationSettings");
+        let shouldReturnAfterPayment = false;
         if (navSettings) {
           try {
             const settings = JSON.parse(navSettings);
-            if (settings.returnAfterPayment) {
-              navigateToHome();
-            }
+            shouldReturnAfterPayment = settings.returnAfterPayment === true;
           } catch (error) {
-            // Hata durumunda yönlendirme yapma
+            // Hata durumunda devam et
           }
         }
+
+        // Eğer returnAfterPayment açıksa, URL'yi güncelleme ve doğrudan yönlendirme yap
+        if (shouldReturnAfterPayment) {
+          // Yönlendirme yapmadan önce kısa bir gecikme ekle
+          // Böylece route loader'ın çalışmasını engelle
+          setTimeout(() => {
+            navigateToHome();
+          }, 100);
+          return; // Hemen return yap, diğer işlemleri yapma
+        }
+
+        // URL'den payment parametresini kaldır (sadece returnAfterPayment kapalıysa)
+        navigate({
+          to: Route.fullPath,
+          search: (prev) => ({
+            ...prev,
+            payment: undefined,
+          }),
+          replace: true,
+        });
       } catch (error) {
         customAlert("Ödeme işlenirken bir hata oluştu", "Hata", "error");
       } finally {
@@ -1691,7 +2473,6 @@ function TableDetailContent() {
       paymentMethods,
       discountType,
       discountValue,
-      manualDiscount,
       selectedItems,
       pendingPaymentQuantity,
       pendingPaymentItems,
@@ -1839,9 +2620,15 @@ function TableDetailContent() {
           await updateOrderStatus(order.id!, "closed");
 
           // Masayı yeniden yükle
-          const updatedTable = await getTable(currentTable.id!);
-          if (updatedTable) {
-            setCurrentTable(updatedTable);
+          if (currentTable.id) {
+            try {
+              const updatedTable = await getTable(currentTable.id);
+              if (updatedTable) {
+                setCurrentTable(updatedTable);
+              }
+            } catch (error) {
+              console.error("Masa güncellenirken hata:", error);
+            }
           }
 
           setOrder(null);
@@ -1975,33 +2762,111 @@ function TableDetailContent() {
     });
   }, []);
 
-  // Seçili ürünleri iptal et
-  const handleCancelSelectedItems = useCallback(async () => {
-    if (!order || selectedItems.size === 0) return;
+  // Seçili ürünleri seçilen miktarlarla iptal et
+  const handleCancelSelectedItemsWithQuantities = useCallback(
+    async (
+      quantities: Map<string, number>,
+      selectedIndices: number[]
+    ) => {
+      if (!order || quantities.size === 0) return;
 
-    setIsCanceling(true);
-    try {
-      // Seçili ürünleri filtrele ve iptal edilenleri canceledItems'a ekle
-      const canceledItems = order.canceledItems || [];
-      const updatedItems = order.items.filter((_, index) => {
-        if (selectedItems.has(index)) {
-          // İptal edilen ürünü canceledItems'a ekle
-          const canceledItem = order.items[index];
-          canceledItems.push({
-            ...canceledItem,
-            addedAt: canceledItem.addedAt || new Date(),
-            canceledAt: new Date(),
+      setIsCanceling(true);
+      try {
+        const canceledItems = order.canceledItems || [];
+        const updatedItems: OrderItem[] = [];
+        const itemsToCancel: OrderItem[] = [];
+
+        // Her index için işlem yap
+        selectedIndices.forEach((index) => {
+          const item = order.items[index];
+          if (!item || item.canceledAt) {
+            // Zaten iptal edilmiş veya geçersiz, olduğu gibi ekle
+            updatedItems.push(item);
+            return;
+          }
+
+          const cancelQty = quantities.get(item.menuId) || 0;
+          const itemQty = item.quantity;
+
+          if (cancelQty >= itemQty) {
+            // Tüm miktar iptal ediliyor
+            canceledItems.push({
+              ...item,
+              addedAt: item.addedAt || new Date(),
+              canceledAt: new Date(),
+            });
+            itemsToCancel.push(item);
+          } else if (cancelQty > 0) {
+            // Kısmi iptal - ürünü böl
+            const canceledItem: OrderItem = {
+              ...item,
+              quantity: cancelQty,
+              subtotal: (item.subtotal / itemQty) * cancelQty,
+              addedAt: item.addedAt || new Date(),
+              canceledAt: new Date(),
+            };
+            canceledItems.push(canceledItem);
+            itemsToCancel.push(canceledItem);
+
+            // Kalan miktarı güncelle
+            const remainingQty = itemQty - cancelQty;
+            const remainingSubtotal = (item.subtotal / itemQty) * remainingQty;
+            updatedItems.push({
+              ...item,
+              quantity: remainingQty,
+              subtotal: remainingSubtotal,
+            });
+          } else {
+            // İptal edilmeyecek, olduğu gibi ekle
+            updatedItems.push(item);
+          }
+        });
+
+        // Diğer ürünleri ekle (seçili olmayanlar)
+        order.items.forEach((item, index) => {
+          if (!selectedIndices.includes(index) && !item.canceledAt) {
+            updatedItems.push(item);
+          }
+        });
+
+        // Eğer hiç ürün kalmadıysa siparişi kapat ve masayı müsait yap
+        if (updatedItems.length === 0) {
+          const subtotal = 0;
+          const total = 0;
+          await updateOrder(order.id!, {
+            items: updatedItems,
+            canceledItems: canceledItems,
+            subtotal: subtotal,
+            total: total,
           });
-          return false; // items'dan çıkar
-        }
-        return true; // items'da kal
-      });
 
-      // Eğer hiç ürün kalmadıysa siparişi kapat ve masayı müsait yap
-      if (updatedItems.length === 0) {
-        // Önce canceledItems'ı kaydet
-        const subtotal = 0;
-        const total = 0;
+          if (currentTable.id) {
+            try {
+              await updateTableStatus(currentTable.id, "available", undefined);
+              await updateOrderStatus(order.id!, "closed");
+              const updatedTable = await getTable(currentTable.id);
+              if (updatedTable) {
+                setCurrentTable(updatedTable);
+              }
+            } catch (error) {
+              console.error("Masa güncellenirken hata:", error);
+            }
+          }
+          setOrder(null);
+          setSelectedItems(new Set());
+          setPendingCancelItems([]);
+          setSelectedCancelQuantities(new Map());
+          setIsCanceling(false);
+          return;
+        }
+
+        // Toplam hesapla
+        const subtotal = updatedItems.reduce(
+          (sum, item) => sum + item.subtotal,
+          0
+        );
+        const total = subtotal - (order.discount || 0);
+
         await updateOrder(order.id!, {
           items: updatedItems,
           canceledItems: canceledItems,
@@ -2009,143 +2874,109 @@ function TableDetailContent() {
           total: total,
         });
 
-        await updateTableStatus(currentTable.id!, "available", undefined);
-        await updateOrderStatus(order.id!, "closed");
-        const updatedTable = await getTable(currentTable.id!);
-        if (updatedTable) {
-          setCurrentTable(updatedTable);
-        }
-        setOrder(null);
-        setSelectedItems(new Set());
-        // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
-        return;
-      }
-
-      // Toplam hesapla
-      const subtotal = updatedItems.reduce(
-        (sum, item) => sum + item.subtotal,
-        0
-      );
-      const total = subtotal - (order.discount || 0);
-
-      await updateOrder(order.id!, {
-        items: updatedItems,
-        canceledItems: canceledItems,
-        subtotal: subtotal,
-        total: total,
-      });
-
-      // İptal edilen ürünleri yazdır (kategori yazıcılarına)
-      try {
-        const canceledItemsForPrint = order.items.filter((_, index) =>
-          selectedItems.has(index)
-        );
-
-        if (canceledItemsForPrint.length > 0) {
-          // Her iptal edilen ürün için kategori bul ve ilgili yazıcılara yazdır
-          for (const canceledItem of canceledItemsForPrint) {
-            const menuItem = menus.find((m) => m.id === canceledItem.menuId);
-            if (menuItem && menuItem.category) {
-              const category = categories.find(
-                (c) => c.name === menuItem.category
-              );
-              if (category) {
-                // Bu kategoriye atanmış yazıcıları bul
-                const categoryPrinters = getPrintersForCategories(
-                  printers,
-                  categories,
-                  [category.id || ""]
+        // İptal edilen ürünleri yazdır (kategori yazıcılarına)
+        try {
+          if (itemsToCancel.length > 0) {
+            for (const canceledItem of itemsToCancel) {
+              const menuItem = menus.find((m) => m.id === canceledItem.menuId);
+              if (menuItem && menuItem.category) {
+                const category = categories.find(
+                  (c) => c.name === menuItem.category
                 );
-
-                // Her yazıcıya yazdır
-                for (const printer of categoryPrinters) {
-                  const printContent = formatPrintContent(
-                    "cancel",
-                    [canceledItem],
-                    currentTable.tableNumber,
-                    order.orderNumber,
-                    {
-                      companyName: companyData?.name || "",
-                      paperWidth: printer.paperWidth || 48,
-                    }
+                if (category) {
+                  const categoryPrinters = getPrintersForCategories(
+                    printers,
+                    categories,
+                    [category.id || ""]
                   );
-                  await printToPrinter(printer.name, printContent, "cancel");
+
+                  for (const printer of categoryPrinters) {
+                    const printContent = formatPrintContent(
+                      "cancel",
+                      [canceledItem],
+                      currentTable.tableNumber,
+                      order.orderNumber,
+                      {
+                        companyName: companyData?.name || "",
+                        paperWidth: printer.paperWidth || 48,
+                      }
+                    );
+                    await printToPrinter(printer.name, printContent, "cancel");
+                  }
                 }
               }
             }
           }
+        } catch (error) {
+          // Yazdırma hatası iptal işlemini etkilemesin
+        }
+
+        // Masa geçmişine kaydet
+        const effectiveCompanyId = companyId || userData?.companyId;
+        const effectiveBranchId = branchId || userData?.assignedBranchId;
+        if (effectiveCompanyId) {
+          try {
+            for (const canceledItem of itemsToCancel) {
+              await addTableHistory(
+                effectiveCompanyId,
+                currentTable.id!,
+                currentTable.tableNumber,
+                "item_cancelled",
+                `${canceledItem.menuName} (${canceledItem.quantity} adet) iptal edildi`,
+                {
+                  menuId: canceledItem.menuId,
+                  menuName: canceledItem.menuName,
+                  quantity: canceledItem.quantity,
+                  subtotal: canceledItem.subtotal,
+                },
+                effectiveBranchId || undefined
+              );
+            }
+          } catch (error) {
+            // Error saving table history
+          }
+        }
+
+        // Siparişi yeniden yükle
+        const updatedOrder = await getOrder(order.id!);
+        setOrder(updatedOrder);
+        setSelectedItems(new Set());
+        setPendingCancelItems([]);
+        setSelectedCancelQuantities(new Map());
+        setShowQuantitySelectionModal(false);
+        setQuantitySelectionAction(null);
+
+        // Navigation ayarını kontrol et
+        const navSettings = localStorage.getItem("navigationSettings");
+        if (navSettings) {
+          try {
+            const settings = JSON.parse(navSettings);
+            if (settings.returnAfterProductCancel) {
+              navigateToHome();
+            }
+          } catch (error) {
+            // Hata durumunda yönlendirme yapma
+          }
         }
       } catch (error) {
-        // Yazdırma hatası iptal işlemini etkilemesin
+        customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
+      } finally {
+        setIsCanceling(false);
       }
-
-      // Masa geçmişine kaydet - Her iptal edilen ürün için
-      const effectiveCompanyId = companyId || userData?.companyId;
-      const effectiveBranchId = branchId || userData?.assignedBranchId;
-      if (effectiveCompanyId) {
-        try {
-          const canceledItemsForHistory = order.items.filter((_, index) =>
-            selectedItems.has(index)
-          );
-          for (const canceledItem of canceledItemsForHistory) {
-            await addTableHistory(
-              effectiveCompanyId,
-              currentTable.id!,
-              currentTable.tableNumber,
-              "item_cancelled",
-              `${canceledItem.menuName} iptal edildi`,
-              {
-                menuId: canceledItem.menuId,
-                menuName: canceledItem.menuName,
-                quantity: canceledItem.quantity,
-                subtotal: canceledItem.subtotal,
-              },
-              effectiveBranchId || undefined
-            );
-          }
-        } catch (error) {
-          // Error saving table history
-        }
-      }
-
-      // Siparişi yeniden yükle
-      const updatedOrder = await getOrder(order.id!);
-      setOrder(updatedOrder);
-      setSelectedItems(new Set());
-
-      // Navigation ayarını kontrol et
-      const navSettings = localStorage.getItem("navigationSettings");
-      if (navSettings) {
-        try {
-          const settings = JSON.parse(navSettings);
-          if (settings.returnAfterProductCancel) {
-            navigateToHome();
-          }
-        } catch (error) {
-          // Hata durumunda yönlendirme yapma
-        }
-      }
-    } catch (error) {
-      customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
-    } finally {
-      setIsCanceling(false);
-    }
-  }, [
-    order,
-    selectedItems,
-    menus,
-    categories,
-    printers,
-    currentTable,
-    companyId,
-    branchId,
-    userData,
-    currentTable,
-    navigate,
-    companyId,
-    branchId,
-    userData,
-  ]);
+    },
+    [
+      order,
+      menus,
+      categories,
+      printers,
+      currentTable,
+      companyId,
+      branchId,
+      userData,
+      companyData,
+      navigateToHome,
+    ]
+  );
 
   // Seçili ürünleri taşı
   const handleMoveSelectedItems = useCallback(
@@ -2832,6 +3663,15 @@ function TableDetailContent() {
           setShowPaymentModal(false);
           setShowFullScreenPayment(false);
           setShowCustomerModal(false);
+          // URL'den payment parametresini kaldır
+          navigate({
+            to: Route.fullPath,
+            search: (prev) => ({
+              ...prev,
+              payment: undefined,
+            }),
+            replace: true,
+          });
 
           customAlert(
             "Cari oluşturuldu ve sipariş cari masasına taşındı",
@@ -3048,7 +3888,7 @@ function TableDetailContent() {
   }
 
   return (
-    <div className="h-[100dvh] bg-gray-50 dark:bg-gray-900 flex flex-col lg:flex-row overflow-hidden select-none">
+    <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col lg:flex-row overflow-hidden select-none">
       {/* Header - Mobile */}
       <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -3076,62 +3916,985 @@ function TableDetailContent() {
           </button>
         </div>
       </div>
-      {/* Left Sidebar - Categories (Desktop) */}
-      <div className="hidden lg:flex lg:w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col h-full overflow-hidden">
-        <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <Button
-            variant="outline"
-            onClick={navigateToHome}
-            className="w-full justify-start mb-4 h-10 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold"
-          >
-            <ArrowLeft className="h-5 w-5 mr-2" />
-            Geri
-          </Button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-            Masa {currentTable.tableNumber}
-          </h1>
+      {/* Left Sidebar - Order (Desktop) */}
+      <div
+        className="hidden lg:flex lg:flex-none lg:w-[550px] flex-col overflow-hidden border-l-4 border-purple-600"
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
+      >
+        <div className="p-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Sipariş -{" "}
+              {(() => {
+                // Masa adını formatla: "Masa Salon 1" -> "Salon 1", "Masa Bahçe 1" -> "Bahçe 1"
+                const tableName = currentTable.tableNumber.toString();
+                if (tableName.toLowerCase().startsWith("masa ")) {
+                  return tableName.substring(5); // "Masa " kısmını kaldır
+                }
+                return tableName;
+              })()}
+            </h2>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
-          <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
-            Kategoriler
-          </h2>
-          <div className="space-y-1.5">
-            {categories.map((category) => {
-              const isSelected = selectedCategoryId === category.id;
+        {/* Cart Items veya Aktif Sipariş */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {isRefreshingOrder ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Masa yenileniyor...
+                </p>
+              </div>
+            </div>
+          ) : order ? (
+            <>
+              {/* Ödemesi Alınan ve İptal Edilen Ürünler */}
+              {(() => {
+                // Ödenen ürünler ve iptal edilen ürünler her zaman gösterilmeli
+                // order.items boş olsa bile (tüm ürünler ödendiyse)
+                // Ürün bazlı olmayan ödemeleri topla (paidItems undefined olanlar)
+                const generalPayments: Array<{
+                  method: string;
+                  amount: number;
+                  methodName: string;
+                }> = [];
+                order.payments?.forEach((payment) => {
+                  // Eğer paidItems yoksa, bu genel bir ödeme (ürün bazlı değil)
+                  if (!payment.paidItems || payment.paidItems.length === 0) {
+                    const methodName =
+                      paymentMethods.find((pm) => pm.code === payment.method)
+                        ?.name ||
+                      (payment.method === "cash"
+                        ? "Nakit"
+                        : payment.method === "card"
+                          ? "Kart"
+                          : payment.method);
+                    generalPayments.push({
+                      method: payment.method,
+                      amount: payment.amount,
+                      methodName: methodName,
+                    });
+                  }
+                });
+
+                // Tüm ödemelerden ödenen ürünleri birleştir
+                // Ödenen ürünler order.items'dan kaldırılmış olabilir, bu yüzden paidItems'dan direkt al
+                const paidItemsMap = new Map<
+                  string,
+                  { menuName: string; quantity: number; subtotal: number }
+                >();
+                order.payments?.forEach((payment) => {
+                  payment.paidItems?.forEach((paidItem) => {
+                    // Tüm ödenen ürünleri göster (order.items'da olmasa bile)
+                    const existing = paidItemsMap.get(paidItem.menuId);
+                    if (existing) {
+                      existing.quantity += paidItem.quantity;
+                      existing.subtotal += paidItem.subtotal;
+                    } else {
+                      paidItemsMap.set(paidItem.menuId, {
+                        menuName: paidItem.menuName,
+                        quantity: paidItem.quantity,
+                        subtotal: paidItem.subtotal,
+                      });
+                    }
+                  });
+                });
+
+                // İptal edilen ürünleri birleştir
+                const canceledItemsMap = new Map<
+                  string,
+                  { menuName: string; quantity: number; subtotal: number }
+                >();
+                (order.items || []).forEach((item) => {
+                  if (item.canceledAt) {
+                    const existing = canceledItemsMap.get(item.menuId);
+                    if (existing) {
+                      existing.quantity += item.quantity;
+                      existing.subtotal += item.subtotal;
+                    } else {
+                      canceledItemsMap.set(item.menuId, {
+                        menuName: item.menuName,
+                        quantity: item.quantity,
+                        subtotal: item.subtotal,
+                      });
+                    }
+                  }
+                });
+
+                return (
+                  <>
+                    {/* Alınan Ödemeler (Ürün Bazlı Olmayan) */}
+                    {generalPayments.length > 0 && (
+                      <div className="mb-4 pb-4 border-b-2 border-blue-300">
+                        <div className="text-sm font-bold text-blue-700 mb-3 flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" />
+                          Alınan Ödeme
+                        </div>
+                        <div className="text-base font-semibold text-blue-900 dark:text-blue-200">
+                          {generalPayments
+                            .map(
+                              (payment) =>
+                                `${payment.amount.toFixed(2).replace(".", ",")}₺ ${payment.methodName}`
+                            )
+                            .join(" - ")}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ödenen Ürünler */}
+                    {Array.from(paidItemsMap.values()).length > 0 && (
+                      <div className="mb-4 pb-4 border-b-2 border-green-300">
+                        <div className="text-sm font-bold text-green-700 mb-3 flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" />
+                          Ödenen Ürünler
+                        </div>
+                        <div className="space-y-3">
+                          {Array.from(paidItemsMap.values()).map((item) => (
+                            <div
+                              key={item.menuName}
+                              className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-base font-semibold text-green-900 dark:text-green-200 truncate">
+                                    {item.menuName}
+                                  </p>
+                                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                                    {item.quantity} adet × ₺
+                                    {(item.subtotal / item.quantity)
+                                      .toFixed(2)
+                                      .replace(".", ",")}
+                                  </p>
+                                </div>
+                                <span className="font-bold text-base text-green-900 dark:text-green-200 ml-2">
+                                  ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* İptal Edilen Ürünler */}
+                    {Array.from(canceledItemsMap.values()).length > 0 && (
+                      <div className="mb-4 pb-4 border-b-2 border-red-300">
+                        <div className="text-sm font-bold text-red-700 mb-3 flex items-center gap-2">
+                          <X className="h-4 w-4" />
+                          İptal Edilen Ürünler
+                        </div>
+                        <div className="space-y-3">
+                          {Array.from(canceledItemsMap.values()).map((item) => (
+                            <div
+                              key={item.menuName}
+                              className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-base font-semibold text-red-900 dark:text-red-200 truncate">
+                                    {item.menuName}
+                                  </p>
+                                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                                    {item.quantity} adet • ₺
+                                    {(item.subtotal / item.quantity).toFixed(2)}{" "}
+                                    birim fiyat
+                                  </p>
+                                </div>
+                                <span className="font-bold text-base text-red-900 dark:text-red-200 line-through ml-2">
+                                  ₺{item.subtotal.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Aktif Ürünler */}
+                    {order.items && order.items.filter((item) => !item.canceledAt).length >
+                      0 && (
+                      <div className="mb-4">
+                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+                          {(() => {
+                            // Aynı menuId'ye sahip ürünleri birleştir
+                            const mergedItems = new Map<
+                              string,
+                              { item: OrderItem; indices: number[] }
+                            >();
+                            order.items.forEach((item, index) => {
+                              if (!item.canceledAt) {
+                                const existing = mergedItems.get(item.menuId);
+                                if (existing) {
+                                  existing.item.quantity += item.quantity;
+                                  existing.item.subtotal += item.subtotal;
+                                  existing.indices.push(index);
+                                } else {
+                                  mergedItems.set(item.menuId, {
+                                    item: { ...item },
+                                    indices: [index],
+                                  });
+                                }
+                              }
+                            });
+
+                            return Array.from(mergedItems.values()).map(
+                              ({ item, indices }, idx) => {
+                                const isSelected = indices.some((idx) =>
+                                  selectedItems.has(idx)
+                                );
+                                // Gönderilmemiş ürün mü kontrol et
+                                const isUnsent = !order.sentItems?.includes(
+                                  item.menuId
+                                );
+
+                                return (
+                                  <div
+                                    key={item.menuId}
+                                    className={`relative ${
+                                      isSelected
+                                        ? "bg-blue-50 dark:bg-blue-900/20"
+                                        : ""
+                                    }`}
+                                  >
+                                    <div
+                                      onClick={() => {
+                                        // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
+                                        if (isUnsent) return;
+
+                                        // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
+                                        if (showPaymentModal) {
+                                          // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
+                                          let existingInPending =
+                                            pendingPaymentItems.find(
+                                              (p) => p.menuId === item.menuId
+                                            );
+
+                                          // Eğer yoksa, pendingPaymentItems'a ekle
+                                          if (!existingInPending) {
+                                            // Aynı menuId'ye sahip tüm item'ları bul ve topla
+                                            const allSameItems =
+                                              order.items.filter(
+                                                (o) => o.menuId === item.menuId
+                                              );
+                                            const totalQty =
+                                              allSameItems.reduce(
+                                                (sum, o) => sum + o.quantity,
+                                                0
+                                              );
+                                            const indices = order.items
+                                              .map((o, idx) =>
+                                                o.menuId === item.menuId
+                                                  ? idx
+                                                  : -1
+                                              )
+                                              .filter((idx) => idx !== -1);
+
+                                            const newPendingItem = {
+                                              menuId: item.menuId,
+                                              menuName: item.menuName,
+                                              totalQuantity: totalQty,
+                                              menuPrice: item.menuPrice,
+                                              indices: indices,
+                                            };
+
+                                            setPendingPaymentItems((prev) => {
+                                              const newList = [...prev];
+                                              newList.push(newPendingItem);
+                                              return newList;
+                                            });
+
+                                            existingInPending = newPendingItem;
+                                          }
+
+                                          // selectedQuantities'yi güncelle
+                                          const currentQty =
+                                            selectedQuantities.get(
+                                              item.menuId
+                                            ) || 0;
+                                          const newQty = Math.min(
+                                            existingInPending.totalQuantity,
+                                            currentQty + 1
+                                          );
+                                          setSelectedQuantities((prev) => {
+                                            const newMap = new Map(prev);
+                                            newMap.set(item.menuId, newQty);
+                                            return newMap;
+                                          });
+                                          return;
+                                        }
+
+                                        // Normal seçim (ödeme modalı kapalıysa)
+                                        // Tüm indices'leri toggle et
+                                        const newSet = new Set(selectedItems);
+                                        indices.forEach((idx) => {
+                                          if (newSet.has(idx)) {
+                                            newSet.delete(idx);
+                                          } else {
+                                            newSet.add(idx);
+                                          }
+                                        });
+                                        setSelectedItems(newSet);
+                                      }}
+                                      className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 ${
+                                        isUnsent
+                                          ? ""
+                                          : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                      } ${
+                                        isSelected ||
+                                        (showPaymentModal &&
+                                          (selectedQuantities.get(
+                                            item.menuId
+                                          ) || 0) > 0)
+                                          ? "bg-blue-50 dark:bg-blue-900/20"
+                                          : ""
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                          {item.quantity}x
+                                        </span>
+                                        <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                          {item.menuName}
+                                        </p>
+                                      </div>
+
+                                      {/* Gönderilmemiş ürünler için butonlar */}
+                                      {isUnsent ? (
+                                        <div
+                                          className="flex items-center gap-3 ml-2"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <button
+                                            onClick={() =>
+                                              decreaseUnsentItemQuantity(
+                                                item.menuId
+                                              )
+                                            }
+                                            className="p-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                            disabled={item.quantity <= 1}
+                                          >
+                                            <Minus className="h-5 w-5" />
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              increaseUnsentItemQuantity(
+                                                item.menuId
+                                              )
+                                            }
+                                            className="p-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                          >
+                                            <Plus className="h-5 w-5" />
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              removeUnsentItem(item.menuId)
+                                            }
+                                            className="p-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                          >
+                                            <Trash2 className="h-5 w-5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-base font-semibold text-gray-900 dark:text-white ml-2 shrink-0">
+                                          ₺
+                                          {(item.menuPrice * item.quantity)
+                                            .toFixed(2)
+                                            .replace(".", ",")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cart içindeki yeni eklenen ürünler */}
+                    {cart.length > 0 && (
+                      <div className="mb-4 mt-4">
+                        <div className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-3 flex items-center gap-2">
+                          <ShoppingCart className="h-4 w-4" />
+                          Yeni Eklenen Ürünler
+                        </div>
+                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+                          {(() => {
+                            // Aynı menuId'ye sahip ürünleri birleştir
+                            const mergedItems = new Map<
+                              string,
+                              { item: OrderItem; cartItemIds: string[] }
+                            >();
+
+                            cart.forEach((item) => {
+                              const existing = mergedItems.get(item.menuId);
+                              if (existing) {
+                                // Aynı ürün varsa miktar ve toplamı birleştir
+                                existing.item.quantity += item.quantity;
+                                existing.item.subtotal += item.subtotal;
+                                existing.cartItemIds.push(
+                                  item.cartItemId || item.menuId
+                                );
+                              } else {
+                                // Yeni ürün ekle
+                                mergedItems.set(item.menuId, {
+                                  item: { ...item },
+                                  cartItemIds: [item.cartItemId || item.menuId],
+                                });
+                              }
+                            });
+
+                            return Array.from(mergedItems.values()).map(
+                              ({ item, cartItemIds }, idx) => {
+                                const isSelected = cartItemIds.some((id) =>
+                                  selectedCartItems.has(id)
+                                );
+                                return (
+                                  <div
+                                    key={item.menuId}
+                                    className={`relative ${
+                                      isSelected
+                                        ? "bg-blue-50 dark:bg-blue-900/20"
+                                        : ""
+                                    }`}
+                                  >
+                                    <div
+                                      onClick={() => {
+                                        // Tüm cartItemIds'leri toggle et
+                                        const newSet = new Set(
+                                          selectedCartItems
+                                        );
+                                        cartItemIds.forEach((id) => {
+                                          if (newSet.has(id)) {
+                                            newSet.delete(id);
+                                          } else {
+                                            newSet.add(id);
+                                          }
+                                        });
+                                        setSelectedCartItems(newSet);
+                                      }}
+                                      className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                                        isSelected
+                                          ? "bg-blue-50 dark:bg-blue-900/20"
+                                          : ""
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                          {item.quantity}x
+                                        </span>
+                                        <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                          {item.menuName}
+                                        </p>
+                                      </div>
+
+                                      {/* Cart ürünleri için butonlar */}
+                                      <div
+                                        className="flex items-center gap-3 ml-2"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          onClick={() =>
+                                            decreaseCartItemQuantity(
+                                              item.menuId
+                                            )
+                                          }
+                                          className="p-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                          disabled={item.quantity <= 1}
+                                        >
+                                          <Minus className="h-5 w-5" />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            increaseCartItemQuantity(
+                                              item.menuId
+                                            )
+                                          }
+                                          className="p-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                        >
+                                          <Plus className="h-5 w-5" />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            removeCartItem(item.menuId)
+                                          }
+                                          className="p-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                        >
+                                          <Trash2 className="h-5 w-5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </>
+          ) : cart.length > 0 ? (
+            <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+              {(() => {
+                // Aynı menuId'ye sahip ürünleri birleştir
+                const mergedItems = new Map<
+                  string,
+                  { item: OrderItem; cartItemIds: string[] }
+                >();
+
+                cart.forEach((item) => {
+                  const existing = mergedItems.get(item.menuId);
+                  if (existing) {
+                    // Aynı ürün varsa miktar ve toplamı birleştir
+                    existing.item.quantity += item.quantity;
+                    existing.item.subtotal += item.subtotal;
+                    existing.cartItemIds.push(item.cartItemId || item.menuId);
+                  } else {
+                    // Yeni ürün ekle
+                    mergedItems.set(item.menuId, {
+                      item: { ...item },
+                      cartItemIds: [item.cartItemId || item.menuId],
+                    });
+                  }
+                });
+
+                return Array.from(mergedItems.values()).map(
+                  ({ item, cartItemIds }, idx) => {
+                    const isSelected = cartItemIds.some((id) =>
+                      selectedCartItems.has(id)
+                    );
+                    return (
+                      <div
+                        key={item.menuId}
+                        className={`relative ${
+                          isSelected ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                        }`}
+                      >
+                        <div
+                          onClick={() => {
+                            // Tüm cartItemIds'leri toggle et
+                            const newSet = new Set(selectedCartItems);
+                            cartItemIds.forEach((id) => {
+                              if (newSet.has(id)) {
+                                newSet.delete(id);
+                              } else {
+                                newSet.add(id);
+                              }
+                            });
+                            setSelectedCartItems(newSet);
+                          }}
+                          className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                            isSelected ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                              {item.quantity}x
+                            </span>
+                            <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                              {item.menuName}
+                            </p>
+                          </div>
+
+                          {/* Cart ürünleri için butonlar */}
+                          <div
+                            className="flex items-center gap-3 ml-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() =>
+                                decreaseCartItemQuantity(item.menuId)
+                              }
+                              className="p-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                              disabled={item.quantity <= 1}
+                            >
+                              <Minus className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                increaseCartItemQuantity(item.menuId)
+                              }
+                              className="p-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            >
+                              <Plus className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => removeCartItem(item.menuId)}
+                              className="p-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+              <ShoppingCart className="h-10 w-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+              <p className="text-xs">Sepet boş</p>
+              <p className="text-xs mt-1">Ürünlere tıklayarak ekleyin</p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="p-3 flex-shrink-0 space-y-2">
+          {/* Seçili ürünler için butonlar - Ödeme Al butonunun üzerinde */}
+          {order && order.items.length > 0 && selectedItems.size > 0 && (
+            <div className="flex gap-2 mb-2">
+              <Button
+                onClick={() => {
+                  customAlert(
+                    "Taşıma özelliği yakında eklenecek",
+                    "Bilgi",
+                    "info"
+                  );
+                }}
+                className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm"
+              >
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Taşı
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!order || selectedItems.size === 0) return;
+                  
+                  // Direkt iptal et - seçili ürünlerin tamamını iptal et
+                  setIsCanceling(true);
+                  try {
+                    const canceledItems = order.canceledItems || [];
+                    const updatedItems: OrderItem[] = [];
+                    const itemsToCancel: OrderItem[] = [];
+
+                    // Seçili ürünleri iptal et
+                    order.items.forEach((item, index) => {
+                      if (selectedItems.has(index) && !item.canceledAt) {
+                        // İptal edilen ürünü canceledItems'a ekle
+                        const canceledItem = {
+                          ...item,
+                          addedAt: item.addedAt || new Date(),
+                          canceledAt: new Date(),
+                        };
+                        canceledItems.push(canceledItem);
+                        itemsToCancel.push(canceledItem);
+                      } else if (!item.canceledAt) {
+                        // İptal edilmeyecek, olduğu gibi ekle
+                        updatedItems.push(item);
+                      }
+                    });
+
+                    // Eğer hiç ürün kalmadıysa siparişi kapat
+                    if (updatedItems.length === 0) {
+                      await updateOrder(order.id!, {
+                        items: updatedItems,
+                        canceledItems: canceledItems,
+                        subtotal: 0,
+                        total: 0,
+                      });
+
+                      if (currentTable.id) {
+                        try {
+                          await updateTableStatus(currentTable.id, "available", undefined);
+                          await updateOrderStatus(order.id!, "closed");
+                          const updatedTable = await getTable(currentTable.id);
+                          if (updatedTable) {
+                            setCurrentTable(updatedTable);
+                          }
+                        } catch (error) {
+                          console.error("Masa güncellenirken hata:", error);
+                        }
+                      }
+                      setOrder(null);
+                      setSelectedItems(new Set());
+                      setIsCanceling(false);
+                      return;
+                    }
+
+                    // Toplam hesapla
+                    const subtotal = updatedItems.reduce(
+                      (sum, item) => sum + item.subtotal,
+                      0
+                    );
+                    const total = subtotal - (order.discount || 0);
+
+                    await updateOrder(order.id!, {
+                      items: updatedItems,
+                      canceledItems: canceledItems,
+                      subtotal: subtotal,
+                      total: total,
+                    });
+
+                    // İptal edilen ürünleri yazdır
+                    try {
+                      if (itemsToCancel.length > 0) {
+                        for (const canceledItem of itemsToCancel) {
+                          const menuItem = menus.find((m) => m.id === canceledItem.menuId);
+                          if (menuItem && menuItem.category) {
+                            const category = categories.find(
+                              (c) => c.name === menuItem.category
+                            );
+                            if (category) {
+                              const categoryPrinters = getPrintersForCategories(
+                                printers,
+                                categories,
+                                [category.id || ""]
+                              );
+
+                              for (const printer of categoryPrinters) {
+                                const printContent = formatPrintContent(
+                                  "cancel",
+                                  [canceledItem],
+                                  currentTable.tableNumber,
+                                  order.orderNumber,
+                                  {
+                                    companyName: companyData?.name || "",
+                                    paperWidth: printer.paperWidth || 48,
+                                  }
+                                );
+                                await printToPrinter(printer.name, printContent, "cancel");
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } catch (error) {
+                      // Yazdırma hatası iptal işlemini etkilemesin
+                    }
+
+                    // Masa geçmişine kaydet
+                    const effectiveCompanyId = companyId || userData?.companyId;
+                    const effectiveBranchId = branchId || userData?.assignedBranchId;
+                    if (effectiveCompanyId) {
+                      try {
+                        for (const canceledItem of itemsToCancel) {
+                          await addTableHistory(
+                            effectiveCompanyId,
+                            currentTable.id!,
+                            currentTable.tableNumber,
+                            "item_cancelled",
+                            `${canceledItem.menuName} iptal edildi`,
+                            {
+                              menuId: canceledItem.menuId,
+                              menuName: canceledItem.menuName,
+                              quantity: canceledItem.quantity,
+                              subtotal: canceledItem.subtotal,
+                            },
+                            effectiveBranchId || undefined
+                          );
+                        }
+                      } catch (error) {
+                        // Error saving table history
+                      }
+                    }
+
+                    // Siparişi yeniden yükle
+                    const updatedOrder = await getOrder(order.id!);
+                    setOrder(updatedOrder);
+                    setSelectedItems(new Set());
+                  } catch (error) {
+                    customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
+                  } finally {
+                    setIsCanceling(false);
+                  }
+                }}
+                className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white text-sm"
+                disabled={isCanceling}
+              >
+                {isCanceling ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    İptal ediliyor...
+                  </>
+                ) : (
+                  <>
+                    <X className="h-4 w-4 mr-2" />
+                    İptal
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+          {cart.length > 0 && selectedCartItems.size > 0 && (
+            <div className="flex gap-2 mb-2">
+              <Button
+                onClick={() => {
+                  customAlert(
+                    "Taşıma özelliği yakında eklenecek",
+                    "Bilgi",
+                    "info"
+                  );
+                }}
+                className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm"
+              >
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Taşı
+              </Button>
+              <Button
+                onClick={() => {
+                  // Seçili cart item'ları sil
+                  selectedCartItems.forEach((cartItemId) => {
+                    removeFromCart(cartItemId);
+                  });
+                  setSelectedCartItems(new Set());
+                }}
+                className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white text-sm"
+              >
+                <X className="h-4 w-4 mr-2" />
+                İptal
+              </Button>
+            </div>
+          )}
+          {cart.length > 0 && (
+            <Button
+              onClick={handleSendOrder}
+              disabled={isSendingOrder || isRefreshingOrder}
+              className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold"
+            >
+              {isSendingOrder ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Gönderiliyor...
+                </>
+              ) : (
+                <>
+                  <Send className="h-5 w-5 mr-2" />
+                  Siparişi Gönder ({cartTotal.toFixed(2)}₺)
+                </>
+              )}
+            </Button>
+          )}
+          {order &&
+            order.items.length > 0 &&
+            order.status !== "closed" &&
+            (() => {
+              // İptal edilmemiş ürünleri filtrele
+              const activeItems = order.items.filter((item) => !item.canceledAt);
+              
+              // Eğer aktif ürün yoksa buton gösterilmesin
+              if (activeItems.length === 0) {
+                return null;
+              }
+
+              // Ödenen ürünleri hesapla (paidItems varsa)
+              const paidItemsMap = new Map<string, number>();
+              order.payments?.forEach((payment) => {
+                payment.paidItems?.forEach((paidItem) => {
+                  const current = paidItemsMap.get(paidItem.menuId) || 0;
+                  paidItemsMap.set(paidItem.menuId, current + paidItem.quantity);
+                });
+              });
+
+              // Aktif ürünlerden ödenmemiş olanları bul
+              const unpaidItems = activeItems.filter((item) => {
+                const paidQty = paidItemsMap.get(item.menuId) || 0;
+                // Eğer bu ürün için ödeme yapılmamışsa veya kısmi ödeme yapılmışsa
+                // (yani ödenen miktar, toplam miktardan azsa) ödenmemiş sayılır
+                return paidQty < item.quantity;
+              });
+
+              // Eğer ödenmemiş ürün yoksa ve genel ödeme varsa kontrol et
+              if (unpaidItems.length === 0) {
+                // Tüm ödemelerin toplamını hesapla
+                const totalPaid = (order.payments || []).reduce(
+                  (sum, payment) => sum + payment.amount,
+                  0
+                );
+                const orderSubtotal = activeItems.reduce(
+                  (sum, item) => sum + item.subtotal,
+                  0
+                );
+                const orderDiscount = order.discount || 0;
+                const orderTotal = order.total || orderSubtotal - orderDiscount;
+                const isFullyPaid = totalPaid >= orderTotal && orderTotal > 0;
+
+                // Eğer tam ödeme alındıysa toplam ve buton gösterilmesin
+                if (isFullyPaid) {
+                  return null;
+                }
+              }
+
               return (
-                <button
-                  key={category.id}
-                  onClick={() => {
-                    setSelectedCategoryId(category.id!);
-                    setSelectedCategoryName(category.name);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
-                    isSelected
-                      ? "bg-blue-600 dark:bg-blue-500 text-white shadow-md"
-                      : "bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  <div className="font-medium">{category.name}</div>
-                  {category.description && (
-                    <div
-                      className={`text-xs mt-1 ${
-                        isSelected
-                          ? "text-blue-100"
-                          : "text-gray-500 dark:text-gray-400"
-                      }`}
-                    >
-                      {category.description}
+                <div className="flex items-center gap-3">
+                  {/* Toplam */}
+                  <div className="flex-1 h-14 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-between">
+                    <span className="text-sm text-purple-700 dark:text-purple-400">
+                      TOPLAM
+                    </span>
+                    <div className="flex flex-col items-end">
+                      {order.discount && order.discount > 0 ? (
+                        <>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400 line-through">
+                            ₺
+                            {order.items
+                              .reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0)
+                              .toFixed(2)
+                              .replace(".", ",")}
+                          </span>
+                          <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
+                            ₺
+                            {(
+                              order.total ||
+                              order.items.reduce(
+                                (sum, item) => sum + item.subtotal,
+                                0
+                              )
+                            )
+                              .toFixed(2)
+                              .replace(".", ",")}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
+                          ₺
+                          {order.items
+                            .reduce((sum, item) => sum + item.subtotal, 0)
+                            .toFixed(2)
+                            .replace(".", ",")}
+                        </span>
+                      )}
                     </div>
-                  )}
-                </button>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      // Ödeme modalı açıldığında selectedItems'ı temizle
+                      // Çünkü artık ödeme modalında ürün seçimi yapılacak
+                      setSelectedItems(new Set());
+
+                      setShowPaymentModal(true);
+                      setPaymentMethod("");
+                      // URL'e payment parametresi ekle
+                      navigate({
+                        to: Route.fullPath,
+                        search: (prev) => ({
+                          ...prev,
+                          payment: "true",
+                        }),
+                        replace: true,
+                      });
+                    }}
+                    className="h-14 bg-green-600 hover:bg-green-700 text-white text-base font-semibold px-6"
+                  >
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Ödeme Al
+                  </Button>
+                </div>
               );
-            })}
-          </div>
+            })()}
         </div>
       </div>
       {/* Main Content - Products */}
-      <div className="flex-1 flex flex-col lg:flex-row">
+      <div className="flex-1 flex flex-col">
         {/* Categories - Mobile (Horizontal Scroll) */}
         <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 overflow-x-auto flex-shrink-0">
           <div className="flex gap-2 min-w-max">
@@ -3158,7 +4921,7 @@ function TableDetailContent() {
         </div>
 
         {/* Products Grid */}
-        <div className="flex-1 p-3 lg:p-4 overflow-y-auto">
+        <div className="flex-1 p-3 lg:p-4 overflow-y-auto relative">
           {filteredMenus.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">
@@ -3172,13 +4935,21 @@ function TableDetailContent() {
                   <div
                     key={menu.id}
                     className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer"
-                    onClick={() => handleAddToCart(menu)}
-                    onMouseDown={() => handleLongPressStart(menu)}
+                    onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
+                    onMouseDown={() =>
+                      !isRefreshingOrder && handleLongPressStart(menu)
+                    }
                     onMouseUp={handleLongPressEnd}
                     onMouseLeave={handleLongPressEnd}
-                    onTouchStart={() => handleLongPressStart(menu)}
+                    onTouchStart={() =>
+                      !isRefreshingOrder && handleLongPressStart(menu)
+                    }
                     onTouchEnd={handleLongPressEnd}
                     onTouchCancel={handleLongPressEnd}
+                    style={{
+                      pointerEvents: isRefreshingOrder ? "none" : "auto",
+                      opacity: isRefreshingOrder ? 0.5 : 1,
+                    }}
                   >
                     {menu.image && (
                       <div className="aspect-square overflow-hidden">
@@ -3205,5118 +4976,1003 @@ function TableDetailContent() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Ödeme Paneli - Aşağıdan Yukarıya Kayarak */}
-        {order &&
-          order.items &&
-          order.items.length > 0 &&
-          (() => {
-            // Eğer seçili ürünler varsa sadece onların toplamını hesapla
-            let remaining: number;
-            if (selectedItems.size > 0) {
-              const selectedItemsArray = Array.from(selectedItems);
-              const selectedItemsData = selectedItemsArray
-                .map((index) => order.items[index])
-                .filter(Boolean);
+      {/* Ödeme Paneli - Sipariş Listesinin Yanında */}
+      {showPaymentModal &&
+        order &&
+        order.items &&
+        order.items.length > 0 &&
+        (() => {
+          // Seçili miktarlara göre kalan tutarı hesapla
+          // Sipariş listesindeki toplam tutar ile aynı olmalı
+          let remaining: number;
+          let originalTotal: number; // İndirim öncesi toplam (üstü çizili fiyat için)
+          
+          // Sipariş listesindeki toplam tutarı hesapla (order.items içindeki tüm item'ların toplamı)
+          // Bu, sipariş listesinde gösterilen TOPLAM ile aynı olmalı
+          // Orijinal fiyat için menuPrice * quantity kullanıyoruz
+          const orderListTotal = (order.items || []).reduce(
+            (sum, item) => sum + (item.menuPrice * item.quantity),
+            0
+          );
+          const orderDiscount = order.discount || 0;
+          const orderListTotalWithDiscount = order.total || orderListTotal - orderDiscount;
 
-              // Seçili ürünleri menuId'ye göre birleştir
-              const mergedSelectedItems = new Map<
-                string,
-                { quantity: number; subtotal: number }
-              >();
-              selectedItemsData.forEach((item) => {
-                const existing = mergedSelectedItems.get(item.menuId);
-                if (existing) {
-                  existing.quantity += item.quantity;
-                  existing.subtotal += item.subtotal;
-                } else {
-                  mergedSelectedItems.set(item.menuId, {
-                    quantity: item.quantity,
-                    subtotal: item.subtotal,
-                  });
-                }
-              });
+          if (pendingPaymentItems.length > 0) {
+            // Seçili miktarlara göre hesapla (sadece seçili miktar > 0 olanlar)
+            // ÖNEMLİ: Seçili ürünlere indirim uygulanmışsa, subtotal (indirimli fiyat) kullanılmalı!
+            let selectedSubtotalOriginal = 0; // Orijinal fiyat (indirim öncesi)
+            let selectedSubtotalDiscounted = 0; // İndirimli fiyat (subtotal)
+            
+            pendingPaymentItems.forEach((paymentItem) => {
+              const selectedQty =
+                selectedQuantities.get(paymentItem.menuId) || 0;
+              if (selectedQty > 0) {
+                // Seçili ürünlerin order.items içindeki gerçek değerlerini bul
+                let remainingQty = selectedQty;
+                paymentItem.indices.forEach((index) => {
+                  if (remainingQty <= 0) return;
+                  const item = order.items[index];
+                  if (!item || item.menuId !== paymentItem.menuId) return;
+                  
+                  const qtyToUse = Math.min(item.quantity, remainingQty);
+                  // Orijinal fiyat (indirim öncesi)
+                  selectedSubtotalOriginal += qtyToUse * item.menuPrice;
+                  // İndirimli fiyat (subtotal - zaten indirim uygulanmış)
+                  selectedSubtotalDiscounted += (item.subtotal / item.quantity) * qtyToUse;
+                  
+                  remainingQty -= qtyToUse;
+                });
+              }
+            });
 
-              remaining = Array.from(mergedSelectedItems.values()).reduce(
-                (sum, { subtotal }) => sum + subtotal,
-                0
-              );
+            // Eğer hiç seçili ürün yoksa, sipariş listesindeki toplam tutarı göster
+            if (selectedSubtotalOriginal === 0) {
+              remaining = orderListTotalWithDiscount;
+              originalTotal = orderListTotal; // İndirim öncesi toplam
             } else {
-              // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
+              // Seçili ürünlerin indirimli toplamını kullan (subtotal)
+              originalTotal = selectedSubtotalOriginal; // Seçili ürünlerin indirim öncesi toplamı
+              remaining = selectedSubtotalDiscounted; // Seçili ürünlerin indirimli toplamı (zaten indirim uygulanmış)
+            }
+          } else {
+            // Eğer pendingPaymentItems yoksa, sipariş listesindeki toplam tutarı kullan
+            // Bu, sipariş listesinde gösterilen TOPLAM ile aynı olmalı
+            remaining = orderListTotalWithDiscount;
+            originalTotal = orderListTotal; // İndirim öncesi toplam
+          }
+
+          const calculateDiscount = () => {
+            if (discountType === "percentage" && discountValue) {
+              const percentage = parseFloat(discountValue);
+              // İndirim hesaplanırken orijinal fiyat kullanılmalı (remaining değil)
+              return (originalTotal * percentage) / 100;
+            } else if (discountType === "amount" && discountValue) {
+              return parseFloat(discountValue);
+            }
+            return 0;
+          };
+          const discount = calculateDiscount();
+          // const finalAmount = Math.max(0, remaining - discount);
+
+          return (
+            <>
+              {/* Overlay */}
+              <div
+                className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[550px] lg:right-0"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setPaymentAmount("");
+                  setPaymentMethod("");
+                  setDiscountType("percentage");
+                  setDiscountValue("");
+                  // URL'den payment parametresini kaldır
+                  navigate({
+                    to: Route.fullPath,
+                    search: (prev) => ({
+                      ...prev,
+                      payment: undefined,
+                    }),
+                    replace: true,
+                  });
+                  setSelectedCourierId("");
+                  setPackageCount("1");
+                  setChangeAmount("0");
+                  setAppliedPayments([]);
+                }}
+              />
+              {/* Ödeme Paneli */}
+              <div className="fixed top-[80px] bottom-0 left-0 right-0 lg:left-[550px] lg:right-0 bg-white dark:bg-gray-800 z-50 flex transform transition-transform duration-300 ease-in-out">
+                {/* Sol Sidebar - Seçili Ürünler */}
+                <div
+                  className="hidden lg:flex lg:flex-none lg:w-80 flex-col overflow-hidden border-r-4 border-blue-600"
+                  style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
+                >
+                  <div className="p-3 flex-shrink-0 border-b border-gray-700">
+                    <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4" />
+                      Seçili Ürünler
+                    </h2>
+                  </div>
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {(() => {
+                      const selectedItemsList = pendingPaymentItems.filter(
+                        (item) => (selectedQuantities.get(item.menuId) || 0) > 0
+                      );
+
+                      if (selectedItemsList.length === 0) {
+                        return (
+                          <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                            <ShoppingCart className="h-10 w-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                            <p className="text-xs">Seçili ürün yok</p>
+                            <p className="text-xs mt-1">
+                              Sipariş listesinden ürün seçin
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 p-3">
+                          {selectedItemsList.map((paymentItem) => {
+                            const selectedQty =
+                              selectedQuantities.get(paymentItem.menuId) || 0;
+                            const itemTotal =
+                              selectedQty * paymentItem.menuPrice;
+                            return (
+                              <div
+                                key={paymentItem.menuId}
+                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                    {paymentItem.menuName}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                                      {selectedQty} /{" "}
+                                      {paymentItem.totalQuantity} adet
+                                    </span>
+                                    <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                      ₺{itemTotal.toFixed(2).replace(".", ",")}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 ml-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newQty = Math.max(
+                                        0,
+                                        selectedQty - 1
+                                      );
+                                      setSelectedQuantities((prev) => {
+                                        const newMap = new Map(prev);
+                                        if (newQty === 0) {
+                                          newMap.delete(paymentItem.menuId);
+                                        } else {
+                                          newMap.set(
+                                            paymentItem.menuId,
+                                            newQty
+                                          );
+                                        }
+                                        return newMap;
+                                      });
+                                    }}
+                                    className="w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95"
+                                  >
+                                    -
+                                  </button>
+                                  <div className="w-12 text-center text-base font-bold text-gray-900 dark:text-white">
+                                    {selectedQty}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newQty = Math.min(
+                                        paymentItem.totalQuantity,
+                                        selectedQty + 1
+                                      );
+                                      setSelectedQuantities((prev) => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(paymentItem.menuId, newQty);
+                                        return newMap;
+                                      });
+                                    }}
+                                    className="w-9 h-9 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={
+                                      selectedQty >= paymentItem.totalQuantity
+                                    }
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Ana Ödeme Alanı */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="p-5 flex-shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                        Ödeme Al
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setShowPaymentModal(false);
+                          setPaymentAmount("");
+                          setDiscountType("percentage");
+                          setDiscountValue("");
+                          setSelectedCourierId("");
+                          setPackageCount("1");
+                          setChangeAmount("0");
+                          setAppliedPayments([]);
+                          // URL'den payment parametresini kaldır
+                          navigate({
+                            to: Route.fullPath,
+                            search: (prev) => ({
+                              ...prev,
+                              payment: undefined,
+                            }),
+                            replace: true,
+                          });
+                        }}
+                        className="p-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
+                      >
+                        <X className="h-7 w-7 text-gray-600 dark:text-gray-400" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Üst Sabit Alan - Numerik Tuşlarla Yazılan Tutarların Tag'ları */}
+                    <div className="px-8 pt-4 pb-4 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex-shrink-0 min-h-[200px]">
+                      {/* Uygulanan Ödemeler */}
+                      {appliedPayments.length > 0 ? (
+                        <div className="flex items-center gap-3 mb-0 flex-wrap">
+                          {appliedPayments.map((payment) => (
+                            <div
+                              key={payment.id}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-purple-100 dark:bg-purple-900/50 rounded-xl text-base font-semibold shadow-md border border-purple-200 dark:border-purple-800"
+                            >
+                              <span className="text-gray-900 dark:text-white">
+                                {payment.methodName} ₺
+                                {payment.amount.toFixed(2).replace(".", ",")}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setAppliedPayments((prev) =>
+                                    prev.filter((p) => p.id !== payment.id)
+                                  );
+                                }}
+                                className="ml-1 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-full p-1.5 transition-all active:scale-95"
+                              >
+                                <X className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center">
+                          <span className="text-sm text-gray-400 dark:text-gray-500">
+                            Numerik tuşlarla tutar girin
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Ödeme Bilgileri - Ödenen Tutar, Toplam Ödeme ve Buton */}
+                    <div className="w-full px-8 py-4 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex-shrink-0">
+                      <div className="flex items-center justify-between gap-6 w-full">
+                        <div className="text-right flex-1">
+                          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
+                            ÖDENEN TUTAR
+                          </div>
+                          <div className="text-4xl font-extrabold text-gray-900 dark:text-white">
+                            ₺
+                            {(
+                              (order.payments || []).reduce(
+                                (sum, p) => sum + p.amount,
+                                0
+                              ) +
+                              appliedPayments.reduce(
+                                (sum, p) => sum + p.amount,
+                                0
+                              )
+                            )
+                              .toFixed(2)
+                              .replace(".", ",")}
+                          </div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
+                            TOPLAM ÖDEME
+                          </div>
+                          <div className="text-4xl font-extrabold text-green-600 dark:text-green-400">
+                            ₺
+                            {(
+                              (order.payments || []).reduce(
+                                (sum, p) => sum + p.amount,
+                                0
+                              ) +
+                              appliedPayments.reduce(
+                                (sum, p) => sum + p.amount,
+                                0
+                              )
+                            )
+                              .toFixed(2)
+                              .replace(".", ",")}
+                          </div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
+                            KALAN TUTAR
+                          </div>
+                          <div className="flex flex-col items-end">
+                            {order.discount && order.discount > 0 ? (
+                              <>
+                                <span className="text-lg font-medium text-gray-500 dark:text-gray-400 line-through">
+                                  ₺
+                                  {(
+                                    // İndirim öncesi toplam (orijinal fiyat) - appliedPayments çıkarma
+                                    originalTotal
+                                  )
+                                    .toFixed(2)
+                                    .replace(".", ",")}
+                                </span>
+                                <div className="text-4xl font-extrabold text-red-600 dark:text-red-400">
+                                  ₺
+                                  {(
+                                    remaining -
+                                    appliedPayments.reduce(
+                                      (sum, p) => sum + p.amount,
+                                      0
+                                    )
+                                  )
+                                    .toFixed(2)
+                                    .replace(".", ",")}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-4xl font-extrabold text-red-600 dark:text-red-400">
+                                ₺
+                                {(
+                                  remaining -
+                                  appliedPayments.reduce(
+                                    (sum, p) => sum + p.amount,
+                                    0
+                                  )
+                                )
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 flex justify-end">
+                          <Button
+                            type="button"
+                            onClick={async () => {
+                              setIsProcessingPayment(true);
+                              try {
+                                // Tag'ların toplam tutarını hesapla
+                                const totalTagAmount = appliedPayments.reduce(
+                                  (sum, p) => sum + p.amount,
+                                  0
+                                );
+
+                                // Eğer tag'lar varsa, sadece tag'ları işle (kısmi ödeme)
+                                if (appliedPayments.length > 0) {
+                                  // Tüm tag'ları tek bir ödeme olarak işle (masanın toplam ücretinden düş)
+                                  // handlePayment içinde zaten refresh yapılıyor
+                                  await handlePayment(
+                                    totalTagAmount.toString(),
+                                    undefined, // Ürün bazlı değil, masanın toplam ücretinden düş
+                                    undefined,
+                                    undefined,
+                                    appliedPayments[0].method // İlk tag'ın ödeme yöntemini kullan
+                                  );
+
+                                  // Tag'ları temizle
+                                  setAppliedPayments([]);
+                                  setPaymentAmount("0");
+                                  setPaymentMethod("");
+
+                                  // Modal'ı kapatma, kullanıcı kalan tutarı da alabilir
+                                  setIsProcessingPayment(false);
+                                  return;
+                                }
+
+                                // Tag'lar yoksa, kalan tutarı işle
+                                const remainingAmount =
+                                  remaining -
+                                  appliedPayments.reduce(
+                                    (sum, p) => sum + p.amount,
+                                    0
+                                  );
+
+                                // Eğer ödeme yöntemi seçilmediyse uyarı göster
+                                if (!paymentMethod) {
+                                  customAlert(
+                                    "Lütfen bir ödeme yöntemi seçin",
+                                    "Uyarı",
+                                    "warning"
+                                  );
+                                  setIsProcessingPayment(false);
+                                  return;
+                                }
+
+                                // Eğer seçili ürün varsa (selectedQuantities veya pendingPaymentItems), sadece seçili ürünlerin ödemesini al
+                                // Eğer seçili ürün yoksa, tüm masanın ödemesini al
+                                const hasSelectedItems = 
+                                  (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) ||
+                                  pendingPaymentItems.length > 0;
+
+                                // Kalan tutarı seçilen ödeme yöntemi ile al
+                                // Eğer selectedQuantities ile ürün seçildiyse, onları kullan
+                                // handlePayment içinde zaten refresh yapılıyor, burada sadece çağırıyoruz
+                                await handlePayment(
+                                  remainingAmount.toString(),
+                                  undefined, // itemsToUse handlePayment içinde selectedQuantities'den oluşturulacak
+                                  hasSelectedItems && pendingPaymentItems.length > 0
+                                    ? pendingPaymentItems
+                                    : undefined,
+                                  hasSelectedItems && selectedQuantities.size > 0
+                                    ? selectedQuantities
+                                    : undefined,
+                                  paymentMethod
+                                );
+
+                                // Tüm işlemler tamamlandı, modal'ı kapat
+                                setPaymentAmount("0");
+                                setPaymentMethod("");
+                                setAppliedPayments([]);
+                                setShowPaymentModal(false);
+                                // URL'den payment parametresini kaldır
+                                navigate({
+                                  to: Route.fullPath,
+                                  search: (prev) => ({
+                                    ...prev,
+                                    payment: undefined,
+                                  }),
+                                  replace: true,
+                                });
+                              } catch (error) {
+                                customAlert(
+                                  "Ödeme işlenirken bir hata oluştu",
+                                  "Hata",
+                                  "error"
+                                );
+                              } finally {
+                                setIsProcessingPayment(false);
+                              }
+                            }}
+                            className="h-16 flex-1 max-w-md text-lg font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                            disabled={isProcessingPayment}
+                          >
+                            {appliedPayments.length > 0 ? (
+                              <>
+                                Tag ödemelerini al ₺
+                                {appliedPayments
+                                  .reduce((sum, p) => sum + p.amount, 0)
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                              </>
+                            ) : (
+                              <>
+                                Kalan tutarı al ₺
+                                {(
+                                  remaining -
+                                  appliedPayments.reduce(
+                                    (sum, p) => sum + p.amount,
+                                    0
+                                  )
+                                )
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Alt Kısım - Butonlar */}
+                    <div className="flex-1 flex items-stretch overflow-hidden px-8 pb-0 min-h-0 flex-shrink-0">
+                      {/* Ödeme Yöntemi Butonları, İşlem Butonları, Numerik Ekran ve Numerik Tuşlar */}
+                      <div className="flex-1 flex items-stretch overflow-hidden">
+                        {/* Sol Sütun - Ödeme Yöntemleri */}
+                        <div className="w-56 pl-0 pr-4 pt-0 pb-0 flex flex-col gap-1.5 h-full relative">
+                          <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider pt-4 leading-tight flex-shrink-0">
+                            Ödeme Yöntemi
+                          </label>
+                          {paymentMethods.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                              Bulunamadı
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+                              {paymentMethods.map((pm) => (
+                                <Button
+                                  key={pm.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentMethod(pm.code);
+                                  }}
+                                  className={`w-full h-10 text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 ${
+                                    paymentMethod === pm.code
+                                      ? "text-white"
+                                      : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600"
+                                  }`}
+                                  style={
+                                    paymentMethod === pm.code
+                                      ? {
+                                          backgroundColor:
+                                            pm.color || "#16a34a",
+                                        }
+                                      : {}
+                                  }
+                                >
+                                  {pm.name}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                          {/* Border'ı alta tam temas ettirmek için absolute positioned border */}
+                          <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 pointer-events-none"></div>
+                        </div>
+
+                        {/* Orta Sütun - İşlem Butonları ve Numerik Keypad */}
+                        <div className="flex-1 flex flex-col pt-0 px-4 pb-0 min-h-0 h-full">
+                          {/* Numerik Keypad - Kalan Alana Sığdırılmış */}
+                          <div className="flex flex-col flex-1 min-h-0">
+                            <div className="flex flex-col px-4 pb-0 flex-1 min-h-0">
+                              {/* İşlem Butonları - Numerik Ekranın Üstünde */}
+                              <div className="w-full mb-3 flex-shrink-0">
+                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider block pt-4 leading-tight flex-shrink-0">
+                                  İşlemler
+                                </label>
+                                <div className="grid grid-cols-4 gap-2.5">
+                                  <Button
+                                    type="button"
+                                    onClick={() => setShowDiscountModal(true)}
+                                    className="h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                    İndirim
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      setPaymentMethod("customerAccount");
+                                    }}
+                                    className="h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                  >
+                                    <CreditCard className="h-4 w-4" />
+                                    Cari
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (
+                                        order &&
+                                        order.items &&
+                                        order.items.length > 0
+                                      ) {
+                                        const updatedItems = order.items.map(
+                                          (item) => ({
+                                            ...item,
+                                            subtotal: 0,
+                                            menuPrice: 0,
+                                          })
+                                        );
+                                        const updatedOrder = {
+                                          ...order,
+                                          items: updatedItems,
+                                        };
+                                        await updateOrder(
+                                          order.id,
+                                          updatedOrder
+                                        );
+                                        setOrder(updatedOrder);
+                                        setPaymentAmount("0");
+                                      }
+                                    }}
+                                    className="h-12 bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                  >
+                                    <Utensils className="h-4 w-4" />
+                                    İkram
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      setPaymentMethod("unpaid");
+                                    }}
+                                    className="h-12 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                  >
+                                    <X className="h-4 w-4" />
+                                    Ödenmez
+                                  </Button>
+                                </div>
+                              </div>
+                              {/* Numerik Giriş Gösterimi - 7,8,9 tuşlarının hemen üzerinde */}
+                              <div className="w-full mb-3 flex-shrink-0">
+                                <div className="rounded-xl p-4 border-2 shadow-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center gap-3">
+                                    {paymentMethod && (
+                                      <ArrowRight className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                    )}
+                                    <span className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                                      {(() => {
+                                        const amount = paymentAmount || "0";
+                                        const formattedAmount = (() => {
+                                          if (!amount.includes(".")) {
+                                            return parseFloat(amount)
+                                              .toFixed(2)
+                                              .replace(".", ",");
+                                          }
+                                          const parts = amount.split(".");
+                                          if (parts[1] && parts[1].length > 2) {
+                                            return parseFloat(amount)
+                                              .toFixed(2)
+                                              .replace(".", ",");
+                                          }
+                                          return amount
+                                            .padEnd(
+                                              amount.indexOf(".") + 3,
+                                              "0"
+                                            )
+                                            .replace(".", ",");
+                                        })();
+
+                                        // Eğer ödeme yöntemi seçildiyse, sayıyı ve yöntemi göster
+                                        if (
+                                          paymentMethod &&
+                                          parseFloat(amount) > 0
+                                        ) {
+                                          const methodName =
+                                            paymentMethods.find(
+                                              (pm) => pm.code === paymentMethod
+                                            )?.name || "";
+                                          return `${methodName ? `${methodName} - ` : ""}₺${formattedAmount}`;
+                                        }
+
+                                        // Sadece sayıyı göster
+                                        return `₺${formattedAmount}`;
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2.5 w-full auto-rows-fr">
+                                {/* 7, 8, 9 */}
+                                {[7, 8, 9].map((num) => (
+                                  <Button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = paymentAmount || "0";
+                                      if (current.includes(".")) {
+                                        setPaymentAmount(
+                                          current + num.toString()
+                                        );
+                                      } else {
+                                        const newValue =
+                                          current === "0"
+                                            ? num.toString()
+                                            : current + num.toString();
+                                        setPaymentAmount(newValue);
+                                      }
+                                    }}
+                                    className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  >
+                                    {num}
+                                  </Button>
+                                ))}
+                                {/* Sil (Delete) */}
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = paymentAmount || "0";
+                                    if (current.length > 1) {
+                                      setPaymentAmount(current.slice(0, -1));
+                                    } else {
+                                      setPaymentAmount("0");
+                                    }
+                                  }}
+                                  className="aspect-square w-full min-h-[90px] p-0 bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                >
+                                  <Delete className="h-16 w-16 text-white" />
+                                </Button>
+                                {/* 4, 5, 6 */}
+                                {[4, 5, 6].map((num) => (
+                                  <Button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = paymentAmount || "0";
+                                      if (current.includes(".")) {
+                                        setPaymentAmount(
+                                          current + num.toString()
+                                        );
+                                      } else {
+                                        const newValue =
+                                          current === "0"
+                                            ? num.toString()
+                                            : current + num.toString();
+                                        setPaymentAmount(newValue);
+                                      }
+                                    }}
+                                    className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  >
+                                    {num}
+                                  </Button>
+                                ))}
+                                {/* C (Clear) */}
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentAmount("0");
+                                  }}
+                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                >
+                                  C
+                                </Button>
+                                {/* 1, 2, 3 */}
+                                {[1, 2, 3].map((num) => (
+                                  <Button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = paymentAmount || "0";
+                                      if (current.includes(".")) {
+                                        setPaymentAmount(
+                                          current + num.toString()
+                                        );
+                                      } else {
+                                        const newValue =
+                                          current === "0"
+                                            ? num.toString()
+                                            : current + num.toString();
+                                        setPaymentAmount(newValue);
+                                      }
+                                    }}
+                                    className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  >
+                                    {num}
+                                  </Button>
+                                ))}
+                                {/* Enter - 2 satır yüksekliğinde */}
+                                <Button
+                                  type="button"
+                                  onClick={async () => {
+                                    // Ödeme yöntemi seçilmemişse uyarı göster
+                                    if (!paymentMethod) {
+                                      customAlert(
+                                        "Lütfen bir ödeme yöntemi seçin",
+                                        "Uyarı",
+                                        "warning"
+                                      );
+                                      return;
+                                    }
+
+                                    // Tutar girilmemişse uyarı göster
+                                    const amount = parseFloat(
+                                      paymentAmount || "0"
+                                    );
+                                    if (amount <= 0) {
+                                      customAlert(
+                                        "Lütfen bir tutar girin",
+                                        "Uyarı",
+                                        "warning"
+                                      );
+                                      return;
+                                    }
+
+                                    // Tag olarak ekle (ödeme alma)
+                                    const methodName =
+                                      paymentMethods.find(
+                                        (pm) => pm.code === paymentMethod
+                                      )?.name || "";
+
+                                    setAppliedPayments((prev) => [
+                                      ...prev,
+                                      {
+                                        method: paymentMethod,
+                                        methodName: methodName,
+                                        amount: amount,
+                                        id: `${paymentMethod}-${Date.now()}-${Math.random()}`,
+                                      },
+                                    ]);
+
+                                    // Numerik ekranı temizle
+                                    setPaymentAmount("0");
+                                    setPaymentMethod("");
+                                  }}
+                                  disabled={
+                                    isProcessingPayment ||
+                                    !paymentAmount ||
+                                    parseFloat(paymentAmount || "0") <= 0
+                                  }
+                                  className="row-span-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:hover:bg-gray-400 text-white dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center p-0 w-full min-h-[calc(180px+10px)]"
+                                >
+                                  {isProcessingPayment ? (
+                                    <Loader2 className="h-12 w-12 animate-spin" />
+                                  ) : (
+                                    <ArrowRight className="h-12 w-12" />
+                                  )}
+                                </Button>
+                                {/* 0 */}
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = paymentAmount || "0";
+                                    if (current !== "0") {
+                                      setPaymentAmount(current + "0");
+                                    }
+                                  }}
+                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                >
+                                  0
+                                </Button>
+                                {/* 00 */}
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = paymentAmount || "0";
+                                    if (current !== "0") {
+                                      setPaymentAmount(current + "00");
+                                    }
+                                  }}
+                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                >
+                                  00
+                                </Button>
+                                {/* . */}
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = paymentAmount || "0";
+                                    if (!current.includes(".")) {
+                                      setPaymentAmount(current + ".");
+                                    }
+                                  }}
+                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                >
+                                  .
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
+      {/* İndirim Modalı */}
+      {showDiscountModal &&
+        order &&
+        order.items &&
+        order.items.length > 0 &&
+        (() => {
+          // Seçili miktarlara göre kalan tutarı hesapla
+          let remaining: number;
+          if (pendingPaymentItems.length > 0) {
+            // Seçili miktarlara göre hesapla (sadece seçili miktar > 0 olanlar)
+            remaining = pendingPaymentItems.reduce((sum, paymentItem) => {
+              const selectedQty =
+                selectedQuantities.get(paymentItem.menuId) || 0;
+              if (selectedQty > 0) {
+                return sum + selectedQty * paymentItem.menuPrice;
+              }
+              return sum;
+            }, 0);
+
+            // Eğer hiç seçili ürün yoksa, tüm ürünlerin toplamını göster
+            if (remaining === 0) {
               remaining = (order.items || []).reduce(
                 (sum, item) => sum + item.subtotal,
                 0
               );
             }
-
-            const calculateDiscount = () => {
-              if (discountType === "percentage" && discountValue) {
-                const percentage = parseFloat(discountValue);
-                return (remaining * percentage) / 100;
-              } else if (discountType === "amount" && discountValue) {
-                return parseFloat(discountValue);
-              } else if (discountType === "manual" && manualDiscount) {
-                return parseFloat(manualDiscount);
-              }
-              return 0;
-            };
-            const discount = calculateDiscount();
-            // const finalAmount = Math.max(0, remaining - discount);
-
-            return (
-              <div
-                className={`absolute inset-0 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-in-out z-10 flex flex-col ${
-                  showPaymentModal ? "translate-y-0" : "translate-y-full"
-                }`}
-              >
-                <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                      <ArrowLeft
-                        className="h-4 w-4 cursor-pointer"
-                        onClick={() => {
-                          setShowPaymentModal(false);
-                          setPaymentAmount("");
-                          setDiscountType("percentage");
-                          setDiscountValue("");
-                          setManualDiscount("");
-                          setSelectedCourierId("");
-                          setPackageCount("1");
-                          setChangeAmount("0");
-                        }}
-                      />
-                      Ödeme Al
-                    </h2>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        İndirim
-                      </label>
-                      <div className="space-y-3">
-                        {/* İndirim Türü Seçimi */}
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant={
-                              discountType === "percentage"
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() => {
-                              setDiscountType("percentage");
-                              setDiscountValue("");
-                              setManualDiscount("");
-                              setPaymentAmount(remaining.toFixed(2));
-                            }}
-                            className="flex-1 text-xs"
-                          >
-                            Oran
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={
-                              discountType === "amount" ? "default" : "outline"
-                            }
-                            onClick={() => {
-                              setDiscountType("amount");
-                              setDiscountValue("");
-                              setManualDiscount("");
-                              setPaymentAmount(remaining.toFixed(2));
-                            }}
-                            className="flex-1 text-xs"
-                          >
-                            Fiyat
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={
-                              discountType === "manual" ? "default" : "outline"
-                            }
-                            onClick={() => {
-                              setDiscountType("manual");
-                              setDiscountValue("");
-                              setManualDiscount("");
-                              setPaymentAmount(remaining.toFixed(2));
-                            }}
-                            className="flex-1 text-xs"
-                          >
-                            Manuel
-                          </Button>
-                        </div>
-
-                        {/* Oran Bazlı İndirim */}
-                        {discountType === "percentage" && (
-                          <div>
-                            <div className="flex gap-2 flex-wrap">
-                              {[10, 20, 30, 40, 50].map((percent) => (
-                                <Button
-                                  key={percent}
-                                  type="button"
-                                  variant={
-                                    discountValue === percent.toString()
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => {
-                                    if (discountValue === percent.toString()) {
-                                      setDiscountValue("");
-                                      setPaymentAmount(remaining.toFixed(2));
-                                    } else {
-                                      setDiscountValue(percent.toString());
-                                      const discountAmount =
-                                        (remaining * percent) / 100;
-                                      setPaymentAmount(
-                                        Math.max(
-                                          0,
-                                          remaining - discountAmount
-                                        ).toFixed(2)
-                                      );
-                                    }
-                                  }}
-                                  className="flex-1 min-w-[60px] text-xs"
-                                >
-                                  %{percent}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Fiyat Bazlı İndirim */}
-                        {discountType === "amount" && (
-                          <div>
-                            <div className="flex gap-2 flex-wrap">
-                              {[20, 50, 75, 100].map((amount) => (
-                                <Button
-                                  key={amount}
-                                  type="button"
-                                  variant={
-                                    discountValue === amount.toString()
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => {
-                                    if (discountValue === amount.toString()) {
-                                      setDiscountValue("");
-                                      setPaymentAmount(remaining.toFixed(2));
-                                    } else {
-                                      setDiscountValue(amount.toString());
-                                      setPaymentAmount(
-                                        Math.max(0, remaining - amount).toFixed(
-                                          2
-                                        )
-                                      );
-                                    }
-                                  }}
-                                  className="flex-1 min-w-[60px] text-xs"
-                                >
-                                  ₺{amount}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Manuel İndirim */}
-                        {discountType === "manual" && (
-                          <div>
-                            <Input
-                              type="number"
-                              value={manualDiscount}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setManualDiscount(value);
-                                const discountAmount = parseFloat(value) || 0;
-                                setPaymentAmount(
-                                  Math.max(
-                                    0,
-                                    remaining - discountAmount
-                                  ).toFixed(2)
-                                );
-                              }}
-                              placeholder="İndirim tutarı"
-                              step="0.01"
-                              min="0"
-                              max={remaining}
-                              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            />
-                          </div>
-                        )}
-
-                        {/* İndirim Özeti */}
-                        <div className="bg-gray-50 dark:bg-gray-700/50 p-2 rounded text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">
-                              İndirim:
-                            </span>
-                            <span className="font-medium text-red-600 dark:text-red-400">
-                              -₺{discount.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Ödeme Tutarı
-                      </label>
-                      <Input
-                        type="number"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                        max={remaining}
-                        className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                      />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Kalan: ₺{remaining.toFixed(2)}
-                        {discount > 0 && (
-                          <span className="text-red-600 dark:text-red-400 ml-2">
-                            (İndirim: -₺{discount.toFixed(2)})
-                          </span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Ödeme Yöntemi
-                      </label>
-                      {paymentMethods.length === 0 ? (
-                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                          Ödeme yöntemi bulunamadı
-                        </div>
-                      ) : (
-                        <div className="flex gap-2 flex-wrap">
-                          {paymentMethods.map((pm) => (
-                            <Button
-                              key={pm.id}
-                              type="button"
-                              variant={
-                                paymentMethod === pm.code
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() => setPaymentMethod(pm.code)}
-                              className={`flex-1 min-w-[100px] h-10 ${
-                                paymentMethod === pm.code
-                                  ? "text-white"
-                                  : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-                              }`}
-                              style={
-                                paymentMethod === pm.code
-                                  ? { backgroundColor: pm.color || "#16a34a" }
-                                  : {}
-                              }
-                            >
-                              {pm.name}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Kurye Atama */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Kurye Atama (Opsiyonel)
-                      </label>
-                      {couriers.length === 0 ? (
-                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                          Aktif kurye bulunamadı
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <select
-                            value={selectedCourierId}
-                            onChange={(e) => {
-                              setSelectedCourierId(e.target.value);
-                              if (!e.target.value) {
-                                setPackageCount("1");
-                                setChangeAmount("0");
-                              }
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                          >
-                            <option value="">Kurye Seçin</option>
-                            {couriers.map((courier) => (
-                              <option key={courier.id} value={courier.id}>
-                                {courier.name} (₺
-                                {courier.pricePerPackage.toFixed(2)}/paket)
-                              </option>
-                            ))}
-                          </select>
-
-                          {selectedCourierId && (
-                            <>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                  Paket Sayısı
-                                </label>
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  value={packageCount}
-                                  onChange={(e) =>
-                                    setPackageCount(e.target.value)
-                                  }
-                                  placeholder="1"
-                                  className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                  Para Üstü (₺)
-                                </label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={changeAmount}
-                                  onChange={(e) =>
-                                    setChangeAmount(e.target.value)
-                                  }
-                                  placeholder="0.00"
-                                  className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        onClick={() => handlePayment()}
-                        disabled={isProcessingPayment}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                      >
-                        {isProcessingPayment ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            İşleniyor...
-                          </>
-                        ) : (
-                          <>
-                            <Check className="h-4 w-4 mr-2" />
-                            Onayla
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowPaymentModal(false);
-                          setPaymentAmount("");
-                          setDiscountType("percentage");
-                          setDiscountValue("");
-                          setManualDiscount("");
-                          setSelectedCourierId("");
-                          setPackageCount("1");
-                          setChangeAmount("0");
-                        }}
-                        className="flex-1"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        İptal
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          } else {
+            // Eğer pendingPaymentItems yoksa, tüm ürünlerin toplamını kullan
+            remaining = (order.items || []).reduce(
+              (sum, item) => sum + item.subtotal,
+              0
             );
-          })()}
+          }
 
-        {/* Normal Görünüm */}
-        <div
-          className={`flex-none w-80 flex flex-col transition-opacity duration-300 overflow-hidden border-l border-gray-200 dark:border-gray-700 ${
-            showPaymentModal ? "opacity-0 pointer-events-none" : "opacity-100"
-          }`}
-          style={{ backgroundColor: "#1E2939" }}
-        >
-          <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4" />
-                {order ? "Aktif Sipariş" : "Sipariş"}
-              </h2>
-            </div>
-          </div>
+          // İndirim hesaplaması için seçili ürünler varsa onların toplamını, yoksa tüm siparişin toplamını kullan
+          let orderSubtotal: number;
+          let selectedItemsIndices: Set<number> = new Set();
+          
+          if (pendingPaymentItems.length > 0) {
+            // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
+            orderSubtotal = pendingPaymentItems.reduce((sum, paymentItem) => {
+              const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+              if (selectedQty > 0) {
+                // Seçili ürünlerin index'lerini topla
+                paymentItem.indices.forEach(idx => selectedItemsIndices.add(idx));
+                return sum + selectedQty * paymentItem.menuPrice;
+              }
+              return sum;
+            }, 0);
+            
+            // Eğer hiç seçili ürün yoksa, tüm ürünlerin toplamını kullan
+            if (orderSubtotal === 0) {
+              orderSubtotal = (order.items || []).reduce(
+                (sum, item) => sum + (item.menuPrice * item.quantity),
+                0
+              );
+              selectedItemsIndices = new Set(order.items.map((_, idx) => idx));
+            } else {
+              // Seçili ürünlerin index'lerini topla
+              pendingPaymentItems.forEach(paymentItem => {
+                paymentItem.indices.forEach(idx => selectedItemsIndices.add(idx));
+              });
+            }
+          } else if (selectedItems.size > 0) {
+            // selectedItems varsa, seçili ürünlerin toplamını hesapla
+            orderSubtotal = Array.from(selectedItems).reduce((sum, index) => {
+              const item = order.items[index];
+              if (item) {
+                selectedItemsIndices.add(index);
+                return sum + (item.menuPrice * item.quantity);
+              }
+              return sum;
+            }, 0);
+          } else {
+            // Seçili ürün yoksa, tüm ürünlerin toplamını kullan (orijinal fiyatlardan)
+            orderSubtotal = (order.items || []).reduce(
+              (sum, item) => sum + (item.menuPrice * item.quantity),
+              0
+            );
+            selectedItemsIndices = new Set(order.items.map((_, idx) => idx));
+          }
 
-          {/* Cart Items veya Aktif Sipariş */}
-          <div className="flex-1 overflow-y-auto p-3 min-h-0">
-            {order && order.items.length > 0 ? (
-              <>
-                {/* Ödemesi Alınan ve İptal Edilen Ürünler */}
-                {(() => {
-                  // Tüm ödemelerden ödenen ürünleri birleştir
-                  const paidItemsMap = new Map<
-                    string,
-                    { menuName: string; quantity: number; subtotal: number }
-                  >();
+          const calculateDiscount = () => {
+            if (discountType === "percentage" && discountValue) {
+              const percentage = parseFloat(discountValue);
+              return (orderSubtotal * percentage) / 100;
+            } else if (discountType === "amount" && discountValue) {
+              return Math.min(parseFloat(discountValue), orderSubtotal);
+            }
+            return 0;
+          };
+          const discount = calculateDiscount();
 
-                  if (order.payments && order.payments.length > 0) {
-                    order.payments.forEach((payment) => {
-                      if (payment.paidItems) {
-                        payment.paidItems.forEach((paidItem) => {
-                          const existing = paidItemsMap.get(paidItem.menuId);
-                          if (existing) {
-                            existing.quantity += paidItem.quantity;
-                            existing.subtotal += paidItem.subtotal;
-                          } else {
-                            paidItemsMap.set(paidItem.menuId, {
-                              menuName: paidItem.menuName,
-                              quantity: paidItem.quantity,
-                              subtotal: paidItem.subtotal,
-                            });
-                          }
-                        });
-                      }
-                    });
-                  }
-
-                  const paidItems = Array.from(paidItemsMap.values());
-                  const hasPaidItems = paidItems.length > 0;
-                  const hasCanceledItems =
-                    order.canceledItems && order.canceledItems.length > 0;
-                  const hasMovedItems =
-                    order.movedItems && order.movedItems.length > 0;
-
-                  if (!hasPaidItems && !hasCanceledItems && !hasMovedItems) {
-                    return null;
-                  }
-
-                  return (
-                    <div className="mb-4 pb-4 border-b-2 border-gray-300 dark:border-gray-600">
-                      {/* Ödemesi Alınan Ürünler */}
-                      {hasPaidItems && (
-                        <div className="mb-3">
-                          <div className="text-xs font-bold text-green-700 dark:text-green-400 mb-2 flex items-center gap-1">
-                            <Check className="h-3 w-3" />
-                            Ödemesi Alınan Ürünler
-                          </div>
-                          <div className="space-y-1.5">
-                            {paidItems.map((paidItem, idx) => (
-                              <div
-                                key={`paid-${idx}`}
-                                className="rounded-lg p-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 w-full"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-green-900 dark:text-green-200 text-xs truncate">
-                                      {paidItem.menuName}
-                                    </h4>
-                                  </div>
-                                  <div className="flex flex-col items-end gap-0.5">
-                                    <span className="font-bold text-green-900 dark:text-green-200 text-xs">
-                                      ₺{paidItem.subtotal.toFixed(2)}
-                                    </span>
-                                    <span className="text-[10px] text-green-700 dark:text-green-300">
-                                      {paidItem.quantity} adet
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* İptal Edilen Ürünler */}
-                      {hasCanceledItems && (
-                        <div className={hasPaidItems ? "mt-3" : ""}>
-                          <div className="text-xs font-bold text-red-700 dark:text-red-400 mb-2 flex items-center gap-1">
-                            <X className="h-3 w-3" />
-                            İptal Edilen Ürünler
-                          </div>
-                          <div className="space-y-1.5">
-                            {order.canceledItems!.map((canceledItem, idx) => (
-                              <div
-                                key={`canceled-${idx}`}
-                                className="rounded-lg p-1.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 opacity-75 w-full"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <h4 className="font-medium text-xs text-red-900 dark:text-red-200 line-through">
-                                      {canceledItem.menuName}
-                                    </h4>
-                                    <p className="text-[10px] text-red-700 dark:text-red-300 mt-0.5">
-                                      {canceledItem.quantity} adet • ₺
-                                      {canceledItem.menuPrice.toFixed(2)} birim
-                                      fiyat
-                                    </p>
-                                  </div>
-                                  <span className="font-bold text-xs text-red-900 dark:text-red-200 line-through">
-                                    ₺{canceledItem.subtotal.toFixed(2)}
-                                  </span>
-                                </div>
-                                {canceledItem.canceledAt && (
-                                  <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 pt-1 border-t border-red-200 dark:border-red-800 mt-1">
-                                    <Clock className="h-2.5 w-2.5" />
-                                    <span>
-                                      {getTimeAgo(canceledItem.canceledAt)}{" "}
-                                      iptal edildi
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Taşınan Ürünler */}
-                      {order.movedItems && order.movedItems.length > 0 && (
-                        <div
-                          className={
-                            hasPaidItems || hasCanceledItems ? "mt-3" : ""
-                          }
-                        >
-                          <div className="text-xs font-bold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1">
-                            <ArrowRight className="h-3 w-3" />
-                            Taşınan Ürünler
-                          </div>
-                          <div className="space-y-1.5">
-                            {order.movedItems.map((movedItem, idx) => (
-                              <div
-                                key={`moved-${idx}`}
-                                className="rounded-lg p-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 opacity-75 w-full"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <h4 className="font-medium text-xs text-blue-900 dark:text-blue-200">
-                                      {movedItem.menuName}
-                                    </h4>
-                                    <p className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5">
-                                      {movedItem.quantity} adet • ₺
-                                      {movedItem.menuPrice.toFixed(2)} birim
-                                      fiyat
-                                    </p>
-                                  </div>
-                                  <span className="font-bold text-xs text-blue-900 dark:text-blue-200">
-                                    ₺{movedItem.subtotal.toFixed(2)}
-                                  </span>
-                                </div>
-                                {movedItem.movedAt && (
-                                  <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 pt-1 border-t border-blue-200 dark:border-blue-800 mt-1">
-                                    <ArrowRight className="h-2.5 w-2.5" />
-                                    <span>
-                                      {getTimeAgo(movedItem.movedAt)}{" "}
-                                      {movedItem.movedFromTableNumber &&
-                                      movedItem.movedToTableNumber
-                                        ? `Masa ${movedItem.movedFromTableNumber}'den Masa ${movedItem.movedToTableNumber}'ye taşındı`
-                                        : movedItem.movedFromTableNumber
-                                          ? `Masa ${movedItem.movedFromTableNumber}'den taşındı`
-                                          : movedItem.movedToTableNumber
-                                            ? `Masa ${movedItem.movedToTableNumber}'ye taşındı`
-                                            : "taşındı"}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                <div
-                  className={
-                    currentTable.area === "Cari" ? "space-y-4" : "space-y-2"
-                  }
-                >
-                  {(() => {
-                    // Cari masasıysa tarihe göre grupla, değilse normal göster
-                    if (currentTable.area === "Cari") {
-                      // Ürünleri tarihe göre grupla
-                      const itemsByDate = new Map<
-                        string,
-                        Array<{ item: OrderItem; index: number }>
-                      >();
-
-                      order.items.forEach((item, index) => {
-                        const dateKey = item.addedAt
-                          ? item.addedAt.toLocaleDateString("tr-TR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                            })
-                          : "Tarih Yok";
-
-                        if (!itemsByDate.has(dateKey)) {
-                          itemsByDate.set(dateKey, []);
-                        }
-                        itemsByDate.get(dateKey)!.push({ item, index });
-                      });
-
-                      // Tarihleri sırala (en yeni üstte)
-                      const sortedDates = Array.from(itemsByDate.keys()).sort(
-                        (a, b) => {
-                          if (a === "Tarih Yok") return 1;
-                          if (b === "Tarih Yok") return -1;
-                          const dateA = new Date(
-                            a.split(".").reverse().join("-")
-                          );
-                          const dateB = new Date(
-                            b.split(".").reverse().join("-")
-                          );
-                          return dateB.getTime() - dateA.getTime();
-                        }
-                      );
-
-                      return sortedDates.map((dateKey) => {
-                        const itemsForDate = itemsByDate.get(dateKey)!;
-
-                        return (
-                          <div key={dateKey} className="space-y-2">
-                            {/* Tarih Başlığı */}
-                            <div>
-                              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                                {dateKey}
-                              </h3>
-                              <div className="border-t border-gray-300 dark:border-gray-600 mb-2"></div>
-                            </div>
-
-                            {/* O tarihteki ürünler */}
-                            {itemsForDate.map(({ item, index }) => {
-                              const isSelected = selectedItems.has(index);
-
-                              return (
-                                <div
-                                  key={`${item.menuId}-${index}`}
-                                  onClick={() => {
-                                    toggleItemSelection(index);
-                                  }}
-                                  className={`rounded-lg p-2 border-2 cursor-pointer transition-all w-full ${
-                                    isSelected
-                                      ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
-                                      : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between mb-1.5">
-                                    <div className="flex-1 min-w-0">
-                                      <h4
-                                        className={`font-medium text-xs truncate ${
-                                          isSelected
-                                            ? "text-blue-900 dark:text-blue-200"
-                                            : "text-gray-900 dark:text-white"
-                                        }`}
-                                      >
-                                        {item.quantity}x {item.menuName}
-                                      </h4>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                      <span
-                                        className={`font-bold text-xs ${
-                                          isSelected
-                                            ? "text-blue-900 dark:text-blue-200"
-                                            : "text-gray-900 dark:text-white"
-                                        }`}
-                                      >
-                                        ₺{item.subtotal.toFixed(2)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      });
-                    } else {
-                      // Normal masalar için tarih gruplaması olmadan göster
-                      // Aynı menuId'ye sahip ürünleri birleştir
-                      const mergedItems = new Map<
-                        string,
-                        { item: OrderItem; indices: number[] }
-                      >();
-                      order.items.forEach((item, index) => {
-                        const existing = mergedItems.get(item.menuId);
-                        if (existing) {
-                          existing.item.quantity += item.quantity;
-                          existing.item.subtotal += item.subtotal;
-                          existing.indices.push(index);
-                        } else {
-                          mergedItems.set(item.menuId, {
-                            item: { ...item },
-                            indices: [index],
-                          });
-                        }
-                      });
-
-                      return Array.from(mergedItems.values()).map(
-                        ({ item, indices }) => {
-                          const isSelected = indices.some((idx) =>
-                            selectedItems.has(idx)
-                          );
-                          return (
-                            <div
-                              key={item.menuId}
-                              onClick={() => {
-                                // Tüm index'leri seç/seçimi kaldır
-                                indices.forEach((idx) =>
-                                  toggleItemSelection(idx)
-                                );
-                              }}
-                              className={`rounded-lg p-2 border-2 cursor-pointer transition-all w-full ${
-                                isSelected
-                                  ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
-                                  : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between mb-1.5">
-                                <div className="flex-1 min-w-0">
-                                  <h4
-                                    className={`font-medium text-xs truncate ${
-                                      isSelected
-                                        ? "text-blue-900 dark:text-blue-200"
-                                        : "text-gray-900 dark:text-white"
-                                    }`}
-                                  >
-                                    {item.menuName}
-                                  </h4>
-                                </div>
-                                <div className="flex flex-col items-end gap-1">
-                                  <span
-                                    className={`font-bold text-xs ${
-                                      isSelected
-                                        ? "text-blue-900 dark:text-blue-200"
-                                        : "text-gray-900 dark:text-white"
-                                    }`}
-                                  >
-                                    ₺{item.subtotal.toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                {item.addedAt && (
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    {getTimeAgo(item.addedAt)}
-                                  </p>
-                                )}
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  {item.quantity} adet
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        }
-                      );
-                    }
-                  })()}
-                </div>
-
-                {cart.length > 0 && (
-                  <>
-                    <div className="mt-4 pt-4 border-t-2 border-green-300">
-                      <div className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1">
-                        <Plus className="h-3 w-3" />
-                        Yeni Eklenen Ürünler
-                      </div>
-                      <div className="space-y-2">
-                        {(() => {
-                          // Aynı menuId'ye sahip ürünleri birleştir
-                          const mergedItems = new Map<
-                            string,
-                            { item: OrderItem; cartItemIds: string[] }
-                          >();
-                          cart.forEach((item) => {
-                            const existing = mergedItems.get(item.menuId);
-                            if (existing) {
-                              existing.item.quantity += item.quantity;
-                              existing.item.subtotal += item.subtotal;
-                              existing.cartItemIds.push(
-                                item.cartItemId || item.menuId
-                              );
-                              // Notları birleştir (varsa)
-                              if (item.notes) {
-                                if (existing.item.notes) {
-                                  existing.item.notes = `${existing.item.notes}, ${item.notes}`;
-                                } else {
-                                  existing.item.notes = item.notes;
-                                }
-                              }
-                            } else {
-                              mergedItems.set(item.menuId, {
-                                item: { ...item },
-                                cartItemIds: [item.cartItemId || item.menuId],
-                              });
-                            }
-                          });
-
-                          return Array.from(mergedItems.values()).map(
-                            ({ item, cartItemIds }) => {
-                              const isNewItem =
-                                item.cartItemId &&
-                                !item.cartItemId.includes("-old-");
-
-                              return (
-                                <div
-                                  key={item.menuId}
-                                  className={`rounded-lg p-2 border-2 ${
-                                    isNewItem
-                                      ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 shadow-sm"
-                                      : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between mb-1.5">
-                                    <div className="flex-1 min-w-0">
-                                      <h4 className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                                        {item.menuName}
-                                      </h4>
-                                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                                        ₺{item.menuPrice.toFixed(2)} x{" "}
-                                        {item.quantity}
-                                      </p>
-                                      {item.notes && (
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
-                                          Not: {item.notes}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <span className="font-bold text-gray-900 dark:text-white text-xs ml-2">
-                                      ₺{item.subtotal.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between mt-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // İlk cartItemId'yi kullan
-                                          updateQuantity(cartItemIds[0], -1);
-                                        }}
-                                        className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                                      >
-                                        <Minus className="h-2.5 w-2.5" />
-                                      </button>
-                                      <span className="font-semibold w-6 text-center text-xs">
-                                        {item.quantity}
-                                      </span>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // İlk cartItemId'yi kullan
-                                          updateQuantity(cartItemIds[0], 1);
-                                        }}
-                                        className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                                      >
-                                        <Plus className="h-2.5 w-2.5" />
-                                      </button>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // Not ekleme/düzenleme için
-                                          const menuItem = menus.find(
-                                            (m) => m.id === item.menuId
-                                          );
-                                          if (menuItem) {
-                                            setSelectedMenuForNote(menuItem);
-                                            setItemNote(item.notes || "");
-                                            setShowAddNoteModal(true);
-                                          }
-                                        }}
-                                        className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center gap-1"
-                                        title="Not ekle/düzenle"
-                                      >
-                                        <Edit className="h-3 w-3" />
-                                        Not
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // Tüm cartItemIds'leri sil
-                                          cartItemIds.forEach((cartItemId) => {
-                                            removeFromCart(cartItemId);
-                                          });
-                                        }}
-                                        className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center gap-1"
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                        Sil
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            ) : cart.length === 0 ? (
-              <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-                <ShoppingCart className="h-10 w-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
-                <p className="text-xs">Sepet boş</p>
-                <p className="text-xs mt-1">Ürünlere tıklayarak ekleyin</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {(() => {
-                  // Aynı menuId'ye sahip ürünleri birleştir
-                  const mergedItems = new Map<
-                    string,
-                    { item: OrderItem; cartItemIds: string[] }
-                  >();
-
-                  cart.forEach((item) => {
-                    const existing = mergedItems.get(item.menuId);
-                    if (existing) {
-                      // Aynı ürün varsa miktar ve toplamı birleştir
-                      existing.item.quantity += item.quantity;
-                      existing.item.subtotal += item.subtotal;
-                      existing.cartItemIds.push(item.cartItemId || item.menuId);
-                    } else {
-                      // Yeni ürün ekle
-                      mergedItems.set(item.menuId, {
-                        item: { ...item },
-                        cartItemIds: [item.cartItemId || item.menuId],
-                      });
-                    }
-                  });
-
-                  return Array.from(mergedItems.values()).map(
-                    ({ item, cartItemIds }) => {
-                      const isNewItem =
-                        item.cartItemId && !item.cartItemId.includes("-old-");
-
-                      return (
-                        <div
-                          key={item.menuId}
-                          className={`rounded-lg p-2 border-2 ${
-                            isNewItem
-                              ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 shadow-sm"
-                              : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-1.5">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                                {item.menuName}
-                              </h4>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">
-                                ₺{item.menuPrice.toFixed(2)} x {item.quantity}
-                              </p>
-                              {item.selectedExtras &&
-                                item.selectedExtras.length > 0 && (
-                                  <div className="mt-1 space-y-0.5">
-                                    {item.selectedExtras.map((extra, idx) => (
-                                      <p
-                                        key={idx}
-                                        className="text-[10px] text-gray-500 dark:text-gray-400"
-                                      >
-                                        + {extra.name} (+₺
-                                        {extra.price.toFixed(2)})
-                                      </p>
-                                    ))}
-                                  </div>
-                                )}
-                              {item.notes && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
-                                  Not: {item.notes}
-                                </p>
-                              )}
-                            </div>
-                            <span className="font-bold text-gray-900 dark:text-white text-xs ml-2">
-                              ₺{item.subtotal.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mt-2">
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // İlk cartItemId'yi kullan
-                                  updateQuantity(cartItemIds[0], -1);
-                                }}
-                                className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                              >
-                                <Minus className="h-2.5 w-2.5" />
-                              </button>
-                              <span className="font-semibold w-6 text-center text-xs">
-                                {item.quantity}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // İlk cartItemId'yi kullan
-                                  updateQuantity(cartItemIds[0], 1);
-                                }}
-                                className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                              >
-                                <Plus className="h-2.5 w-2.5" />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Not ekleme/düzenleme için
-                                  const menuItem = menus.find(
-                                    (m) => m.id === item.menuId
-                                  );
-                                  if (menuItem) {
-                                    setSelectedMenuForNote(menuItem);
-                                    setItemNote(item.notes || "");
-                                    setShowAddNoteModal(true);
-                                  }
-                                }}
-                                className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center gap-1"
-                                title="Not ekle/düzenle"
-                              >
-                                <Edit className="h-3 w-3" />
-                                Not
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Tüm cartItemIds'leri sil
-                                  cartItemIds.forEach((cartItemId) => {
-                                    removeFromCart(cartItemId);
-                                  });
-                                }}
-                                className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center gap-1"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                                Sil
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-
-          {/* Totals & Actions */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-3 flex-shrink-0">
-            {order && order.items.length > 0 ? (
-              // Aktif Sipariş İşlemleri
-              <>
-                <div className="space-y-2">
-                  {/* Sadece yeni eklenen ürünlerin ara toplamı */}
-                  {cart.length > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Ara Toplam:
-                      </span>
-                      <span className="font-medium text-green-700 dark:text-green-400">
-                        ₺{cartTotal.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {/* Masada ürün varken yeni ürün eklenirse buton gösterme, sadece ara toplam göster */}
-                {cart.length === 0 && (
-                  <>
-                    {/* Toplam Fiyat ve Ödeme Butonu */}
-                    {order && order.items && order.items.length > 0 && (
-                      <>
-                        {(() => {
-                          let totalAmount: number;
-                          if (selectedItems.size > 0) {
-                            // Seçili ürünlerin toplamı
-                            const selectedItemsArray =
-                              Array.from(selectedItems);
-                            const selectedItemsData = selectedItemsArray
-                              .map((index) => order.items[index])
-                              .filter(Boolean);
-                            const mergedSelectedItems = new Map<
-                              string,
-                              { quantity: number; subtotal: number }
-                            >();
-                            selectedItemsData.forEach((item) => {
-                              const existing = mergedSelectedItems.get(
-                                item.menuId
-                              );
-                              if (existing) {
-                                existing.quantity += item.quantity;
-                                existing.subtotal += item.subtotal;
-                              } else {
-                                mergedSelectedItems.set(item.menuId, {
-                                  quantity: item.quantity,
-                                  subtotal: item.subtotal,
-                                });
-                              }
-                            });
-                            totalAmount = Array.from(
-                              mergedSelectedItems.values()
-                            ).reduce((sum, { subtotal }) => sum + subtotal, 0);
-                          } else {
-                            // Tüm ürünlerin toplamı
-                            totalAmount = (order.items || []).reduce(
-                              (sum, item) => sum + item.subtotal,
-                              0
-                            );
-                          }
-
-                          // Kısmi ödeme durumunda tahsil edilen tutarı hesapla
-                          const totalPaidAmount =
-                            order.paymentStatus === "partial" && order.payments
-                              ? order.payments.reduce(
-                                  (sum, payment) => sum + payment.amount,
-                                  0
-                                )
-                              : 0;
-
-                          return (
-                            <>
-                              {order.paymentStatus === "partial" &&
-                                totalPaidAmount > 0 && (
-                                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                                      Tahsil Edilen:
-                                    </span>
-                                    <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                                      ₺{totalPaidAmount.toFixed(2)}
-                                    </span>
-                                  </div>
-                                )}
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                  Toplam:
-                                </span>
-                                <span className="text-lg font-bold text-gray-900 dark:text-white">
-                                  ₺{totalAmount.toFixed(2)}
-                                </span>
-                              </div>
-                            </>
-                          );
-                        })()}
-                        {selectedItems.size > 0 ? (
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => {
-                                // Seçili ürünlerden aynı üründen birden fazla olan var mı kontrol et
-                                const selectedItemsArray =
-                                  Array.from(selectedItems);
-                                const itemsByMenuId = new Map<
-                                  string,
-                                  { item: OrderItem; indices: number[] }
-                                >();
-
-                                selectedItemsArray.forEach((index) => {
-                                  const item = order.items[index];
-                                  if (item) {
-                                    const existing = itemsByMenuId.get(
-                                      item.menuId
-                                    );
-                                    if (existing) {
-                                      existing.indices.push(index);
-                                    } else {
-                                      itemsByMenuId.set(item.menuId, {
-                                        item,
-                                        indices: [index],
-                                      });
-                                    }
-                                  }
-                                });
-
-                                // Birden fazla farklı ürün seçiliyse, her ürün için sırayla miktar seçim modalı aç
-                                if (itemsByMenuId.size > 1) {
-                                  // Tüm seçili ürünleri array'e koy
-                                  const itemsArray = Array.from(
-                                    itemsByMenuId.values()
-                                  ).map((item) => {
-                                    const totalQuantity = item.indices.reduce(
-                                      (sum, idx) => {
-                                        const orderItem = order.items[idx];
-                                        return orderItem
-                                          ? sum + orderItem.quantity
-                                          : sum;
-                                      },
-                                      0
-                                    );
-                                    return {
-                                      menuId: item.item.menuId,
-                                      menuName: item.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: item.indices,
-                                    };
-                                  });
-
-                                  // İlk ürün için miktar seçim modalı aç
-                                  setPendingCancelItems(itemsArray);
-                                  setCurrentCancelItemIndex(0);
-                                  setSelectedItemForQuantity(itemsArray[0]);
-                                  setSelectedQuantity(1);
-                                  setQuantitySelectionAction("cancel");
-                                  setShowQuantitySelectionModal(true);
-                                  return;
-                                }
-
-                                // Sadece tek bir ürün seçiliyse ve o ürünün toplam adedi > 1 ise miktar seçim modalı aç
-                                if (itemsByMenuId.size === 1) {
-                                  const singleItem = Array.from(
-                                    itemsByMenuId.values()
-                                  )[0];
-                                  const totalQuantity =
-                                    singleItem.indices.reduce((sum, idx) => {
-                                      const item = order.items[idx];
-                                      return item ? sum + item.quantity : sum;
-                                    }, 0);
-
-                                  if (totalQuantity > 1) {
-                                    setSelectedItemForQuantity({
-                                      menuId: singleItem.item.menuId,
-                                      menuName: singleItem.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: singleItem.indices,
-                                    });
-                                    setSelectedQuantity(1);
-                                    setQuantitySelectionAction("cancel");
-                                    setShowQuantitySelectionModal(true);
-                                    return;
-                                  }
-                                }
-
-                                // Tek adet veya farklı ürünler, direkt iptal et
-                                handleCancelSelectedItems();
-                              }}
-                              disabled={isCanceling}
-                              className="flex-1 h-12 text-base font-medium bg-red-600 hover:bg-red-700 text-white dark:text-white"
-                            >
-                              {isCanceling ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  İptal Ediliyor...
-                                </>
-                              ) : (
-                                <>
-                                  <X className="h-4 w-4 mr-2" />
-                                  İptal
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                // Seçili ürünlerden aynı üründen birden fazla olan var mı kontrol et
-                                const selectedItemsArray =
-                                  Array.from(selectedItems);
-                                const itemsByMenuId = new Map<
-                                  string,
-                                  { item: OrderItem; indices: number[] }
-                                >();
-
-                                selectedItemsArray.forEach((index) => {
-                                  const item = order.items[index];
-                                  if (item) {
-                                    const existing = itemsByMenuId.get(
-                                      item.menuId
-                                    );
-                                    if (existing) {
-                                      existing.indices.push(index);
-                                    } else {
-                                      itemsByMenuId.set(item.menuId, {
-                                        item,
-                                        indices: [index],
-                                      });
-                                    }
-                                  }
-                                });
-
-                                // Birden fazla farklı ürün seçiliyse, her ürün için sırayla miktar seçim modalı aç
-                                if (itemsByMenuId.size > 1) {
-                                  // Tüm seçili ürünleri array'e koy
-                                  const itemsArray = Array.from(
-                                    itemsByMenuId.values()
-                                  ).map((item) => {
-                                    const totalQuantity = item.indices.reduce(
-                                      (sum, idx) => {
-                                        const orderItem = order.items[idx];
-                                        return orderItem
-                                          ? sum + orderItem.quantity
-                                          : sum;
-                                      },
-                                      0
-                                    );
-                                    return {
-                                      menuId: item.item.menuId,
-                                      menuName: item.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: item.indices,
-                                    };
-                                  });
-
-                                  // İlk ürün için miktar seçim modalı aç
-                                  setPendingMoveItems(itemsArray);
-                                  setCurrentMoveItemIndex(0);
-                                  setSelectedItemForQuantity(itemsArray[0]);
-                                  setSelectedQuantity(1);
-                                  setQuantitySelectionAction("move");
-                                  setShowQuantitySelectionModal(true);
-                                  return;
-                                }
-
-                                // Sadece tek bir ürün seçiliyse ve o ürünün toplam adedi > 1 ise miktar seçim modalı aç
-                                if (itemsByMenuId.size === 1) {
-                                  const singleItem = Array.from(
-                                    itemsByMenuId.values()
-                                  )[0];
-                                  const totalQuantity =
-                                    singleItem.indices.reduce((sum, idx) => {
-                                      const item = order.items[idx];
-                                      return item ? sum + item.quantity : sum;
-                                    }, 0);
-
-                                  if (totalQuantity > 1) {
-                                    // Tek ürün durumunda da pendingMoveItems set et
-                                    const singleItemArray = [
-                                      {
-                                        menuId: singleItem.item.menuId,
-                                        menuName: singleItem.item.menuName,
-                                        totalQuantity: totalQuantity,
-                                        indices: singleItem.indices,
-                                      },
-                                    ];
-                                    setPendingMoveItems(singleItemArray);
-                                    setCurrentMoveItemIndex(0);
-                                    setSelectedItemForQuantity({
-                                      menuId: singleItem.item.menuId,
-                                      menuName: singleItem.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: singleItem.indices,
-                                    });
-                                    setSelectedQuantity(1);
-                                    setQuantitySelectionAction("move");
-                                    setShowQuantitySelectionModal(true);
-                                    return;
-                                  }
-                                }
-
-                                // Tek adet veya farklı ürünler, direkt taşı modalını aç
-                                setShowMoveModal(true);
-                              }}
-                              className="flex-1 h-12 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white dark:text-white"
-                            >
-                              <ArrowLeft className="h-4 w-4 mr-2" />
-                              Taşı
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2 w-full">
-                            <Button
-                              onClick={async () => {
-                                const defaultPrinter = getDefaultPrinter(
-                                  printers,
-                                  selectedPrinterId
-                                );
-                                if (!defaultPrinter) {
-                                  customAlert(
-                                    "Varsayılan yazıcı bulunamadı.\nLütfen yazıcı ayarlarından varsayılan yazıcı seçin.",
-                                    "Uyarı",
-                                    "warning"
-                                  );
-                                  return;
-                                }
-
-                                if (!order) {
-                                  customAlert(
-                                    "Henüz sipariş bulunmuyor.",
-                                    "Uyarı",
-                                    "warning"
-                                  );
-                                  return;
-                                }
-
-                                try {
-                                  // Tüm ürünleri birleştir: mevcut + iptal + ödeme alınan
-                                  const allItems: OrderItem[] = [];
-
-                                  // 1. Aktif sipariş listesindeki mevcut ürünleri ekle
-                                  if (order.items && order.items.length > 0) {
-                                    const activeItems = order.items.filter(
-                                      (item) =>
-                                        !order.canceledItems?.some(
-                                          (canceled) =>
-                                            canceled.menuId === item.menuId
-                                        ) &&
-                                        !order.payments?.some((payment) =>
-                                          payment.paidItems?.some(
-                                            (paid) =>
-                                              paid.menuId === item.menuId
-                                          )
-                                        )
-                                    );
-                                    allItems.push(...activeItems);
-                                  }
-
-                                  // 2. İptal edilen ürünleri ekle
-                                  if (
-                                    order.canceledItems &&
-                                    order.canceledItems.length > 0
-                                  ) {
-                                    const canceledOrderItems: OrderItem[] =
-                                      order.canceledItems.map((canceled) => ({
-                                        menuId: canceled.menuId,
-                                        menuName: canceled.menuName,
-                                        quantity: canceled.quantity,
-                                        menuPrice:
-                                          canceled.subtotal / canceled.quantity,
-                                        subtotal: canceled.subtotal,
-                                        notes: canceled.notes || "",
-                                        selectedExtras:
-                                          canceled.selectedExtras || [],
-                                      }));
-                                    allItems.push(...canceledOrderItems);
-                                  }
-
-                                  // 3. Ödemesi alınan ürünleri ekle
-                                  if (
-                                    order.payments &&
-                                    order.payments.length > 0
-                                  ) {
-                                    for (const payment of order.payments) {
-                                      if (
-                                        payment.paidItems &&
-                                        payment.paidItems.length > 0
-                                      ) {
-                                        const paidOrderItems: OrderItem[] =
-                                          payment.paidItems.map((paid) => ({
-                                            menuId: paid.menuId,
-                                            menuName: paid.menuName,
-                                            quantity: paid.quantity,
-                                            menuPrice:
-                                              paid.subtotal / paid.quantity,
-                                            subtotal: paid.subtotal,
-                                            notes: "",
-                                            selectedExtras: [],
-                                          }));
-                                        allItems.push(...paidOrderItems);
-                                      }
-                                    }
-                                  }
-
-                                  // Tüm ürünleri tek bir çıktıda yazdır
-                                  if (allItems.length > 0) {
-                                    // Toplam tutarı hesapla (sadece aktif ürünler)
-                                    const activeItems = order.items || [];
-                                    const totalAmount = activeItems.reduce(
-                                      (sum, item) => sum + item.subtotal,
-                                      0
-                                    );
-
-                                    const content = formatPrintContent(
-                                      "order",
-                                      allItems, // Aktif + iptal edilmiş + ödenen ürünler
-                                      currentTable.tableNumber.toString(),
-                                      undefined, // Sipariş no gösterilmeyecek
-                                      {
-                                        companyName: companyData?.name || "",
-                                        total: totalAmount,
-                                        canceledItems:
-                                          order.canceledItems || [], // İptal edilmiş ürünler
-                                        isPaid: false, // Tekrar yazdırma - ödeme durumu bilinmiyor
-                                      }
-                                    );
-                                    await printToPrinter(
-                                      defaultPrinter.name,
-                                      content,
-                                      "order"
-                                    );
-                                  } else {
-                                    customAlert(
-                                      "Yazdırılacak ürün bulunamadı.",
-                                      "Uyarı",
-                                      "warning"
-                                    );
-                                  }
-                                } catch (error) {
-                                  customAlert(
-                                    "Yazdırma sırasında bir hata oluştu.",
-                                    "Hata",
-                                    "error"
-                                  );
-                                }
-                              }}
-                              variant="outline"
-                              disabled={!order}
-                              className="h-12 px-6 text-sm font-medium border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Yazdır"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                // Aynı üründen birden fazla yoksa direkt ödeme modalını aç
-                                let remaining: number;
-                                // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
-                                remaining = (order.items || []).reduce(
-                                  (sum, item) => sum + item.subtotal,
-                                  0
-                                );
-                                // Tam ekran ödeme ekranını aç
-                                setPaymentScreenAmount(
-                                  remaining > 0 ? remaining.toFixed(2) : ""
-                                );
-                                setPaymentScreenDiscountType("percentage");
-                                setPaymentScreenDiscountValue("");
-                                setPaymentScreenManualDiscount("");
-                                setPaymentScreenSelectedItems(new Set());
-                                setPaymentScreenSelectedQuantities(new Map());
-                                setPaymentMethod(""); // Ödeme yöntemini temizle
-                                setShowFullScreenPayment(true);
-                              }}
-                              className="flex-1 h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                            >
-                              <CreditCard className="h-4 w-4 mr-2" />
-                              Ödeme Al
-                            </Button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              </>
-            ) : null}
-
-            {/* Buton Alanı - Desktop (Sabit) */}
-            {cart.length > 0 && (
-              <Button
-                onClick={handleSendOrder}
-                disabled={cart.length === 0 || isSendingOrder}
-                className="w-full h-12 text-base font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white"
-              >
-                {isSendingOrder ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Gönderiliyor...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Gönder
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Cart Bottom Sheet - Mobile */}
-        {showCart && (
-          <div className="lg:hidden fixed inset-0 z-50">
-            {/* Overlay */}
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowCart(false)}
-            />
-
-            {/* Cart Sheet */}
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl h-[85vh] flex flex-col relative overflow-hidden">
-              {/* Detay Paneli - Sağdan Kayarak (Mobile) */}
+          return (
+            <>
+              {/* Overlay */}
               <div
-                className={`absolute inset-0 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-in-out z-10 flex flex-col ${
-                  false ? "translate-x-0" : "translate-x-full"
-                }`}
-              >
-                <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <ArrowLeft className="h-4 w-4 cursor-pointer" />
-                    Sipariş Detayları
-                  </h2>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3">
-                  <div className="space-y-3">
-                    {/* Ödeme Geçmişi */}
-                    {order && order.payments && order.payments.length > 0 && (
-                      <div className="mb-4">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">
-                          Ödeme Geçmişi
-                        </h3>
-                        <div className="space-y-2">
-                          {order.payments.map((payment, paymentIndex) => (
-                            <div
-                              key={paymentIndex}
-                              className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-medium text-blue-900 dark:text-blue-200">
-                                  {paymentMethods.find(
-                                    (pm) => pm.code === payment.method
-                                  )?.name ||
-                                    (payment.method === "cash"
-                                      ? "Nakit"
-                                      : payment.method === "card"
-                                        ? "Kart"
-                                        : payment.method === "mealCard"
-                                          ? "Yemek Kartı"
-                                          : "Diğer")}
-                                </span>
-                                <span className="text-sm font-bold text-blue-900 dark:text-blue-200">
-                                  ₺{payment.amount.toFixed(2)}
-                                </span>
-                              </div>
-                              {payment.paidItems &&
-                                payment.paidItems.length > 0 && (
-                                  <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-                                    <p className="text-xs text-blue-700 dark:text-blue-300 mb-1 font-medium">
-                                      Ödenen Ürünler:
-                                    </p>
-                                    <div className="space-y-1">
-                                      {payment.paidItems.map(
-                                        (paidItem, itemIndex) => (
-                                          <div
-                                            key={itemIndex}
-                                            className="flex items-center justify-between text-xs"
-                                          >
-                                            <span className="text-blue-600 dark:text-blue-400">
-                                              {paidItem.menuName} x{" "}
-                                              {paidItem.quantity}
-                                            </span>
-                                            <span className="text-blue-700 dark:text-blue-300 font-medium">
-                                              ₺{paidItem.subtotal.toFixed(2)}
-                                            </span>
-                                          </div>
-                                        )
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-                                <p className="text-xs text-blue-600 dark:text-blue-400">
-                                  {getTimeAgo(payment.paidAt)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Tüm Güncellemeler - Birleştirilmiş ve Sıralanmış (Mobile) */}
-                    {order &&
-                      (() => {
-                        // Aktif ürünleri işle
-                        const groupedItems: { [key: string]: OrderItem[] } = {};
-                        order.items.forEach((item) => {
-                          const timeKey = item.addedAt
-                            ? new Date(item.addedAt).getTime().toString()
-                            : "no-time";
-                          const key = `${item.menuId}-${timeKey}`;
-                          if (!groupedItems[key]) {
-                            groupedItems[key] = [];
-                          }
-                          groupedItems[key].push(item);
-                        });
-
-                        const processedItems: Array<{
-                          item: OrderItem;
-                          addedAt?: Date;
-                          type: "active";
-                        }> = [];
-                        Object.values(groupedItems).forEach((group) => {
-                          if (group.length > 0) {
-                            const firstItem = group[0];
-                            if (group.length > 1) {
-                              const totalQuantity = group.reduce(
-                                (sum, item) => sum + item.quantity,
-                                0
-                              );
-                              const totalSubtotal = group.reduce(
-                                (sum, item) => sum + item.subtotal,
-                                0
-                              );
-                              const combinedNotes = group
-                                .map((item) => item.notes)
-                                .filter(Boolean)
-                                .join(", ");
-                              processedItems.push({
-                                item: {
-                                  ...firstItem,
-                                  quantity: totalQuantity,
-                                  subtotal: totalSubtotal,
-                                  notes: combinedNotes || undefined,
-                                  // movedFromTableNumber ve movedAt bilgilerini koru
-                                  movedFromTableId: firstItem.movedFromTableId,
-                                  movedFromTableNumber:
-                                    firstItem.movedFromTableNumber,
-                                  movedAt: firstItem.movedAt,
-                                },
-                                addedAt: firstItem.addedAt,
-                                type: "active",
-                              });
-                            } else {
-                              processedItems.push({
-                                item: firstItem,
-                                addedAt: firstItem.addedAt,
-                                type: "active",
-                              });
-                            }
-                          }
-                        });
-
-                        // İptal edilen ürünleri işle - Her birini ayrı göster (orijinal miktarını hesapla)
-                        const processedCanceledItems: Array<{
-                          item: OrderItem;
-                          addedAt?: Date;
-                          canceledAt?: Date;
-                          originalQuantity?: number; // Orijinal eklenme miktarı
-                          type: "canceled";
-                        }> = [];
-                        if (order.canceledItems) {
-                          order.canceledItems.forEach((canceledItem) => {
-                            // Aynı menuId ve aynı addedAt zamanına sahip tüm ürünleri bul (aktif + iptal edilen)
-                            const itemAddedAt = canceledItem.addedAt
-                              ? new Date(canceledItem.addedAt).getTime()
-                              : null;
-
-                            let originalQuantity = canceledItem.quantity;
-
-                            if (itemAddedAt) {
-                              // Aktif ürünlerden aynı zamanda eklenenleri bul
-                              const sameTimeActiveItems = order.items.filter(
-                                (activeItem) => {
-                                  if (activeItem.menuId !== canceledItem.menuId)
-                                    return false;
-                                  const activeAddedAt = activeItem.addedAt
-                                    ? new Date(activeItem.addedAt).getTime()
-                                    : null;
-                                  // Zaman farkı 1 saniyeden az ise aynı kabul et (milisaniye farkları için)
-                                  if (!activeAddedAt) return false;
-                                  return (
-                                    Math.abs(activeAddedAt - itemAddedAt) < 1000
-                                  );
-                                }
-                              );
-
-                              // İptal edilen ürünlerden aynı zamanda eklenenleri bul
-                              const sameTimeCanceledItems = (
-                                order.canceledItems || []
-                              ).filter((ci) => {
-                                if (ci.menuId !== canceledItem.menuId)
-                                  return false;
-                                const ciAddedAt = ci.addedAt
-                                  ? new Date(ci.addedAt).getTime()
-                                  : null;
-                                // Zaman farkı 1 saniyeden az ise aynı kabul et (milisaniye farkları için)
-                                if (!ciAddedAt) return false;
-                                return Math.abs(ciAddedAt - itemAddedAt) < 1000;
-                              });
-
-                              // Toplam orijinal miktarı hesapla
-                              const activeQuantity = sameTimeActiveItems.reduce(
-                                (sum, item) => sum + item.quantity,
-                                0
-                              );
-                              const canceledQuantity =
-                                sameTimeCanceledItems.reduce(
-                                  (sum, item) => sum + item.quantity,
-                                  0
-                                );
-                              originalQuantity =
-                                activeQuantity + canceledQuantity;
-                            }
-
-                            processedCanceledItems.push({
-                              item: canceledItem,
-                              addedAt: canceledItem.addedAt,
-                              canceledAt: canceledItem.canceledAt,
-                              originalQuantity: originalQuantity,
-                              type: "canceled",
-                            });
-                          });
-                        }
-
-                        // Taşınan ürünleri işle - Sadece menuId + movedToTableId'ye göre grupla
-                        const groupedMovedItems: {
-                          [key: string]: OrderItem[];
-                        } = {};
-                        if (order.movedItems) {
-                          order.movedItems.forEach((item) => {
-                            // Aynı ürün aynı masaya taşınmışsa birleştir (movedAt'e bakmadan)
-                            const key = `${item.menuId}-${item.movedToTableId || "no-table"}`;
-                            if (!groupedMovedItems[key]) {
-                              groupedMovedItems[key] = [];
-                            }
-                            groupedMovedItems[key].push(item);
-                          });
-                        }
-
-                        const processedMovedItems: Array<{
-                          item: OrderItem;
-                          addedAt?: Date;
-                          movedAt?: Date;
-                          movedToTableId?: string;
-                          movedToTableNumber?: string;
-                          movedFromTableId?: string;
-                          movedFromTableNumber?: string;
-                          type: "moved";
-                        }> = [];
-                        Object.values(groupedMovedItems).forEach((group) => {
-                          if (group.length > 0) {
-                            const firstItem = group[0];
-                            const totalQuantity = group.reduce(
-                              (sum, item) => sum + item.quantity,
-                              0
-                            );
-                            const totalSubtotal = group.reduce(
-                              (sum, item) => sum + item.subtotal,
-                              0
-                            );
-                            const latestMovedAt = group.reduce<
-                              Date | undefined
-                            >((latest, item) => {
-                              if (!item.movedAt) return latest;
-                              if (!latest) return item.movedAt;
-                              return new Date(item.movedAt) > new Date(latest)
-                                ? item.movedAt
-                                : latest;
-                            }, firstItem.movedAt);
-                            const earliestAddedAt = group.reduce<
-                              Date | undefined
-                            >((earliest, item) => {
-                              if (!item.addedAt) return earliest;
-                              if (!earliest) return item.addedAt;
-                              return new Date(item.addedAt) < new Date(earliest)
-                                ? item.addedAt
-                                : earliest;
-                            }, firstItem.addedAt);
-
-                            processedMovedItems.push({
-                              item: {
-                                ...firstItem,
-                                quantity: totalQuantity,
-                                subtotal: totalSubtotal,
-                                movedAt: latestMovedAt,
-                              },
-                              addedAt: earliestAddedAt,
-                              movedAt: latestMovedAt,
-                              movedToTableId: firstItem.movedToTableId,
-                              movedToTableNumber: firstItem.movedToTableNumber,
-                              movedFromTableId: firstItem.movedFromTableId,
-                              movedFromTableNumber:
-                                firstItem.movedFromTableNumber,
-                              type: "moved",
-                            });
-                          }
-                        });
-
-                        // Tüm güncellemeleri birleştir ve en yeni olanları en üstte sırala
-                        type UpdateItem =
-                          | { item: OrderItem; addedAt?: Date; type: "active" }
-                          | {
-                              item: OrderItem;
-                              addedAt?: Date;
-                              canceledAt?: Date;
-                              originalQuantity?: number;
-                              type: "canceled";
-                            }
-                          | {
-                              item: OrderItem;
-                              addedAt?: Date;
-                              movedAt?: Date;
-                              movedToTableId?: string;
-                              movedToTableNumber?: string;
-                              movedFromTableId?: string;
-                              movedFromTableNumber?: string;
-                              type: "moved";
-                            };
-
-                        const allUpdates: UpdateItem[] = [
-                          ...processedItems,
-                          ...processedCanceledItems,
-                          ...processedMovedItems,
-                        ];
-
-                        // En yeni güncellemeye göre sırala
-                        allUpdates.sort((a, b) => {
-                          let aTime: Date | undefined;
-                          let bTime: Date | undefined;
-
-                          if (a.type === "active") {
-                            aTime = a.addedAt;
-                          } else if (a.type === "canceled") {
-                            aTime = a.canceledAt || a.addedAt;
-                          } else if (a.type === "moved") {
-                            aTime = a.movedAt || a.addedAt;
-                          }
-
-                          if (b.type === "active") {
-                            bTime = b.addedAt;
-                          } else if (b.type === "canceled") {
-                            bTime = b.canceledAt || b.addedAt;
-                          } else if (b.type === "moved") {
-                            bTime = b.movedAt || b.addedAt;
-                          }
-
-                          if (!aTime && !bTime) return 0;
-                          if (!aTime) return 1;
-                          if (!bTime) return -1;
-                          return (
-                            new Date(bTime).getTime() -
-                            new Date(aTime).getTime()
-                          );
-                        });
-
-                        return (
-                          <div className="space-y-3">
-                            {allUpdates.map((update, index) => {
-                              const item = update.item;
-                              if (update.type === "active") {
-                                return (
-                                  <div
-                                    key={`active-${item.menuId}-${update.addedAt?.getTime() || index}`}
-                                    className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
-                                  >
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1">
-                                        <h4 className="font-medium text-sm text-gray-900 dark:text-white">
-                                          {item.menuName}
-                                        </h4>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                          {item.quantity} adet • ₺
-                                          {item.menuPrice.toFixed(2)} birim
-                                          fiyat
-                                        </p>
-                                      </div>
-                                      <span className="font-bold text-sm text-gray-900 dark:text-white">
-                                        ₺{item.subtotal.toFixed(2)}
-                                      </span>
-                                    </div>
-                                    {item.movedFromTableNumber ||
-                                    item.movedFromTableId ? (
-                                      <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                        <ArrowRight className="h-3 w-3" />
-                                        <span>
-                                          {item.movedAt
-                                            ? getTimeAgo(item.movedAt)
-                                            : update.addedAt
-                                              ? getTimeAgo(update.addedAt)
-                                              : ""}{" "}
-                                          Masa{" "}
-                                          {item.movedFromTableNumber ||
-                                            "Bilinmeyen"}
-                                          'den Masa {currentTable.tableNumber}
-                                          'ye taşındı
-                                        </span>
-                                      </div>
-                                    ) : update.addedAt ? (
-                                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                        <Clock className="h-3 w-3" />
-                                        <span>
-                                          {getTimeAgo(update.addedAt)} eklendi
-                                        </span>
-                                      </div>
-                                    ) : null}
-                                    {item.notes && (
-                                      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 italic">
-                                          Not: {item.notes}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              } else if (update.type === "canceled") {
-                                const displayQuantity =
-                                  update.originalQuantity || item.quantity;
-                                return (
-                                  <div
-                                    key={`canceled-${item.menuId}-${update.addedAt?.getTime() || index}`}
-                                    className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 border border-red-200 dark:border-red-800 opacity-75"
-                                  >
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1">
-                                        <h4 className="font-medium text-sm text-red-900 dark:text-red-200 line-through">
-                                          {item.menuName}
-                                        </h4>
-                                        <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                                          {item.quantity} adet • ₺
-                                          {item.menuPrice.toFixed(2)} birim
-                                          fiyat
-                                        </p>
-                                      </div>
-                                      <span className="font-bold text-sm text-red-900 dark:text-red-200 line-through">
-                                        ₺{item.subtotal.toFixed(2)}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-col gap-1 text-xs text-red-600 dark:text-red-400 pt-2 border-t border-red-200 dark:border-red-800">
-                                      {update.addedAt && (
-                                        <div className="flex items-center gap-1">
-                                          <Clock className="h-3 w-3" />
-                                          <span>
-                                            {getTimeAgo(update.addedAt)}{" "}
-                                            {displayQuantity} adet eklendi
-                                          </span>
-                                        </div>
-                                      )}
-                                      {update.canceledAt && (
-                                        <div className="flex items-center gap-1">
-                                          <Clock className="h-3 w-3" />
-                                          <span>
-                                            {getTimeAgo(update.canceledAt)}{" "}
-                                            iptal edildi
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              } else if (update.type === "moved") {
-                                return (
-                                  <div
-                                    key={`moved-${item.menuId}-${update.movedToTableId || "no-table"}`}
-                                    className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800 opacity-75"
-                                  >
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1">
-                                        <h4 className="font-medium text-sm text-blue-900 dark:text-blue-200">
-                                          {item.menuName}
-                                        </h4>
-                                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                                          {item.quantity} adet • ₺
-                                          {item.menuPrice.toFixed(2)} birim
-                                          fiyat
-                                        </p>
-                                      </div>
-                                      <span className="font-bold text-sm text-blue-900 dark:text-blue-200">
-                                        ₺{item.subtotal.toFixed(2)}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-col gap-1 text-xs text-blue-600 dark:text-blue-400 pt-2 border-t border-blue-200 dark:border-blue-800">
-                                      {update.addedAt && (
-                                        <div className="flex items-center gap-1">
-                                          <Clock className="h-3 w-3" />
-                                          <span>
-                                            {getTimeAgo(update.addedAt)} eklendi
-                                          </span>
-                                        </div>
-                                      )}
-                                      {update.movedAt && (
-                                        <div className="flex items-center gap-1">
-                                          <ArrowRight className="h-3 w-3" />
-                                          <span>
-                                            {getTimeAgo(update.movedAt)}{" "}
-                                            {update.movedFromTableNumber &&
-                                            update.movedToTableNumber
-                                              ? `Masa ${update.movedFromTableNumber}'den Masa ${update.movedToTableNumber}'ye taşındı`
-                                              : update.movedFromTableNumber
-                                                ? `Masa ${update.movedFromTableNumber}'den taşındı`
-                                                : update.movedToTableNumber
-                                                  ? `Masa ${update.movedToTableNumber}'ye taşındı`
-                                                  : "taşındı"}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })}
-                          </div>
-                        );
-                      })()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Ödeme Paneli - Aşağıdan Yukarıya Kayarak (Mobile) */}
-              {order &&
-                order.items &&
-                order.items.length > 0 &&
-                (() => {
-                  // Eğer seçili ürünler varsa sadece onların toplamını hesapla
-                  let remaining: number;
-                  if (selectedItems.size > 0) {
-                    const selectedItemsArray = Array.from(selectedItems);
-                    const selectedItemsData = selectedItemsArray
-                      .map((index) => order.items[index])
-                      .filter(Boolean);
-
-                    // Seçili ürünleri menuId'ye göre birleştir
-                    const mergedSelectedItems = new Map<
-                      string,
-                      { quantity: number; subtotal: number }
-                    >();
-                    selectedItemsData.forEach((item) => {
-                      const existing = mergedSelectedItems.get(item.menuId);
-                      if (existing) {
-                        existing.quantity += item.quantity;
-                        existing.subtotal += item.subtotal;
-                      } else {
-                        mergedSelectedItems.set(item.menuId, {
-                          quantity: item.quantity,
-                          subtotal: item.subtotal,
-                        });
-                      }
-                    });
-
-                    remaining = Array.from(mergedSelectedItems.values()).reduce(
-                      (sum, { subtotal }) => sum + subtotal,
-                      0
-                    );
-                  } else {
-                    // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
-                    remaining = (order.items || []).reduce(
-                      (sum, item) => sum + item.subtotal,
-                      0
-                    );
-                  }
-
-                  const calculateDiscount = () => {
-                    if (discountType === "percentage" && discountValue) {
-                      const percentage = parseFloat(discountValue);
-                      return (remaining * percentage) / 100;
-                    } else if (discountType === "amount" && discountValue) {
-                      return parseFloat(discountValue);
-                    } else if (discountType === "manual" && manualDiscount) {
-                      return parseFloat(manualDiscount);
-                    }
-                    return 0;
-                  };
-                  const discount = calculateDiscount();
-                  // const finalAmount = Math.max(0, remaining - discount);
-
-                  return (
-                    <div
-                      className={`absolute inset-0 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-in-out z-10 flex flex-col ${
-                        showPaymentModal ? "translate-y-0" : "translate-y-full"
-                      }`}
-                    >
-                      <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-                        <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <ArrowLeft
-                            className="h-4 w-4 cursor-pointer"
-                            onClick={() => {
-                              setShowPaymentModal(false);
-                              setPaymentAmount("");
-                              setDiscountType("percentage");
-                              setDiscountValue("");
-                              setManualDiscount("");
-                            }}
-                          />
-                          Ödeme Al
-                        </h2>
-                      </div>
-                      <div className="flex-1 overflow-y-auto p-3">
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              İndirim
-                            </label>
-                            <div className="space-y-3">
-                              {/* İndirim Türü Seçimi */}
-                              <div className="flex gap-2">
-                                <Button
-                                  type="button"
-                                  variant={
-                                    discountType === "percentage"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => {
-                                    setDiscountType("percentage");
-                                    setDiscountValue("");
-                                    setManualDiscount("");
-                                    setPaymentAmount(remaining.toFixed(2));
-                                  }}
-                                  className="flex-1 text-xs"
-                                >
-                                  Oran
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={
-                                    discountType === "amount"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => {
-                                    setDiscountType("amount");
-                                    setDiscountValue("");
-                                    setManualDiscount("");
-                                    setPaymentAmount(remaining.toFixed(2));
-                                  }}
-                                  className="flex-1 text-xs"
-                                >
-                                  Fiyat
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={
-                                    discountType === "manual"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => {
-                                    setDiscountType("manual");
-                                    setDiscountValue("");
-                                    setManualDiscount("");
-                                    setPaymentAmount(remaining.toFixed(2));
-                                  }}
-                                  className="flex-1 text-xs"
-                                >
-                                  Manuel
-                                </Button>
-                              </div>
-
-                              {/* Oran Bazlı İndirim */}
-                              {discountType === "percentage" && (
-                                <div>
-                                  <div className="flex gap-2 flex-wrap">
-                                    {[10, 20, 30, 40, 50].map((percent) => (
-                                      <Button
-                                        key={percent}
-                                        type="button"
-                                        variant={
-                                          discountValue === percent.toString()
-                                            ? "default"
-                                            : "outline"
-                                        }
-                                        onClick={() => {
-                                          if (
-                                            discountValue === percent.toString()
-                                          ) {
-                                            setDiscountValue("");
-                                            setPaymentAmount(
-                                              remaining.toFixed(2)
-                                            );
-                                          } else {
-                                            setDiscountValue(
-                                              percent.toString()
-                                            );
-                                            const discountAmount =
-                                              (remaining * percent) / 100;
-                                            setPaymentAmount(
-                                              Math.max(
-                                                0,
-                                                remaining - discountAmount
-                                              ).toFixed(2)
-                                            );
-                                          }
-                                        }}
-                                        className="flex-1 min-w-[60px] text-xs"
-                                      >
-                                        %{percent}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Fiyat Bazlı İndirim */}
-                              {discountType === "amount" && (
-                                <div>
-                                  <div className="flex gap-2 flex-wrap">
-                                    {[20, 50, 75, 100].map((amount) => (
-                                      <Button
-                                        key={amount}
-                                        type="button"
-                                        variant={
-                                          discountValue === amount.toString()
-                                            ? "default"
-                                            : "outline"
-                                        }
-                                        onClick={() => {
-                                          if (
-                                            discountValue === amount.toString()
-                                          ) {
-                                            setDiscountValue("");
-                                            setPaymentAmount(
-                                              remaining.toFixed(2)
-                                            );
-                                          } else {
-                                            setDiscountValue(amount.toString());
-                                            setPaymentAmount(
-                                              Math.max(
-                                                0,
-                                                remaining - amount
-                                              ).toFixed(2)
-                                            );
-                                          }
-                                        }}
-                                        className="flex-1 min-w-[60px] text-xs"
-                                      >
-                                        ₺{amount}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Manuel İndirim */}
-                              {discountType === "manual" && (
-                                <div>
-                                  <Input
-                                    type="number"
-                                    value={manualDiscount}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      setManualDiscount(value);
-                                      const discountAmount =
-                                        parseFloat(value) || 0;
-                                      setPaymentAmount(
-                                        Math.max(
-                                          0,
-                                          remaining - discountAmount
-                                        ).toFixed(2)
-                                      );
-                                    }}
-                                    placeholder="İndirim tutarı"
-                                    step="0.01"
-                                    min="0"
-                                    max={remaining}
-                                    className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                                  />
-                                </div>
-                              )}
-
-                              {/* İndirim Özeti */}
-                              <div className="bg-gray-50 dark:bg-gray-700/50 p-2 rounded text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600 dark:text-gray-400">
-                                    İndirim:
-                                  </span>
-                                  <span className="font-medium text-red-600 dark:text-red-400">
-                                    -₺{discount.toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Ödeme Tutarı
-                            </label>
-                            <Input
-                              type="number"
-                              value={paymentAmount}
-                              onChange={(e) => setPaymentAmount(e.target.value)}
-                              placeholder="0.00"
-                              step="0.01"
-                              min="0"
-                              max={remaining}
-                              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              Kalan: ₺{remaining.toFixed(2)}
-                              {discount > 0 && (
-                                <span className="text-red-600 dark:text-red-400 ml-2">
-                                  (İndirim: -₺{discount.toFixed(2)})
-                                </span>
-                              )}
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Ödeme Yöntemi
-                            </label>
-                            {paymentMethods.length === 0 ? (
-                              <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                                Ödeme yöntemi bulunamadı
-                              </div>
-                            ) : (
-                              <div className="flex gap-2 flex-wrap">
-                                {paymentMethods.map((pm) => (
-                                  <Button
-                                    key={pm.id}
-                                    type="button"
-                                    variant={
-                                      paymentMethod === pm.code
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    onClick={() => setPaymentMethod(pm.code)}
-                                    className={`flex-1 min-w-[100px] h-10 ${
-                                      paymentMethod === pm.code
-                                        ? "text-white"
-                                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-                                    }`}
-                                    style={
-                                      paymentMethod === pm.code
-                                        ? {
-                                            backgroundColor:
-                                              pm.color || "#16a34a",
-                                          }
-                                        : {}
-                                    }
-                                  >
-                                    {pm.name}
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                            <Button
-                              onClick={() => handlePayment()}
-                              disabled={isProcessingPayment}
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                            >
-                              {isProcessingPayment ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  İşleniyor...
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="h-4 w-4 mr-2" />
-                                  Onayla
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setShowPaymentModal(false);
-                                setPaymentAmount("");
-                                setDiscountType("percentage");
-                                setDiscountValue("");
-                                setManualDiscount("");
-                              }}
-                              className="flex-1"
-                            >
-                              <X className="h-4 w-4 mr-2" />
-                              İptal
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-              {/* Normal Görünüm (Mobile) */}
-              <div
-                className={`flex-1 flex flex-col transition-opacity duration-300 overflow-hidden ${
-                  showPaymentModal
-                    ? "opacity-0 pointer-events-none"
-                    : "opacity-100"
-                }`}
-              >
-                <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <ShoppingCart className="h-4 w-4" />
-                    {order
-                      ? "Aktif Sipariş"
-                      : `Sipariş (${cart.reduce((sum, item) => sum + item.quantity, 0)})`}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowCart(false)}
-                      className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-1"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-3 min-h-0">
-                  {order && order.items.length > 0 ? (
-                    // Aktif Sipariş Göster (Mobile) - Aynı ürünleri birleştir
-                    <div className="space-y-2">
-                      {(() => {
-                        // Aynı menuId'ye sahip ürünleri birleştir
-                        const mergedItems = new Map<
-                          string,
-                          { item: OrderItem; indices: number[] }
-                        >();
-                        order.items.forEach((item, index) => {
-                          const existing = mergedItems.get(item.menuId);
-                          if (existing) {
-                            existing.item.quantity += item.quantity;
-                            existing.item.subtotal += item.subtotal;
-                            existing.indices.push(index);
-                          } else {
-                            mergedItems.set(item.menuId, {
-                              item: { ...item },
-                              indices: [index],
-                            });
-                          }
-                        });
-
-                        return Array.from(mergedItems.values()).map(
-                          ({ item, indices }) => {
-                            const isSelected = indices.some((idx) =>
-                              selectedItems.has(idx)
-                            );
-                            return (
-                              <div
-                                key={item.menuId}
-                                onClick={() => {
-                                  // Tüm index'leri seç/seçimi kaldır
-                                  indices.forEach((idx) =>
-                                    toggleItemSelection(idx)
-                                  );
-                                }}
-                                className={`rounded-lg p-2 border-2 cursor-pointer transition-all ${
-                                  isSelected
-                                    ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
-                                    : "border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between mb-1.5">
-                                  <div className="flex-1 min-w-0">
-                                    <h4
-                                      className={`font-medium text-xs truncate ${
-                                        isSelected
-                                          ? "text-blue-900 dark:text-blue-200"
-                                          : "text-gray-900 dark:text-white"
-                                      }`}
-                                    >
-                                      {item.menuName}
-                                    </h4>
-                                  </div>
-                                  <div className="flex flex-col items-end gap-1">
-                                    <span
-                                      className={`font-bold text-xs ${
-                                        isSelected
-                                          ? "text-blue-900 dark:text-blue-200"
-                                          : "text-gray-900 dark:text-white"
-                                      }`}
-                                    >
-                                      ₺{item.subtotal.toFixed(2)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                                  {item.addedAt && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                      <Clock className="h-3 w-3" />
-                                      {getTimeAgo(item.addedAt)}
-                                    </p>
-                                  )}
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    {item.quantity} adet
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          }
-                        );
-                      })()}
-                    </div>
-                  ) : cart.length === 0 ? (
-                    <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-                      <ShoppingCart className="h-10 w-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
-                      <p className="text-xs">Sepet boş</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {(() => {
-                        // Aynı menuId'ye sahip ürünleri birleştir
-                        const mergedItems = new Map<
-                          string,
-                          { item: OrderItem; cartItemIds: string[] }
-                        >();
-                        cart.forEach((item) => {
-                          const existing = mergedItems.get(item.menuId);
-                          if (existing) {
-                            existing.item.quantity += item.quantity;
-                            existing.item.subtotal += item.subtotal;
-                            existing.cartItemIds.push(
-                              item.cartItemId || item.menuId
-                            );
-                            // Notları birleştir (varsa)
-                            if (item.notes) {
-                              if (existing.item.notes) {
-                                existing.item.notes = `${existing.item.notes}, ${item.notes}`;
-                              } else {
-                                existing.item.notes = item.notes;
-                              }
-                            }
-                          } else {
-                            mergedItems.set(item.menuId, {
-                              item: { ...item },
-                              cartItemIds: [item.cartItemId || item.menuId],
-                            });
-                          }
-                        });
-
-                        return Array.from(mergedItems.values()).map(
-                          ({ item, cartItemIds }) => {
-                            const isNewItem =
-                              item.cartItemId &&
-                              !item.cartItemId.includes("-old-");
-
-                            return (
-                              <div
-                                key={item.menuId}
-                                className={`rounded-lg p-2 border-2 ${
-                                  isNewItem
-                                    ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 shadow-sm"
-                                    : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between mb-1.5">
-                                  <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                                      {item.menuName}
-                                    </h4>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                                      ₺{item.menuPrice.toFixed(2)} x{" "}
-                                      {item.quantity}
-                                    </p>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      // Tüm cartItemIds'leri sil
-                                      cartItemIds.forEach((cartItemId) => {
-                                        removeFromCart(cartItemId);
-                                      });
-                                    }}
-                                    className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-0.5 flex-shrink-0"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={() => {
-                                        // İlk cartItemId'yi kullan
-                                        updateQuantity(cartItemIds[0], -1);
-                                      }}
-                                      className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                                    >
-                                      <Minus className="h-2.5 w-2.5" />
-                                    </button>
-                                    <span className="font-semibold w-6 text-center text-xs">
-                                      {item.quantity}
-                                    </span>
-                                    <button
-                                      onClick={() => {
-                                        // İlk cartItemId'yi kullan
-                                        updateQuantity(cartItemIds[0], 1);
-                                      }}
-                                      className="w-6 h-6 rounded-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-500"
-                                    >
-                                      <Plus className="h-2.5 w-2.5" />
-                                    </button>
-                                  </div>
-                                  <span className="font-bold text-gray-900 dark:text-white text-xs">
-                                    ₺{item.subtotal.toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          }
-                        );
-                      })()}
-
-                      {/* Gönder Butonu */}
-                      {cart.length > 0 && (
-                        <Button
-                          onClick={handleSendOrder}
-                          disabled={cart.length === 0 || isSendingOrder}
-                          className="w-full h-10 text-sm font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white mt-2"
-                        >
-                          {isSendingOrder ? (
-                            <>
-                              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                              Gönderiliyor...
-                            </>
-                          ) : (
-                            <>
-                              <Send className="h-3 w-3 mr-2" />
-                              Gönder
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {order && order.items.length > 0 ? (
-                  // Aktif Sipariş İşlemleri (Mobile)
-                  <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-3 bg-gray-50 dark:bg-gray-700/30 flex-shrink-0">
-                    <div className="space-y-2">
-                      {/* Sadece yeni eklenen ürünlerin ara toplamı */}
-                      {cart.length > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600 dark:text-gray-400">
-                            Ara Toplam:
-                          </span>
-                          <span className="font-medium text-green-700 dark:text-green-400">
-                            ₺{cartTotal.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {/* Toplam Fiyat ve Ödeme Butonu */}
-                    {order && order.items && order.items.length > 0 && (
-                      <>
-                        {(() => {
-                          let totalAmount: number;
-                          if (selectedItems.size > 0) {
-                            // Seçili ürünlerin toplamı
-                            const selectedItemsArray =
-                              Array.from(selectedItems);
-                            const selectedItemsData = selectedItemsArray
-                              .map((index) => order.items[index])
-                              .filter(Boolean);
-                            const mergedSelectedItems = new Map<
-                              string,
-                              { quantity: number; subtotal: number }
-                            >();
-                            selectedItemsData.forEach((item) => {
-                              const existing = mergedSelectedItems.get(
-                                item.menuId
-                              );
-                              if (existing) {
-                                existing.quantity += item.quantity;
-                                existing.subtotal += item.subtotal;
-                              } else {
-                                mergedSelectedItems.set(item.menuId, {
-                                  quantity: item.quantity,
-                                  subtotal: item.subtotal,
-                                });
-                              }
-                            });
-                            totalAmount = Array.from(
-                              mergedSelectedItems.values()
-                            ).reduce((sum, { subtotal }) => sum + subtotal, 0);
-                          } else {
-                            // Tüm ürünlerin toplamı
-                            totalAmount = (order.items || []).reduce(
-                              (sum, item) => sum + item.subtotal,
-                              0
-                            );
-                          }
-
-                          return (
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                Toplam:
-                              </span>
-                              <span className="text-lg font-bold text-gray-900 dark:text-white">
-                                ₺{totalAmount.toFixed(2)}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                        {selectedItems.size > 0 ? (
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => {
-                                // Seçili ürünlerden aynı üründen birden fazla olan var mı kontrol et
-                                const selectedItemsArray =
-                                  Array.from(selectedItems);
-                                const itemsByMenuId = new Map<
-                                  string,
-                                  { item: OrderItem; indices: number[] }
-                                >();
-
-                                selectedItemsArray.forEach((index) => {
-                                  const item = order.items[index];
-                                  if (item) {
-                                    const existing = itemsByMenuId.get(
-                                      item.menuId
-                                    );
-                                    if (existing) {
-                                      existing.indices.push(index);
-                                    } else {
-                                      itemsByMenuId.set(item.menuId, {
-                                        item,
-                                        indices: [index],
-                                      });
-                                    }
-                                  }
-                                });
-
-                                // Birden fazla farklı ürün seçiliyse, her ürün için sırayla miktar seçim modalı aç
-                                if (itemsByMenuId.size > 1) {
-                                  // Tüm seçili ürünleri array'e koy
-                                  const itemsArray = Array.from(
-                                    itemsByMenuId.values()
-                                  ).map((item) => {
-                                    const totalQuantity = item.indices.reduce(
-                                      (sum, idx) => {
-                                        const orderItem = order.items[idx];
-                                        return orderItem
-                                          ? sum + orderItem.quantity
-                                          : sum;
-                                      },
-                                      0
-                                    );
-                                    return {
-                                      menuId: item.item.menuId,
-                                      menuName: item.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: item.indices,
-                                    };
-                                  });
-
-                                  // İlk ürün için miktar seçim modalı aç
-                                  setPendingCancelItems(itemsArray);
-                                  setCurrentCancelItemIndex(0);
-                                  setSelectedItemForQuantity(itemsArray[0]);
-                                  setSelectedQuantity(1);
-                                  setQuantitySelectionAction("cancel");
-                                  setShowQuantitySelectionModal(true);
-                                  return;
-                                }
-
-                                // Sadece tek bir ürün seçiliyse ve o ürünün toplam adedi > 1 ise miktar seçim modalı aç
-                                if (itemsByMenuId.size === 1) {
-                                  const singleItem = Array.from(
-                                    itemsByMenuId.values()
-                                  )[0];
-                                  const totalQuantity =
-                                    singleItem.indices.reduce((sum, idx) => {
-                                      const item = order.items[idx];
-                                      return item ? sum + item.quantity : sum;
-                                    }, 0);
-
-                                  if (totalQuantity > 1) {
-                                    setSelectedItemForQuantity({
-                                      menuId: singleItem.item.menuId,
-                                      menuName: singleItem.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: singleItem.indices,
-                                    });
-                                    setSelectedQuantity(1);
-                                    setQuantitySelectionAction("cancel");
-                                    setShowQuantitySelectionModal(true);
-                                    return;
-                                  }
-                                }
-
-                                // Tek adet veya farklı ürünler, direkt iptal et
-                                handleCancelSelectedItems();
-                              }}
-                              disabled={isCanceling}
-                              className="flex-1 h-10 text-sm font-medium bg-red-600 hover:bg-red-700 text-white dark:text-white"
-                            >
-                              {isCanceling ? (
-                                <>
-                                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                                  İptal Ediliyor...
-                                </>
-                              ) : (
-                                <>
-                                  <X className="h-3 w-3 mr-2" />
-                                  İptal
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                // Seçili ürünlerden aynı üründen birden fazla olan var mı kontrol et
-                                const selectedItemsArray =
-                                  Array.from(selectedItems);
-                                const itemsByMenuId = new Map<
-                                  string,
-                                  { item: OrderItem; indices: number[] }
-                                >();
-
-                                selectedItemsArray.forEach((index) => {
-                                  const item = order.items[index];
-                                  if (item) {
-                                    const existing = itemsByMenuId.get(
-                                      item.menuId
-                                    );
-                                    if (existing) {
-                                      existing.indices.push(index);
-                                    } else {
-                                      itemsByMenuId.set(item.menuId, {
-                                        item,
-                                        indices: [index],
-                                      });
-                                    }
-                                  }
-                                });
-
-                                // Birden fazla farklı ürün seçiliyse, her ürün için sırayla miktar seçim modalı aç
-                                if (itemsByMenuId.size > 1) {
-                                  // Tüm seçili ürünleri array'e koy
-                                  const itemsArray = Array.from(
-                                    itemsByMenuId.values()
-                                  ).map((item) => {
-                                    const totalQuantity = item.indices.reduce(
-                                      (sum, idx) => {
-                                        const orderItem = order.items[idx];
-                                        return orderItem
-                                          ? sum + orderItem.quantity
-                                          : sum;
-                                      },
-                                      0
-                                    );
-                                    return {
-                                      menuId: item.item.menuId,
-                                      menuName: item.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: item.indices,
-                                    };
-                                  });
-
-                                  // İlk ürün için miktar seçim modalı aç
-                                  setPendingMoveItems(itemsArray);
-                                  setCurrentMoveItemIndex(0);
-                                  setSelectedItemForQuantity(itemsArray[0]);
-                                  setSelectedQuantity(1);
-                                  setQuantitySelectionAction("move");
-                                  setShowQuantitySelectionModal(true);
-                                  return;
-                                }
-
-                                // Sadece tek bir ürün seçiliyse ve o ürünün toplam adedi > 1 ise miktar seçim modalı aç
-                                if (itemsByMenuId.size === 1) {
-                                  const singleItem = Array.from(
-                                    itemsByMenuId.values()
-                                  )[0];
-                                  const totalQuantity =
-                                    singleItem.indices.reduce((sum, idx) => {
-                                      const item = order.items[idx];
-                                      return item ? sum + item.quantity : sum;
-                                    }, 0);
-
-                                  if (totalQuantity > 1) {
-                                    setSelectedItemForQuantity({
-                                      menuId: singleItem.item.menuId,
-                                      menuName: singleItem.item.menuName,
-                                      totalQuantity: totalQuantity,
-                                      indices: singleItem.indices,
-                                    });
-                                    setSelectedQuantity(1);
-                                    setQuantitySelectionAction("move");
-                                    setShowQuantitySelectionModal(true);
-                                    return;
-                                  }
-                                }
-
-                                // Tek adet veya farklı ürünler, direkt taşı modalını aç
-                                setShowMoveModal(true);
-                              }}
-                              className="flex-1 h-10 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white dark:text-white"
-                            >
-                              <ArrowLeft className="h-3 w-3 mr-2" />
-                              Taşı
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            onClick={() => {
-                              // Aynı üründen birden fazla yoksa direkt ödeme modalını aç
-                              let remaining: number;
-                              // Tam ödeme: Mevcut ürünlerin toplamı (önceki ödemeler zaten kaldırılan ürünler için)
-                              remaining = (order.items || []).reduce(
-                                (sum, item) => sum + item.subtotal,
-                                0
-                              );
-                              // Tam ekran ödeme ekranını aç
-                              setPaymentScreenAmount(
-                                remaining > 0 ? remaining.toFixed(2) : ""
-                              );
-                              setPaymentScreenDiscountType("percentage");
-                              setPaymentScreenDiscountValue("");
-                              setPaymentScreenManualDiscount("");
-                              setPaymentScreenSelectedItems(new Set());
-                              setPaymentScreenSelectedQuantities(new Map());
-                              setPaymentMethod(""); // Ödeme yöntemini temizle
-                              setShowFullScreenPayment(true);
-                            }}
-                            className="w-full h-10 text-sm font-medium bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                          >
-                            <CreditCard className="h-3 w-3 mr-2" />
-                            Ödeme Al
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Miktar Girme Modalı */}
-        {showQuantityModal && selectedMenuForQuantity && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full">
-              <div className="p-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                  Miktar Girin
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  {selectedMenuForQuantity.name}
-                </p>
-
-                {/* Miktar Girişi */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Miktar (örn: 1, 0.5, 2.5)
-                  </label>
-                  <input
-                    type="text"
-                    value={quantityInput}
-                    onChange={(e) => {
-                      // Sadece rakam, virgül ve nokta kabul et
-                      const value = e.target.value.replace(/[^0-9.,]/g, "");
-                      setQuantityInput(value);
-                    }}
-                    placeholder="0"
-                    className="w-full h-16 px-4 text-3xl font-bold text-center border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
-                    autoFocus
-                  />
-
-                  {/* Hesaplanan Fiyat */}
-                  {quantityInput && (
-                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Toplam Fiyat:
-                        </span>
-                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                          ₺
-                          {(
-                            (selectedMenuForQuantity.price +
-                              Array.from(selectedExtras)
-                                .map((extraId) => {
-                                  const extra =
-                                    selectedMenuForQuantity.extras?.find(
-                                      (e) => e.id === extraId
-                                    );
-                                  return extra ? extra.price : 0;
-                                })
-                                .reduce((sum, price) => sum + price, 0)) *
-                            parseFloat(quantityInput.replace(",", ".") || "0")
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center mt-1 text-xs text-gray-600 dark:text-gray-400">
-                        <span>
-                          {parseFloat(quantityInput.replace(",", ".") || "0")} ×
-                          ₺
-                          {(
-                            selectedMenuForQuantity.price +
-                            Array.from(selectedExtras)
-                              .map((extraId) => {
-                                const extra =
-                                  selectedMenuForQuantity.extras?.find(
-                                    (e) => e.id === extraId
-                                  );
-                                return extra ? extra.price : 0;
-                              })
-                              .reduce((sum, price) => sum + price, 0)
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Ekstra Malzemeler */}
-                {selectedMenuForQuantity.extras &&
-                  selectedMenuForQuantity.extras.length > 0 && (
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Ekstra Malzemeler
-                      </label>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {selectedMenuForQuantity.extras.map((extra) => {
-                          const isSelected = selectedExtras.has(extra.id);
-                          const isRequired = extra.isRequired;
-
-                          return (
-                            <div
-                              key={extra.id}
-                              onClick={() => {
-                                if (isRequired) return;
-                                const newSelected = new Set(selectedExtras);
-                                if (isSelected) {
-                                  newSelected.delete(extra.id);
-                                } else {
-                                  newSelected.add(extra.id);
-                                }
-                                setSelectedExtras(newSelected);
-                              }}
-                              className={`flex items-center justify-between p-2 rounded-lg border-2 transition-all cursor-pointer ${
-                                isSelected
-                                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400"
-                                  : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
-                              } ${isRequired ? "border-orange-300 dark:border-orange-600 cursor-not-allowed" : ""}`}
-                            >
-                              <div className="flex items-center gap-2 flex-1">
-                                <div
-                                  className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                                    isSelected
-                                      ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
-                                      : "border-gray-300 dark:border-gray-500"
-                                  } ${isRequired ? "opacity-50" : ""}`}
-                                >
-                                  {isSelected && (
-                                    <Check className="h-2.5 w-2.5 text-white" />
-                                  )}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-gray-900 dark:text-white">
-                                      {extra.name}
-                                    </span>
-                                    {isRequired && (
-                                      <span className="text-[10px] px-1 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 rounded">
-                                        Zorunlu
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-[10px] text-gray-600 dark:text-gray-400">
-                                    +₺{extra.price.toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Numerik Klavye */}
-                <div className="mb-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {[7, 8, 9, 4, 5, 6, 1, 2, 3].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() =>
-                          setQuantityInput((prev) => prev + num.toString())
-                        }
-                        className="h-14 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
-                      >
-                        {num}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setQuantityInput((prev) => prev + ",")}
-                      className="h-14 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/40 active:bg-blue-300 dark:active:bg-blue-900/50 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
-                    >
-                      ,
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuantityInput((prev) => prev + "0")}
-                      className="h-14 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 rounded-lg text-2xl font-bold text-gray-900 dark:text-white transition-colors"
-                    >
-                      0
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQuantityInput((prev) => prev.slice(0, -1))
-                      }
-                      className="h-14 bg-red-500 hover:bg-red-600 active:bg-red-700 rounded-lg flex items-center justify-center text-white transition-colors"
-                    >
-                      <Delete className="h-6 w-6" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Butonlar */}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowQuantityModal(false);
-                      setSelectedMenuForQuantity(null);
-                      setQuantityInput("");
-                      setSelectedExtras(new Set());
-                    }}
-                    className="flex-1 h-12 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium text-gray-900 dark:text-white transition-colors"
-                  >
-                    İptal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddWithQuantity}
-                    disabled={
-                      !quantityInput ||
-                      parseFloat(quantityInput.replace(",", ".") || "0") <= 0
-                    }
-                    className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Sepete Ekle
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Ürün Not Ekleme Modalı */}
-        {showAddNoteModal && selectedMenuForNote && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                {cart.find((item) => item.menuId === selectedMenuForNote.id)
-                  ? "Ürün Notu Düzenle"
-                  : "Ürün Notu Ekle"}
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Ürün: {selectedMenuForNote.name}
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Not (Opsiyonel)
-                  </label>
-                  <Textarea
-                    ref={itemNoteTextareaRef}
-                    value={itemNote}
-                    onChange={(e) => setItemNote(e.target.value)}
-                    placeholder="Örn: Az baharatlı, ekstra peynir..."
-                    className="h-24"
-                    showTouchKeyboard={true}
-                    showKeyboardButton={true}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => {
-                      const existingItem = cart.find(
-                        (item) => item.menuId === selectedMenuForNote.id
-                      );
-                      if (existingItem) {
-                        // Mevcut item'ı güncelle (not düzenle)
-                        setCart((prev) => {
-                          return prev.map((item) => {
-                            if (item.cartItemId === existingItem.cartItemId) {
-                              return {
-                                ...item,
-                                notes: itemNote || undefined,
-                              };
-                            }
-                            return item;
-                          });
-                        });
-                      } else {
-                        // Yeni ürün ekle
-                        addToCartWithNote(selectedMenuForNote, itemNote);
-                      }
-                      setShowAddNoteModal(false);
-                      setSelectedMenuForNote(null);
-                      setItemNote("");
-                    }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:text-white"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    {cart.find((item) => item.menuId === selectedMenuForNote.id)
-                      ? "Kaydet"
-                      : "Sepete Ekle"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowAddNoteModal(false);
-                      setSelectedMenuForNote(null);
-                      setItemNote("");
-                    }}
-                    className="flex-1"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    İptal
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Ekstra Malzeme Seçimi Modalı */}
-        {showExtraModal && selectedMenuForExtra && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Ekstra Malzemeler
-              </h2>
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ürün:{" "}
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {selectedMenuForExtra.name}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Temel Fiyat:{" "}
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">
-                    ₺{selectedMenuForExtra.price.toFixed(2)}
-                  </span>
-                </p>
-              </div>
-
-              {selectedMenuForExtra.extras &&
-              selectedMenuForExtra.extras.length > 0 ? (
-                <div className="space-y-2 mb-4">
-                  {selectedMenuForExtra.extras.map((extra) => {
-                    const isSelected = selectedExtras.has(extra.id);
-                    const isRequired = extra.isRequired;
-
-                    return (
-                      <div
-                        key={extra.id}
-                        onClick={() => {
-                          if (isRequired) return; // Zorunlu ekstralar seçilemez
-                          const newSelected = new Set(selectedExtras);
-                          if (isSelected) {
-                            newSelected.delete(extra.id);
-                          } else {
-                            newSelected.add(extra.id);
-                          }
-                          setSelectedExtras(newSelected);
-                        }}
-                        className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400"
-                            : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
-                        } ${isRequired ? "border-orange-300 dark:border-orange-600 cursor-not-allowed" : ""}`}
-                      >
-                        <div className="flex items-center gap-3 flex-1">
-                          <div
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                              isSelected
-                                ? "bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500"
-                                : "border-gray-300 dark:border-gray-500"
-                            } ${isRequired ? "opacity-50" : ""}`}
-                          >
-                            {isSelected && (
-                              <Check className="h-3 w-3 text-white" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                {extra.name}
-                              </span>
-                              {isRequired && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 rounded">
-                                  Zorunlu
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                              +₺{extra.price.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Bu ürün için ekstra malzeme bulunmuyor.
-                </p>
-              )}
-
-              {/* Toplam Fiyat */}
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Toplam:
-                  </span>
-                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                    ₺
-                    {(
-                      selectedMenuForExtra.price +
-                      Array.from(selectedExtras)
-                        .map((extraId) => {
-                          const extra = selectedMenuForExtra.extras?.find(
-                            (e) => e.id === extraId
-                          );
-                          return extra ? extra.price : 0;
-                        })
-                        .reduce((sum, price) => sum + price, 0)
-                    ).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowExtraModal(false);
-                    setSelectedMenuForExtra(null);
-                    setSelectedExtras(new Set());
-                  }}
-                  className="flex-1"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  İptal
-                </Button>
-                <Button
-                  onClick={handleAddToCartWithExtras}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Check className="h-4 w-4 mr-2" />
-                  Sepete Ekle
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Ürün İptal Onay Modalı */}
-        {showCancelItemModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-              {cancelItemOptions.length > 0 ? (
-                // Aynı üründen birden fazla varsa seçim yapılabilmeli
-                <>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Ürün İptal Et
-                  </h2>
-                  <div className="space-y-4">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      <strong>{cancelItemOptions[0].item.menuName}</strong>{" "}
-                      ürününden birden fazla var. Hangisini iptal etmek
-                      istersiniz?
-                    </p>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {cancelItemOptions.map(({ item, index }) => (
-                        <button
-                          key={index}
-                          onClick={async () => {
-                            const itemWithIndex = {
-                              ...item,
-                              id: item.id || `${item.menuId}-${index}`,
-                              _index: index,
-                            };
-                            setSelectedItem(itemWithIndex);
-                            setCancelItemOptions([]);
-                            setShowCancelItemModal(false);
-                            // Direkt iptal et
-                            await handleCancelItem();
-                          }}
-                          className="w-full text-left bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                Miktar: {item.quantity}
-                              </div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">
-                                ₺{item.menuPrice.toFixed(2)} x {item.quantity} =
-                                ₺{item.subtotal.toFixed(2)}
-                              </div>
-                            </div>
-                            <X className="h-4 w-4 text-red-600 dark:text-red-400" />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowCancelItemModal(false);
-                        setSelectedItem(null);
-                        setCancelItemOptions([]);
-                      }}
-                      className="w-full"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      İptal
-                    </Button>
-                  </div>
-                </>
-              ) : selectedItem ? (
-                // Tek bir ürün varsa normal onay
-                <>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Ürün İptal Et
-                  </h2>
-                  <div className="space-y-4">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      <strong>{selectedItem.menuName}</strong> ürününü iptal
-                      etmek istediğinize emin misiniz?
-                    </p>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Miktar:
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {selectedItem.quantity}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Tutar:
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          ₺{selectedItem.subtotal.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleCancelItem}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white dark:text-white"
-                      >
-                        <Check className="h-4 w-4 mr-2" />
-                        Onayla
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowCancelItemModal(false);
-                          setSelectedItem(null);
-                          setCancelItemOptions([]);
-                        }}
-                        className="flex-1"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        İptal
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-        )}
-
-        {/* Adet Seçim Modalı */}
-        {showQuantitySelectionModal && selectedItemForQuantity && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div
-              key={`quantity-modal-${selectedItemForQuantity.menuId}-${
-                quantitySelectionAction === "payment"
-                  ? currentPaymentItemIndex
-                  : quantitySelectionAction === "cancel"
-                    ? currentCancelItemIndex
-                    : currentMoveItemIndex
-              }`}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4"
-            >
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                {quantitySelectionAction === "cancel"
-                  ? pendingCancelItems.length > 0
-                    ? `Ürün İptal Et (${currentCancelItemIndex + 1}/${pendingCancelItems.length})`
-                    : "Ürün İptal Et"
-                  : quantitySelectionAction === "payment"
-                    ? pendingPaymentItems.length > 0
-                      ? `Ödeme Al (${currentPaymentItemIndex + 1}/${pendingPaymentItems.length})`
-                      : "Ödeme Al"
-                    : pendingMoveItems.length > 0
-                      ? `Ürün Taşı (${currentMoveItemIndex + 1}/${pendingMoveItems.length})`
-                      : "Ürün Taşı"}
-              </h2>
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>{selectedItemForQuantity.menuName}</strong> ürününden
-                  toplam{" "}
-                  <strong>{selectedItemForQuantity.totalQuantity} adet</strong>{" "}
-                  seçili. Kaç adet{" "}
-                  {quantitySelectionAction === "cancel"
-                    ? "iptal"
-                    : quantitySelectionAction === "payment"
-                      ? "ödemesini almak"
-                      : "taşımak"}{" "}
-                  istersiniz?
-                </p>
-
-                <div className="flex items-center justify-center gap-4 py-4">
-                  <button
-                    onClick={() =>
-                      setSelectedQuantity(Math.max(1, selectedQuantity - 1))
-                    }
-                    className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center font-bold"
-                  >
-                    <Minus className="h-5 w-5" />
-                  </button>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white min-w-[60px] text-center">
-                    {selectedQuantity}
-                  </div>
-                  <button
-                    onClick={() =>
-                      setSelectedQuantity(
-                        Math.min(
-                          selectedItemForQuantity.totalQuantity,
-                          selectedQuantity + 1
-                        )
-                      )
-                    }
-                    className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center font-bold"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={async () => {
-                      if (!order || !selectedItemForQuantity) return;
-
-                      if (quantitySelectionAction === "cancel") {
-                        // İptal işlemi - seçilen miktar kadar ürünün iptalini al
-
-                        // Eğer birden fazla ürün için miktar seçiliyorsa, bir sonraki ürün için modal aç
-                        if (
-                          pendingCancelItems.length > 0 &&
-                          currentCancelItemIndex < pendingCancelItems.length - 1
-                        ) {
-                          // Bu ürünün miktarını kaydet (güncel map'i kullan)
-                          const currentItem =
-                            pendingCancelItems[currentCancelItemIndex];
-                          const updatedQuantities = new Map(
-                            selectedCancelQuantities
-                          );
-                          updatedQuantities.set(
-                            currentItem.menuId,
-                            selectedQuantity
-                          );
-                          setSelectedCancelQuantities(updatedQuantities);
-
-                          // Bir sonraki ürün için modal aç
-                          const nextIndex = currentCancelItemIndex + 1;
-                          setCurrentCancelItemIndex(nextIndex);
-                          setSelectedItemForQuantity(
-                            pendingCancelItems[nextIndex]
-                          );
-                          setSelectedQuantity(1);
-                          // Modal açık kalacak, sadece içeriği değişecek
-                          return;
-                        }
-
-                        // Son ürün için miktar seçildi, iptal işlemini yap
-                        try {
-                          // Tüm seçilen miktarları bir map'te topla (state güncellemesinden önce)
-                          const allSelectedQuantities = new Map(
-                            selectedCancelQuantities
-                          );
-                          if (pendingCancelItems.length > 0) {
-                            // Son ürünün miktarını da ekle
-                            const lastItem =
-                              pendingCancelItems[pendingCancelItems.length - 1];
-                            allSelectedQuantities.set(
-                              lastItem.menuId,
-                              selectedQuantity
-                            );
-
-                            // State'i güncelle
-                            setSelectedCancelQuantities(allSelectedQuantities);
-                          }
-
-                          // İptal işlemi - seçilen TÜM ürünlerden, her biri için seçilen miktar kadar iptal et
-                          const indicesToCancel = new Set<number>();
-                          const itemsToUpdate: Array<{
-                            index: number;
-                            quantity: number;
-                            subtotal: number;
-                          }> = [];
-
-                          // Tüm seçili ürünler için işle
-                          if (pendingCancelItems.length > 0) {
-                            // Tüm ürünler için seçilen miktarları kullan
-                            pendingCancelItems.forEach((cancelItem) => {
-                              const selectedQty =
-                                allSelectedQuantities.get(cancelItem.menuId) ||
-                                cancelItem.totalQuantity;
-                              let remainingQuantity = selectedQty;
-
-                              for (const index of cancelItem.indices) {
-                                if (remainingQuantity <= 0) break;
-                                const item = order.items[index];
-                                if (!item) continue;
-
-                                const cancelQuantity = Math.min(
-                                  remainingQuantity,
-                                  item.quantity
-                                );
-                                if (cancelQuantity <= 0) continue;
-
-                                if (cancelQuantity === item.quantity) {
-                                  indicesToCancel.add(index);
-                                } else {
-                                  const newQuantity =
-                                    item.quantity - cancelQuantity;
-                                  const newSubtotal =
-                                    newQuantity * item.menuPrice;
-                                  itemsToUpdate.push({
-                                    index,
-                                    quantity: newQuantity,
-                                    subtotal: newSubtotal,
-                                  });
-                                }
-
-                                remainingQuantity -= cancelQuantity;
-                              }
-                            });
-                          } else {
-                            // Tek ürün seçiliyse
-                            let remainingQuantity = selectedQuantity;
-                            for (const index of selectedItemForQuantity.indices) {
-                              if (remainingQuantity <= 0) break;
-                              const item = order.items[index];
-                              if (!item) continue;
-
-                              const cancelQuantity = Math.min(
-                                remainingQuantity,
-                                item.quantity
-                              );
-                              if (cancelQuantity <= 0) continue;
-
-                              if (cancelQuantity === item.quantity) {
-                                indicesToCancel.add(index);
-                              } else {
-                                const newQuantity =
-                                  item.quantity - cancelQuantity;
-                                const newSubtotal =
-                                  newQuantity * item.menuPrice;
-                                itemsToUpdate.push({
-                                  index,
-                                  quantity: newQuantity,
-                                  subtotal: newSubtotal,
-                                });
-                              }
-
-                              remainingQuantity -= cancelQuantity;
-                            }
-                          }
-
-                          // İptal edilecek index'leri siparişten çıkar ve canceledItems'a ekle
-                          const currentOrder = await getOrder(order.id!);
-                          if (!currentOrder) {
-                            navigateToHome();
-                            return;
-                          }
-
-                          // İptal edilen ürünleri topla
-                          const canceledItems =
-                            currentOrder.canceledItems || [];
-                          const itemsToCancel: OrderItem[] = [];
-
-                          const canceledAtTime = new Date();
-                          indicesToCancel.forEach((index) => {
-                            const item = currentOrder.items[index];
-                            if (item) {
-                              itemsToCancel.push({
-                                ...item,
-                                addedAt: item.addedAt || new Date(),
-                                canceledAt: canceledAtTime,
-                              });
-                            }
-                          });
-
-                          // Kısmi iptal edilen ürünleri de ekle (quantity güncellemesi yapılanlar)
-                          itemsToUpdate.forEach((update) => {
-                            const item = currentOrder.items[update.index];
-                            if (item) {
-                              const canceledQuantity =
-                                item.quantity - update.quantity;
-                              if (canceledQuantity > 0) {
-                                itemsToCancel.push({
-                                  ...item,
-                                  quantity: canceledQuantity,
-                                  subtotal: canceledQuantity * item.menuPrice,
-                                  addedAt: item.addedAt || new Date(),
-                                  canceledAt: canceledAtTime,
-                                });
-                              }
-                            }
-                          });
-
-                          // İptal edilen ürünleri canceledItems'a ekle
-                          canceledItems.push(...itemsToCancel);
-
-                          // Önce quantity güncellemelerini yap, sonra iptal edilenleri çıkar
-                          let updatedItems = currentOrder.items.map(
-                            (it, idx) => {
-                              const update = itemsToUpdate.find(
-                                (u) => u.index === idx
-                              );
-                              return update
-                                ? {
-                                    ...it,
-                                    quantity: update.quantity,
-                                    subtotal: update.subtotal,
-                                  }
-                                : it;
-                            }
-                          );
-
-                          // İptal edilenleri çıkar
-                          updatedItems = updatedItems.filter(
-                            (_, index) => !indicesToCancel.has(index)
-                          );
-
-                          if (updatedItems.length === 0) {
-                            // Hiç ürün kalmadıysa siparişi kapat
-                            // Önce canceledItems'ı kaydet
-                            const subtotal = 0;
-                            const total = 0;
-                            await updateOrder(order.id!, {
-                              items: updatedItems,
-                              canceledItems: canceledItems,
-                              subtotal: subtotal,
-                              total: total,
-                            });
-
-                            await updateTableStatus(
-                              currentTable.id!,
-                              "available",
-                              undefined
-                            );
-                            await updateOrderStatus(order.id!, "closed");
-                            const updatedTable = await getTable(
-                              currentTable.id!
-                            );
-                            if (updatedTable) {
-                              setCurrentTable(updatedTable);
-                            }
-                            setOrder(null);
-                            setSelectedItems(new Set());
-                            setShowQuantitySelectionModal(false);
-                            setSelectedItemForQuantity(null);
-                            // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
-                            return;
-                          }
-
-                          // Toplam hesapla ve güncelle
-                          const subtotal = updatedItems.reduce(
-                            (sum, item) => sum + item.subtotal,
-                            0
-                          );
-                          const total = subtotal - (currentOrder.discount || 0);
-                          await updateOrder(order.id!, {
-                            items: updatedItems,
-                            canceledItems: canceledItems,
-                            subtotal: subtotal,
-                            total: total,
-                          });
-
-                          const finalOrder = await getOrder(order.id!);
-                          if (finalOrder) {
-                            setOrder(finalOrder);
-                          }
-
-                          // Tüm seçili ürünler iptal edildi, seçimi temizle
-                          setSelectedItems(new Set());
-                          setShowQuantitySelectionModal(false);
-                          setSelectedItemForQuantity(null);
-                          setSelectedQuantity(1);
-                          setQuantitySelectionAction(null);
-                          setPendingCancelItems([]);
-                          setCurrentCancelItemIndex(0);
-                          setSelectedCancelQuantities(new Map());
-                          // Ana sayfaya yönlendirme KALDIRILDI - kullanıcı masa sayfasında kalsın
-                        } catch (error) {
-                          customAlert(
-                            "Ürünler iptal edilirken bir hata oluştu",
-                            "Hata",
-                            "error"
-                          );
-                          // Ana sayfaya yönlendirme KALDIRILDI
-                        }
-                      } else if (quantitySelectionAction === "payment") {
-                        // Ödeme işlemi - seçilen miktar kadar ürünün ödemesini al
-
-                        // Eğer birden fazla ürün için miktar seçiliyorsa, bir sonraki ürün için modal aç
-                        if (
-                          pendingPaymentItems.length > 0 &&
-                          currentPaymentItemIndex <
-                            pendingPaymentItems.length - 1
-                        ) {
-                          // Bu ürünün miktarını kaydet (güncel map'i kullan)
-                          const currentItem =
-                            pendingPaymentItems[currentPaymentItemIndex];
-                          const updatedQuantities = new Map(selectedQuantities);
-                          updatedQuantities.set(
-                            currentItem.menuId,
-                            selectedQuantity
-                          );
-                          setSelectedQuantities(updatedQuantities);
-
-                          // Bir sonraki ürün için modal aç
-                          const nextIndex = currentPaymentItemIndex + 1;
-                          setCurrentPaymentItemIndex(nextIndex);
-                          setSelectedItemForQuantity(
-                            pendingPaymentItems[nextIndex]
-                          );
-                          setSelectedQuantity(1);
-                          // Modal açık kalacak, sadece içeriği değişecek
-                          return;
-                        }
-
-                        // Son ürün için miktar seçildi, ödeme modalını aç
-                        setShowQuantitySelectionModal(false);
-
-                        // Tüm seçilen miktarları bir map'te topla (state güncellemesinden önce)
-                        const allSelectedQuantities = new Map(
-                          selectedQuantities
-                        );
-                        if (pendingPaymentItems.length > 0) {
-                          // Son ürünün miktarını da ekle
-                          const lastItem =
-                            pendingPaymentItems[pendingPaymentItems.length - 1];
-                          allSelectedQuantities.set(
-                            lastItem.menuId,
-                            selectedQuantity
-                          );
-
-                          // State'i güncelle
-                          setSelectedQuantities(allSelectedQuantities);
-
-                          // Tüm seçilen miktarları pendingPaymentQuantity'ye kaydet (ilk ürün için)
-                          const firstItem = pendingPaymentItems[0];
-                          const firstQuantity =
-                            allSelectedQuantities.get(firstItem.menuId) ||
-                            firstItem.totalQuantity;
-                          setPendingPaymentQuantity({
-                            menuId: firstItem.menuId,
-                            quantity: firstQuantity,
-                            indices: firstItem.indices,
-                          });
-                        } else {
-                          // Tek ürün seçiliyse
-                          setPendingPaymentQuantity({
-                            menuId: selectedItemForQuantity.menuId,
-                            quantity: selectedQuantity,
-                            indices: selectedItemForQuantity.indices,
-                          });
-                        }
-
-                        // Ödeme tutarını hesapla (güncel selectedQuantities kullanarak)
-                        let paymentTotal = 0;
-
-                        // Tüm seçili ürünler için hesapla
-                        if (pendingPaymentItems.length > 0) {
-                          // Tüm ürünler için seçilen miktarları kullan (güncel map'ten)
-                          pendingPaymentItems.forEach((item) => {
-                            const quantity =
-                              allSelectedQuantities.get(item.menuId) ||
-                              item.totalQuantity;
-
-                            let remainingQty = quantity;
-                            item.indices.forEach((index) => {
-                              if (remainingQty <= 0) return;
-                              const orderItem = order.items[index];
-                              if (!orderItem) return;
-
-                              if (orderItem.quantity <= remainingQty) {
-                                paymentTotal += orderItem.subtotal;
-                                remainingQty -= orderItem.quantity;
-                              } else {
-                                const partialQty = remainingQty;
-                                paymentTotal +=
-                                  partialQty * orderItem.menuPrice;
-                                remainingQty = 0;
-                              }
-                            });
-                          });
-                        } else {
-                          // Tek ürün seçiliyse
-                          let remainingQuantity = selectedQuantity;
-                          for (const index of selectedItemForQuantity.indices) {
-                            if (remainingQuantity <= 0) break;
-                            const item = order.items[index];
-                            if (!item) continue;
-
-                            if (item.quantity <= remainingQuantity) {
-                              paymentTotal += item.subtotal;
-                              remainingQuantity -= item.quantity;
-                            } else {
-                              const partialQuantity = remainingQuantity;
-                              paymentTotal += partialQuantity * item.menuPrice;
-                              remainingQuantity = 0;
-                            }
-                          }
-                        }
-
-                        // Ödeme modalını aç
-                        // NOT: Modal state'lerini temizleme, ödeme işlemi tamamlandıktan sonra yapılacak
-                        setPaymentAmount(paymentTotal.toFixed(2));
-                        setDiscountType("percentage");
-                        setDiscountValue("");
-                        setManualDiscount("");
-                        setShowPaymentModal(true);
-
-                        // Sadece quantity selection modal state'lerini temizle (ödeme modalı açıldı)
-                        setSelectedItemForQuantity(null);
-                        setSelectedQuantity(1);
-                        setQuantitySelectionAction(null);
-                      } else if (quantitySelectionAction === "move") {
-                        // Taşı işlemi - seçilen miktar kadar ürünün taşınması
-
-                        // Eğer birden fazla ürün için miktar seçiliyorsa, bir sonraki ürün için modal aç
-                        if (
-                          pendingMoveItems.length > 0 &&
-                          currentMoveItemIndex < pendingMoveItems.length - 1
-                        ) {
-                          // Bu ürünün miktarını kaydet (güncel map'i kullan)
-                          const currentItem =
-                            pendingMoveItems[currentMoveItemIndex];
-                          const updatedQuantities = new Map(
-                            selectedMoveQuantities
-                          );
-                          updatedQuantities.set(
-                            currentItem.menuId,
-                            selectedQuantity
-                          );
-                          setSelectedMoveQuantities(updatedQuantities);
-
-                          // Bir sonraki ürün için modal aç
-                          const nextIndex = currentMoveItemIndex + 1;
-                          setCurrentMoveItemIndex(nextIndex);
-                          setSelectedItemForQuantity(
-                            pendingMoveItems[nextIndex]
-                          );
-                          setSelectedQuantity(1);
-                          // Modal açık kalacak, sadece içeriği değişecek
-                          return;
-                        }
-
-                        // Son ürün için miktar seçildi, taşı modalını aç
-                        setShowQuantitySelectionModal(false);
-
-                        // Tüm seçilen miktarları bir map'te topla (state güncellemesinden önce)
-                        const allSelectedQuantities = new Map(
-                          selectedMoveQuantities
-                        );
-                        if (pendingMoveItems.length > 0) {
-                          // Son ürünün miktarını da ekle
-                          const lastItem =
-                            pendingMoveItems[pendingMoveItems.length - 1];
-                          allSelectedQuantities.set(
-                            lastItem.menuId,
-                            selectedQuantity
-                          );
-
-                          // State'i güncelle
-                          setSelectedMoveQuantities(allSelectedQuantities);
-                        }
-
-                        // Taşı modalını aç (handleMoveSelectedItems içinde seçilen miktarlar kullanılacak)
-                        setShowMoveModal(true);
-
-                        // Modal state'lerini temizle
-                        setSelectedItemForQuantity(null);
-                        setSelectedQuantity(1);
-                        setQuantitySelectionAction(null);
-                      }
-
-                      setShowQuantitySelectionModal(false);
-                      setSelectedItemForQuantity(null);
-                      setSelectedQuantity(1);
-                      setQuantitySelectionAction(null);
-                    }}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:text-white"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Onayla
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowQuantitySelectionModal(false);
-                      setSelectedItemForQuantity(null);
-                      setSelectedQuantity(1);
-                      setQuantitySelectionAction(null);
-                    }}
-                    className="flex-1"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    İptal
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tam Ekran Ödeme Ekranı */}
-        {showFullScreenPayment && order && (
-          <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col select-none">
-            {/* Header */}
-            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                Ödeme Al
-              </h2>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    // Masaya dön (ödeme ekranını kapat)
-                    setShowFullScreenPayment(false);
-                    setPaymentScreenAmount("");
-                    setPaymentScreenDiscountType("percentage");
-                    setPaymentScreenDiscountValue("");
-                    setPaymentScreenManualDiscount("");
-                    setPaymentScreenSelectedItems(new Set());
-                    setPaymentScreenSelectedQuantities(new Map());
-                    setSelectedNumericKey(null);
-                    setPaymentScreenQuantityInput("");
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Geri Dön
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    // Anasayfaya dön
-                    setShowFullScreenPayment(false);
-                    setPaymentScreenAmount("");
-                    setPaymentScreenDiscountType("percentage");
-                    setPaymentScreenDiscountValue("");
-                    setPaymentScreenManualDiscount("");
-                    setPaymentScreenSelectedItems(new Set());
-                    setPaymentScreenSelectedQuantities(new Map());
-                    setPaymentScreenQuantityInput("");
-                    setSelectedNumericKey(null);
-                    navigateToHome();
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Utensils className="h-4 w-4" />
-                  Masalar
-                </Button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Üst Kısım - Ürünler ve Kısmi Ödeme Alanı */}
-              <div className="flex-1 overflow-hidden flex border-b border-gray-200 dark:border-gray-700">
-                {/* Sol Taraf - Tüm Ürünler */}
-                <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-gray-700">
-                  <div className="flex-1 overflow-y-auto p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Ürünler
-                    </h3>
-                    <div className="space-y-2">
-                      {order.items.map((item, index) => {
-                        const itemQuantity = item.quantity;
-
-                        return (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              const newSelected = new Set(
-                                paymentScreenSelectedItems
-                              );
-                              const newQuantities = new Map(
-                                paymentScreenSelectedQuantities
-                              );
-
-                              let quantityToAdd = 0.5;
-
-                              // Miktar girişi varsa onu kullan
-                              if (paymentScreenQuantityInput) {
-                                // Virgülü noktaya çevir ve parse et
-                                const quantityStr =
-                                  paymentScreenQuantityInput.replace(",", ".");
-                                const parsedQuantity = parseFloat(quantityStr);
-                                if (
-                                  !isNaN(parsedQuantity) &&
-                                  parsedQuantity > 0
-                                ) {
-                                  quantityToAdd = parsedQuantity;
-                                }
-                              } else {
-                                // Miktar girişi yoksa akıllı seçim yap
-                                if (newSelected.has(index)) {
-                                  // Zaten seçiliyse, 1 adet artır
-                                  quantityToAdd = 1;
-                                } else {
-                                  // Yeni seçiliyorsa
-                                  // Eğer ürünün miktarı tam sayı ise, 1 adet seç
-                                  // Eğer küsüratlı ise, küsürat kadar seç
-                                  const roundedQuantity =
-                                    Math.round(itemQuantity * 100) / 100;
-                                  if (roundedQuantity % 1 === 0) {
-                                    // Tam sayı (1, 2, 3, 4, vb.)
-                                    quantityToAdd = 1;
-                                  } else {
-                                    // Küsüratlı sayı (1.5, 1.25, 2.75, vb.)
-                                    // Küsüratı bul ve yuvarla (örn: 1.5 → 0.5, 1.25 → 0.25, 0.8799999 → 0.88)
-                                    const fractionalPart = roundedQuantity % 1;
-                                    quantityToAdd =
-                                      Math.round(fractionalPart * 100) / 100;
-                                  }
-                                }
-                              }
-
-                              // Eğer zaten seçiliyse, adetini artır
-                              if (newSelected.has(index)) {
-                                const currentQty =
-                                  newQuantities.get(index) || 0;
-                                const roundedCurrentQty =
-                                  Math.round(currentQty * 100) / 100;
-                                const roundedItemQty =
-                                  Math.round(itemQuantity * 100) / 100;
-                                const newQty = Math.min(
-                                  roundedCurrentQty + quantityToAdd,
-                                  roundedItemQty
-                                );
-                                // Yuvarlanmış değeri kaydet
-                                newQuantities.set(
-                                  index,
-                                  Math.round(newQty * 100) / 100
-                                );
-                              } else {
-                                // Yeni seçiliyorsa, seçilen sayı kadar ekle
-                                const roundedItemQty =
-                                  Math.round(itemQuantity * 100) / 100;
-                                const finalQty = Math.min(
-                                  quantityToAdd,
-                                  roundedItemQty
-                                );
-                                newSelected.add(index);
-                                // Yuvarlanmış değeri kaydet
-                                newQuantities.set(
-                                  index,
-                                  Math.round(finalQty * 100) / 100
-                                );
-                              }
-
-                              setPaymentScreenSelectedItems(newSelected);
-                              setPaymentScreenSelectedQuantities(newQuantities);
-
-                              // Miktar girişini temizle (kullanıldı)
-                              setPaymentScreenQuantityInput("");
-
-                              // Seçili ürünlerin toplamını hesapla
-                              const selectedTotal = Array.from(
-                                newSelected
-                              ).reduce((sum, idx) => {
-                                const item = order.items[idx];
-                                const selectedQty = newQuantities.get(idx) || 1;
-                                const actualQty = Math.min(
-                                  selectedQty,
-                                  item.quantity
-                                );
-                                return sum + actualQty * item.menuPrice;
-                              }, 0);
-                              setPaymentScreenAmount(selectedTotal.toFixed(2));
-                            }}
-                            className="rounded-lg p-3 border-2 cursor-pointer transition-all border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-300 dark:hover:border-gray-500"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-medium text-sm text-gray-900 dark:text-white">
-                                  {item.menuName}
-                                </h4>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                  {itemQuantity} adet • ₺
-                                  {item.menuPrice.toFixed(2)} birim fiyat
-                                </p>
-                              </div>
-                              <span className="font-bold text-lg text-gray-900 dark:text-white">
-                                ₺{item.subtotal.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Tüm Ürünler Toplamı */}
-                  <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700/50 min-h-[80px] flex items-center">
-                    <div className="space-y-1 w-full">
-                      <div className="flex justify-between items-center gap-4">
-                        {/* Miktar Göstergesi */}
-                        <div className="flex items-center gap-3">
-                          <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg border-2 border-gray-300 dark:border-gray-600 flex items-center gap-3 min-w-[200px]">
-                            <div className="flex-1">
-                              <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                Miktar
-                              </div>
-                              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                                {paymentScreenQuantityInput || "0"}
-                              </div>
-                            </div>
-                            {/* C (Temizle) Tuşu */}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                // Tümünü temizle
-                                setPaymentScreenQuantityInput("");
-                              }}
-                              className="h-8 w-8 p-0"
-                            >
-                              C
-                            </Button>
-                          </div>
-                        </div>
-                        {/* Toplam / Alınacak Ödeme */}
-                        <div className="flex justify-end items-center gap-2">
-                          <span
-                            className={`text-sm font-medium ${
-                              paymentScreenSelectedItems.size === 0
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-gray-700 dark:text-gray-300"
-                            }`}
-                          >
-                            {paymentScreenSelectedItems.size === 0
-                              ? "Alınacak Ödeme"
-                              : "Toplam"}
-                          </span>
-                          <span className="text-xl font-bold text-gray-900 dark:text-white">
-                            ₺
-                            {order.items
-                              .reduce((sum, item) => sum + item.subtotal, 0)
-                              .toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      {(() => {
-                        const baseAmount = order.items.reduce(
-                          (sum, item) => sum + item.subtotal,
-                          0
-                        );
-
-                        let discountAmount = 0;
-                        if (
-                          paymentScreenDiscountType === "percentage" &&
-                          paymentScreenDiscountValue
-                        ) {
-                          discountAmount =
-                            (baseAmount *
-                              parseFloat(paymentScreenDiscountValue)) /
-                            100;
-                        } else if (
-                          paymentScreenDiscountType === "amount" &&
-                          paymentScreenDiscountValue
-                        ) {
-                          discountAmount = parseFloat(
-                            paymentScreenDiscountValue
-                          );
-                        }
-
-                        const finalAmount = Math.max(
-                          0,
-                          baseAmount - discountAmount
-                        );
-
-                        return discountAmount > 0 ? (
-                          <div className="text-xs text-gray-600 dark:text-gray-400 flex justify-end">
-                            <div>
-                              <div className="line-through">
-                                ₺{baseAmount.toFixed(2)}
-                              </div>
-                              <div className="text-red-600 dark:text-red-400">
-                                -₺{discountAmount.toFixed(2)} İndirim
-                              </div>
-                              <div className="text-lg font-bold text-green-600 dark:text-green-400 mt-1">
-                                ₺{finalAmount.toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sağ Taraf - Kısmi Ödeme Alanı */}
-                <div className="w-96 flex flex-col bg-gray-50 dark:bg-gray-800">
-                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Kısmi Ödeme Alanı
-                    </h3>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-4">
-                    {paymentScreenSelectedItems.size === 0 ? (
-                      <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-8">
-                        Kısmi ödeme için ürün seçilmedi
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {Array.from(paymentScreenSelectedItems).map((index) => {
-                          const item = order.items[index];
-                          const rawSelectedQty =
-                            paymentScreenSelectedQuantities.get(index) || 1;
-                          // Miktarı 2 ondalık basamağa yuvarla
-                          const selectedQty =
-                            Math.round(rawSelectedQty * 100) / 100;
-                          const itemPrice = selectedQty * item.menuPrice;
-
-                          return (
-                            <div
-                              key={index}
-                              className="rounded-lg p-3 border-2 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-medium text-sm text-blue-900 dark:text-blue-200">
-                                  {item.menuName}
-                                </h4>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const newSelected = new Set(
-                                      paymentScreenSelectedItems
-                                    );
-                                    const newQuantities = new Map(
-                                      paymentScreenSelectedQuantities
-                                    );
-
-                                    newSelected.delete(index);
-                                    newQuantities.delete(index);
-
-                                    setPaymentScreenSelectedItems(newSelected);
-                                    setPaymentScreenSelectedQuantities(
-                                      newQuantities
-                                    );
-
-                                    // Toplamı güncelle
-                                    if (newSelected.size > 0) {
-                                      const selectedTotal = Array.from(
-                                        newSelected
-                                      ).reduce((sum, idx) => {
-                                        const item = order.items[idx];
-                                        const rawSelectedQty =
-                                          newQuantities.get(idx) || 1;
-                                        // Miktarı yuvarla
-                                        const selectedQty =
-                                          Math.round(rawSelectedQty * 100) /
-                                          100;
-                                        const roundedItemQty =
-                                          Math.round(item.quantity * 100) / 100;
-                                        const actualQty = Math.min(
-                                          selectedQty,
-                                          roundedItemQty
-                                        );
-                                        return sum + actualQty * item.menuPrice;
-                                      }, 0);
-                                      setPaymentScreenAmount(
-                                        selectedTotal.toFixed(2)
-                                      );
-                                    } else {
-                                      setPaymentScreenAmount("0.00");
-                                    }
-                                  }}
-                                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <p className="text-xs text-blue-700 dark:text-blue-300">
-                                  {selectedQty} adet × ₺
-                                  {item.menuPrice.toFixed(2)}
-                                </p>
-                                <span className="font-bold text-sm text-blue-900 dark:text-blue-200">
-                                  ₺{itemPrice.toFixed(2)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Kısmi Ödeme Alanı Toplamı */}
-                  <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700/50 min-h-[80px] flex items-center">
-                    <div className="space-y-1 w-full">
-                      <div className="flex justify-end items-center gap-2">
-                        <span
-                          className={`text-sm font-medium ${
-                            paymentScreenSelectedItems.size > 0
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-gray-700 dark:text-gray-300"
-                          }`}
-                        >
-                          {paymentScreenSelectedItems.size > 0
-                            ? "Alınacak Ödeme"
-                            : "Toplam"}
-                        </span>
-                        <span className="text-xl font-bold text-gray-900 dark:text-white">
-                          ₺
-                          {(() => {
-                            if (paymentScreenSelectedItems.size > 0) {
-                              const selectedTotal = Array.from(
-                                paymentScreenSelectedItems
-                              ).reduce((sum, idx) => {
-                                const item = order.items[idx];
-                                const rawSelectedQty =
-                                  paymentScreenSelectedQuantities.get(idx) || 1;
-                                // Miktarı yuvarla
-                                const selectedQty =
-                                  Math.round(rawSelectedQty * 100) / 100;
-                                const roundedItemQty =
-                                  Math.round(item.quantity * 100) / 100;
-                                const actualQty = Math.min(
-                                  selectedQty,
-                                  roundedItemQty
-                                );
-                                return sum + actualQty * item.menuPrice;
-                              }, 0);
-                              return selectedTotal.toFixed(2);
-                            }
-                            return "0.00";
-                          })()}
-                        </span>
-                      </div>
-                      {(() => {
-                        const baseAmount =
-                          paymentScreenSelectedItems.size > 0
-                            ? Array.from(paymentScreenSelectedItems).reduce(
-                                (sum, idx) => {
-                                  const item = order.items[idx];
-                                  const rawSelectedQty =
-                                    paymentScreenSelectedQuantities.get(idx) ||
-                                    1;
-                                  // Miktarı yuvarla
-                                  const selectedQty =
-                                    Math.round(rawSelectedQty * 100) / 100;
-                                  const roundedItemQty =
-                                    Math.round(item.quantity * 100) / 100;
-                                  const actualQty = Math.min(
-                                    selectedQty,
-                                    roundedItemQty
-                                  );
-                                  return sum + actualQty * item.menuPrice;
-                                },
-                                0
-                              )
-                            : 0;
-
-                        let discountAmount = 0;
-                        if (
-                          paymentScreenDiscountType === "percentage" &&
-                          paymentScreenDiscountValue
-                        ) {
-                          discountAmount =
-                            (baseAmount *
-                              parseFloat(paymentScreenDiscountValue)) /
-                            100;
-                        } else if (
-                          paymentScreenDiscountType === "amount" &&
-                          paymentScreenDiscountValue
-                        ) {
-                          discountAmount = parseFloat(
-                            paymentScreenDiscountValue
-                          );
-                        } else if (
-                          paymentScreenDiscountType === "manual" &&
-                          paymentScreenManualDiscount
-                        ) {
-                          discountAmount =
-                            parseFloat(paymentScreenManualDiscount) || 0;
-                        }
-
-                        const finalAmount = Math.max(
-                          0,
-                          baseAmount - discountAmount
-                        );
-
-                        return discountAmount > 0 ? (
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            <div className="line-through">
-                              ₺{baseAmount.toFixed(2)}
-                            </div>
-                            <div className="text-red-600 dark:text-red-400">
-                              -₺{discountAmount.toFixed(2)} İndirim
-                            </div>
-                            <div className="text-lg font-bold text-green-600 dark:text-green-400 mt-1">
-                              ₺{finalAmount.toFixed(2)}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Alt Kısım - Numeric Keypad ve Ödeme Butonları */}
-              <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 flex-shrink-0">
-                <div className="flex gap-4">
-                  {/* Sol Taraf - Numeric Keypad */}
-                  <div className="w-80">
-                    <div className="grid grid-cols-3 gap-3">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                        <Button
-                          key={num}
-                          variant="outline"
-                          onClick={() => {
-                            // Sayı ekle
-                            setPaymentScreenQuantityInput(
-                              (prev) => prev + num.toString()
-                            );
-                          }}
-                          className="h-14 text-xl font-semibold"
-                        >
-                          {num}
-                        </Button>
-                      ))}
-                      {/* Virgül tuşu */}
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          // Virgül ekle (eğer yoksa)
-                          setPaymentScreenQuantityInput((prev) => {
-                            if (prev.includes(",") || prev.includes(".")) {
-                              return prev;
-                            }
-                            return prev === "" ? "0," : prev + ",";
-                          });
-                        }}
-                        className="h-14 text-xl font-semibold"
-                      >
-                        ,
-                      </Button>
-                      {/* 0 tuşu */}
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          // 0 ekle
-                          setPaymentScreenQuantityInput((prev) => prev + "0");
-                        }}
-                        className="h-14 text-xl font-semibold"
-                      >
-                        0
-                      </Button>
-                      {/* Silme tuşu */}
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          // Son karakteri sil
-                          setPaymentScreenQuantityInput((prev) =>
-                            prev.slice(0, -1)
-                          );
-                        }}
-                        className="h-14 text-xl font-semibold text-red-600 dark:text-red-400"
-                      >
-                        <Delete className="h-5 w-5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Orta - İskonto, Cari ve Paket Masaları için Kurye/Para Üstü */}
-                  <div className="w-48 flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPaymentScreenDiscountModal(true)}
-                      className="flex-1 h-14"
-                    >
-                      İskonto
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        const defaultPrinter = getDefaultPrinter(
-                          printers,
-                          selectedPrinterId
-                        );
-                        if (!defaultPrinter) {
-                          alert(
-                            "Varsayılan yazıcı bulunamadı. Lütfen yazıcı ayarlarından varsayılan yazıcı seçin."
-                          );
-                          return;
-                        }
-
-                        if (!order) {
-                          alert("Henüz sipariş bulunmuyor.");
-                          return;
-                        }
-
-                        try {
-                          // Tüm ürünleri birleştir: mevcut + iptal + ödeme alınan
-                          const allItems: OrderItem[] = [];
-
-                          // 1. Aktif sipariş listesindeki mevcut ürünleri ekle
-                          if (order.items && order.items.length > 0) {
-                            const activeItems = order.items.filter(
-                              (item) =>
-                                !order.canceledItems?.some(
-                                  (canceled) => canceled.menuId === item.menuId
-                                ) &&
-                                !order.payments?.some((payment) =>
-                                  payment.paidItems?.some(
-                                    (paid) => paid.menuId === item.menuId
-                                  )
-                                )
-                            );
-                            allItems.push(...activeItems);
-                          }
-
-                          // 2. İptal edilen ürünleri ekle
-                          if (
-                            order.canceledItems &&
-                            order.canceledItems.length > 0
-                          ) {
-                            const canceledOrderItems: OrderItem[] =
-                              order.canceledItems.map((canceled) => ({
-                                menuId: canceled.menuId,
-                                menuName: canceled.menuName,
-                                quantity: canceled.quantity,
-                                menuPrice:
-                                  canceled.subtotal / canceled.quantity,
-                                subtotal: canceled.subtotal,
-                                notes: canceled.notes || "",
-                                selectedExtras: canceled.selectedExtras || [],
-                              }));
-                            allItems.push(...canceledOrderItems);
-                          }
-
-                          // 3. Ödemesi alınan ürünleri ekle
-                          if (order.payments && order.payments.length > 0) {
-                            for (const payment of order.payments) {
-                              if (
-                                payment.paidItems &&
-                                payment.paidItems.length > 0
-                              ) {
-                                const paidOrderItems: OrderItem[] =
-                                  payment.paidItems.map((paid) => ({
-                                    menuId: paid.menuId,
-                                    menuName: paid.menuName,
-                                    quantity: paid.quantity,
-                                    menuPrice: paid.subtotal / paid.quantity,
-                                    subtotal: paid.subtotal,
-                                    notes: "",
-                                    selectedExtras: [],
-                                  }));
-                                allItems.push(...paidOrderItems);
-                              }
-                            }
-                          }
-
-                          // Tüm ürünleri tek bir çıktıda yazdır
-                          if (allItems.length > 0) {
-                            // Toplam tutarı hesapla
-                            const totalAmount = allItems.reduce(
-                              (sum, item) => sum + item.subtotal,
-                              0
-                            );
-
-                            const content = formatPrintContent(
-                              "order",
-                              allItems,
-                              currentTable.tableNumber.toString(),
-                              order.id,
-                              {
-                                companyName: companyData?.name || "",
-                                total: totalAmount,
-                                paperWidth: defaultPrinter.paperWidth || 48,
-                              }
-                            );
-                            await printToPrinter(
-                              defaultPrinter.name,
-                              content,
-                              "order"
-                            );
-                          } else {
-                            alert("Yazdırılacak ürün bulunamadı.");
-                          }
-                        } catch (error) {
-                          alert("Yazdırma sırasında bir hata oluştu.");
-                        }
-                      }}
-                      className="flex-1 h-14"
-                    >
-                      <Printer className="h-4 w-4 mr-2" />
-                      Yazdır
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowCustomerModal(true);
-                      }}
-                      className="flex-1 h-14"
-                    >
-                      Cari
-                    </Button>
-                    {/* Paket masaları için kurye atama ve para üstü */}
-                    {currentTable.area === "Paket" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => setShowPaymentScreenCourierModal(true)}
-                          className="flex-1 h-14"
-                        >
-                          {paymentScreenSelectedCourierId
-                            ? couriers.find(
-                                (c) => c.id === paymentScreenSelectedCourierId
-                              )?.name || "Kurye Seç"
-                            : "Kurye Seç"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            setShowPaymentScreenChangeAmountModal(true)
-                          }
-                          className="flex-1 h-14"
-                        >
-                          {paymentScreenChangeAmount &&
-                          parseFloat(paymentScreenChangeAmount) > 0
-                            ? `Para Üstü: ₺${parseFloat(paymentScreenChangeAmount).toFixed(2)}`
-                            : "Para Üstü"}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Sağ Taraf - Ödeme Yöntemleri */}
-                  <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-2">
-                      {paymentMethods.map((pm) => {
-                        const isSelected = paymentMethod === pm.code;
-                        const isLoading = processingPaymentMethodId === pm.id;
-
-                        return (
-                          <Button
-                            key={pm.id}
-                            variant="outline"
-                            disabled={isProcessingPayment}
-                            className={`h-14 ${isSelected ? "border-2 border-blue-500 dark:border-blue-400" : ""}`}
-                            onClick={async () => {
-                              setPaymentMethod(pm.code);
-                              setProcessingPaymentMethodId(pm.id || null);
-
-                              // Seçili ürün var mı kontrol et
-                              const hasSelectedItems =
-                                paymentScreenSelectedItems.size > 0;
-
-                              // Ödeme tutarını hesapla
-                              // Eğer seçili ürün varsa: sadece seçilen ürünlerin toplamı
-                              // Eğer seçili ürün yoksa: tüm masanın toplamı (tam ödeme)
-                              const baseAmount = hasSelectedItems
-                                ? Array.from(paymentScreenSelectedItems).reduce(
-                                    (sum, idx) => {
-                                      const item = order.items[idx];
-                                      const selectedQty =
-                                        paymentScreenSelectedQuantities.get(
-                                          idx
-                                        ) || 1;
-                                      const actualQty = Math.min(
-                                        selectedQty,
-                                        item.quantity
-                                      );
-                                      return sum + actualQty * item.menuPrice;
-                                    },
-                                    0
-                                  )
-                                : order.items.reduce(
-                                    (sum, item) => sum + item.subtotal,
-                                    0
-                                  );
-
-                              // İndirim hesapla
-                              let discountAmount = 0;
-                              if (
-                                paymentScreenDiscountType === "percentage" &&
-                                paymentScreenDiscountValue
-                              ) {
-                                discountAmount =
-                                  (baseAmount *
-                                    parseFloat(paymentScreenDiscountValue)) /
-                                  100;
-                              } else if (
-                                paymentScreenDiscountType === "amount" &&
-                                paymentScreenDiscountValue
-                              ) {
-                                discountAmount = parseFloat(
-                                  paymentScreenDiscountValue
-                                );
-                              } else if (
-                                paymentScreenDiscountType === "manual" &&
-                                paymentScreenManualDiscount
-                              ) {
-                                discountAmount =
-                                  parseFloat(paymentScreenManualDiscount) || 0;
-                              }
-
-                              const finalAmount = Math.max(
-                                0,
-                                baseAmount - discountAmount
-                              );
-                              const finalAmountString = finalAmount.toFixed(2);
-
-                              // Ödeme state'lerini set et
-                              setPaymentAmount(finalAmountString);
-                              setDiscountType(paymentScreenDiscountType);
-                              setDiscountValue(paymentScreenDiscountValue);
-                              setManualDiscount(paymentScreenManualDiscount);
-
-                              // Seçili ürünleri hazırla ve state'e set et
-                              let pendingItems: Array<{
-                                menuId: string;
-                                menuName: string;
-                                totalQuantity: number;
-                                indices: number[];
-                              }> = [];
-                              let quantitiesMap: Map<string, number> =
-                                new Map();
-
-                              if (hasSelectedItems) {
-                                // KISMI ÖDEME: Sadece seçilen ürünlerin ödemesi alınacak
-                                setSelectedItems(paymentScreenSelectedItems);
-
-                                // Seçilen adetleri menuId'ye göre grupla ve pendingPaymentItems formatına çevir
-                                const itemsByMenuId = new Map<
-                                  string,
-                                  {
-                                    item: OrderItem;
-                                    indices: number[];
-                                    quantities: number[];
-                                  }
-                                >();
-
-                                paymentScreenSelectedItems.forEach((idx) => {
-                                  const item = order.items[idx];
-                                  if (item) {
-                                    const selectedQty =
-                                      paymentScreenSelectedQuantities.get(idx);
-                                    const quantityToUse =
-                                      selectedQty !== undefined
-                                        ? selectedQty
-                                        : 1;
-
-                                    const existing = itemsByMenuId.get(
-                                      item.menuId
-                                    );
-                                    if (existing) {
-                                      existing.indices.push(idx);
-                                      existing.quantities.push(quantityToUse);
-                                    } else {
-                                      itemsByMenuId.set(item.menuId, {
-                                        item,
-                                        indices: [idx],
-                                        quantities: [quantityToUse],
-                                      });
-                                    }
-                                  }
-                                });
-
-                                // pendingPaymentItems formatına çevir
-                                pendingItems = Array.from(
-                                  itemsByMenuId.values()
-                                ).map(({ item, indices, quantities }) => {
-                                  const totalQuantity = quantities.reduce(
-                                    (sum, qty) => sum + qty,
-                                    0
-                                  );
-                                  return {
-                                    menuId: item.menuId,
-                                    menuName: item.menuName,
-                                    totalQuantity: totalQuantity,
-                                    indices: indices,
-                                  };
-                                });
-
-                                // selectedQuantities map'ini oluştur (menuId -> quantity)
-                                itemsByMenuId.forEach(
-                                  ({ item, quantities }) => {
-                                    const totalQty = quantities.reduce(
-                                      (sum, qty) => sum + qty,
-                                      0
-                                    );
-                                    quantitiesMap.set(item.menuId, totalQty);
-                                  }
-                                );
-
-                                setPendingPaymentItems(pendingItems);
-                                setSelectedQuantities(quantitiesMap);
-                              } else {
-                                // TAM ÖDEME: Hiç seçim yapılmadı, tüm masanın ödemesi alınacak ve masa kapanacak
-                                setSelectedItems(new Set());
-                                setSelectedQuantities(new Map());
-                                setPendingPaymentItems([]);
-                              }
-
-                              // Ödeme işlemini başlat
-                              // handlePayment içinde:
-                              // - Eğer selectedItems.size > 0 ise: kısmi ödeme (masa açık kalır)
-                              // - Eğer selectedItems.size === 0 ise: tam ödeme (masa kapanır ve anasayfaya dönülür)
-                              // Parametreleri direkt geçiyoruz, böylece state güncellemesi beklemeden ödeme yapılabilir
-                              try {
-                                await handlePayment(
-                                  finalAmountString,
-                                  hasSelectedItems
-                                    ? paymentScreenSelectedItems
-                                    : new Set(),
-                                  hasSelectedItems ? pendingItems : [],
-                                  hasSelectedItems ? quantitiesMap : new Map(),
-                                  pm.code, // Ödeme yöntemi kodunu direkt geç
-                                  // Paket masaları için kurye atama ve para üstü (paket sayısı otomatik 1)
-                                  currentTable.area === "Paket"
-                                    ? paymentScreenSelectedCourierId
-                                    : undefined,
-                                  currentTable.area === "Paket"
-                                    ? "1"
-                                    : undefined, // Her masa 1 paket
-                                  currentTable.area === "Paket"
-                                    ? paymentScreenChangeAmount
-                                    : undefined
-                                );
-
-                                // Ekranı kapat
-                                setShowFullScreenPayment(false);
-                                setPaymentScreenAmount("");
-                                setPaymentScreenDiscountType("percentage");
-                                setPaymentScreenQuantityInput("");
-                                setPaymentScreenDiscountValue("");
-                                setPaymentScreenManualDiscount("");
-                                setPaymentScreenSelectedItems(new Set());
-                                setPaymentScreenSelectedQuantities(new Map());
-                                setSelectedNumericKey(null);
-                                // Paket masaları için state'leri temizle
-                                setPaymentScreenSelectedCourierId("");
-                                setPaymentScreenChangeAmount("0");
-                              } finally {
-                                // Loading state'i temizle
-                                setProcessingPaymentMethodId(null);
-                              }
-                            }}
-                          >
-                            {isLoading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                İşleniyor...
-                              </>
-                            ) : (
-                              pm.name
-                            )}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* İskonto Modalı */}
-            {showPaymentScreenDiscountModal && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+                className="fixed inset-0 bg-black/70 z-[60]"
+                onClick={() => setShowDiscountModal(false)}
+              />
+              {/* Modal */}
+              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                      İskonto
-                    </h2>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowPaymentScreenDiscountModal(false)}
-                      className="h-8 w-8"
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                      İndirim
+                    </h3>
+                    <button
+                      onClick={() => setShowDiscountModal(false)}
+                      className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
+                      <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    </button>
                   </div>
 
                   <div className="space-y-4">
@@ -8325,725 +5981,855 @@ function TableDetailContent() {
                       <Button
                         type="button"
                         variant={
-                          paymentScreenDiscountType === "percentage"
-                            ? "default"
-                            : "outline"
+                          discountType === "percentage" ? "default" : "outline"
                         }
                         onClick={() => {
-                          setPaymentScreenDiscountType("percentage");
-                          setPaymentScreenDiscountValue("");
-                          setPaymentScreenManualDiscount("");
+                          setDiscountType("percentage");
+                          setDiscountValue("");
                         }}
-                        className="flex-1 h-12 text-base font-semibold"
+                        className="flex-1"
                       >
-                        Oran
+                        Oran (%)
                       </Button>
                       <Button
                         type="button"
                         variant={
-                          paymentScreenDiscountType === "amount"
-                            ? "default"
-                            : "outline"
+                          discountType === "amount" ? "default" : "outline"
                         }
                         onClick={() => {
-                          setPaymentScreenDiscountType("amount");
-                          setPaymentScreenDiscountValue("");
-                          setPaymentScreenManualDiscount("");
+                          setDiscountType("amount");
+                          setDiscountValue("");
                         }}
-                        className="flex-1 h-12 text-base font-semibold"
+                        className="flex-1"
                       >
-                        Fiyat
+                        Fiyat (₺)
                       </Button>
                     </div>
 
-                    {/* Oran Bazlı İndirim */}
-                    {paymentScreenDiscountType === "percentage" && (
-                      <div>
-                        <div className="flex gap-2 flex-wrap mb-3">
-                          {[10, 20, 30, 40, 50].map((percent) => (
-                            <Button
-                              key={percent}
-                              type="button"
-                              variant={
-                                paymentScreenDiscountValue ===
-                                percent.toString()
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() => {
-                                if (
-                                  paymentScreenDiscountValue ===
-                                  percent.toString()
-                                ) {
-                                  setPaymentScreenDiscountValue("");
-                                } else {
-                                  setPaymentScreenDiscountValue(
-                                    percent.toString()
-                                  );
-                                }
-                              }}
-                              className="flex-1 min-w-[60px] h-12 text-base font-semibold"
-                            >
-                              %{percent}
-                            </Button>
-                          ))}
-                        </div>
-                        <Input
-                          type="number"
-                          value={paymentScreenDiscountValue}
-                          onChange={(e) =>
-                            setPaymentScreenDiscountValue(e.target.value)
-                          }
-                          placeholder="Manuel oran girin (%)"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                          className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                        />
-                      </div>
-                    )}
-
-                    {/* Fiyat Bazlı İndirim */}
-                    {paymentScreenDiscountType === "amount" && (
-                      <div>
-                        <div className="flex gap-2 flex-wrap mb-3">
-                          {[20, 50, 75, 100].map((amount) => (
-                            <Button
-                              key={amount}
-                              type="button"
-                              variant={
-                                paymentScreenDiscountValue === amount.toString()
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() => {
-                                if (
-                                  paymentScreenDiscountValue ===
-                                  amount.toString()
-                                ) {
-                                  setPaymentScreenDiscountValue("");
-                                } else {
-                                  setPaymentScreenDiscountValue(
-                                    amount.toString()
-                                  );
-                                }
-                              }}
-                              className="flex-1 min-w-[60px] h-12 text-base font-semibold"
-                            >
-                              ₺{amount}
-                            </Button>
-                          ))}
-                        </div>
-                        <Input
-                          type="number"
-                          value={paymentScreenDiscountValue}
-                          onChange={(e) =>
-                            setPaymentScreenDiscountValue(e.target.value)
-                          }
-                          placeholder="Manuel fiyat girin (₺)"
-                          step="0.01"
-                          min="0"
-                          className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                        />
-                      </div>
-                    )}
-
-                    {/* Numeric Keypad */}
+                    {/* Manuel Giriş Alanı */}
                     <div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                      <Input
+                        type="text"
+                        value={discountValue}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9.,]/g, "");
+                          setDiscountValue(value);
+                          if (value) {
+                            const numValue = parseFloat(value.replace(",", ".")) || 0;
+                            if (discountType === "percentage") {
+                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                              );
+                            } else {
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - numValue).toFixed(2)
+                              );
+                            }
+                          } else {
+                            setPaymentAmount(orderSubtotal.toFixed(2));
+                          }
+                        }}
+                        placeholder={
+                          discountType === "percentage"
+                            ? "İndirim oranı (%)"
+                            : "İndirim tutarı (₺)"
+                        }
+                        className="dark:bg-gray-700 dark:text-white dark:border-gray-600 text-lg font-semibold text-center"
+                      />
+                    </div>
+
+                    {/* Hazır Oran/Fiyat Seçenekleri */}
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {discountType === "percentage" ? (
+                        // Hazır yüzde seçenekleri
+                        [5, 10, 15, 20].map((percent) => (
                           <Button
-                            key={num}
+                            key={percent}
                             type="button"
                             variant="outline"
                             onClick={() => {
-                              const currentValue =
-                                paymentScreenDiscountValue || "";
-                              setPaymentScreenDiscountValue(
-                                currentValue + num.toString()
+                              setDiscountValue(percent.toString());
+                              const discountAmount = (orderSubtotal * percent) / 100;
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
                               );
                             }}
-                            className="h-12 text-lg font-semibold"
+                            className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
                           >
-                            {num}
+                            %{percent}
                           </Button>
-                        ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenDiscountValue || "";
-                            setPaymentScreenDiscountValue(
-                              currentValue.slice(0, -1)
-                            );
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenDiscountValue || "";
-                            setPaymentScreenDiscountValue(currentValue + "0");
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          0
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenDiscountValue || "";
-                            if (!currentValue.includes(".")) {
-                              setPaymentScreenDiscountValue(currentValue + ".");
-                            }
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          .
-                        </Button>
-                      </div>
+                        ))
+                      ) : (
+                        // Hazır fiyat seçenekleri
+                        [5, 10, 25, 50].map((amount) => (
+                          <Button
+                            key={amount}
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setDiscountValue(amount.toString());
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - amount).toFixed(2)
+                              );
+                            }}
+                            className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
+                          >
+                            ₺{amount}
+                          </Button>
+                        ))
+                      )}
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    {/* Numerik Keypad */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {/* 7, 8, 9 */}
+                      {[7, 8, 9].map((num) => (
+                        <Button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const current = discountValue || "";
+                            const newValue = current + num.toString();
+                            setDiscountValue(newValue);
+                            if (newValue) {
+                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              if (discountType === "percentage") {
+                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                );
+                              } else {
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                );
+                              }
+                            } else {
+                              setPaymentAmount(orderSubtotal.toFixed(2));
+                            }
+                          }}
+                          className="aspect-square min-h-[70px] text-3xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                        >
+                          {num}
+                        </Button>
+                      ))}
+                      {/* Sil (X) */}
                       <Button
-                        onClick={async () => {
-                          if (
-                            !order ||
-                            !order.items ||
-                            order.items.length === 0
-                          ) {
-                            customAlert(
-                              "Ödeme yapılacak ürün bulunamadı",
-                              "Uyarı",
-                              "warning"
-                            );
-                            return;
+                        type="button"
+                        onClick={() => {
+                          const current = discountValue || "";
+                          if (current.length > 0) {
+                            const newValue = current.slice(0, -1);
+                            setDiscountValue(newValue);
+                            if (newValue) {
+                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              if (discountType === "percentage") {
+                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                );
+                              } else {
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                );
+                              }
+                            } else {
+                              setPaymentAmount(orderSubtotal.toFixed(2));
+                            }
                           }
-
-                          // Tüm ürünlerin toplam fiyatını hesapla
-                          const baseAmount = order.items.reduce(
-                            (sum, item) => sum + item.subtotal,
-                            0
-                          );
-
-                          // İskonto hesapla
-                          let discountAmount = 0;
-                          if (
-                            paymentScreenDiscountType === "percentage" &&
-                            paymentScreenDiscountValue
-                          ) {
-                            discountAmount =
-                              (baseAmount *
-                                parseFloat(paymentScreenDiscountValue)) /
-                              100;
-                          } else if (
-                            paymentScreenDiscountType === "amount" &&
-                            paymentScreenDiscountValue
-                          ) {
-                            discountAmount = Math.min(
-                              parseFloat(paymentScreenDiscountValue),
-                              baseAmount
-                            );
+                        }}
+                        className="aspect-square min-h-[70px] bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                      >
+                        <X className="h-6 w-6 text-white font-bold" />
+                      </Button>
+                      {/* 4, 5, 6 */}
+                      {[4, 5, 6].map((num) => (
+                        <Button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const current = discountValue || "";
+                            const newValue = current + num.toString();
+                            setDiscountValue(newValue);
+                            if (newValue) {
+                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              if (discountType === "percentage") {
+                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                );
+                              } else {
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                );
+                              }
+                            } else {
+                              setPaymentAmount(orderSubtotal.toFixed(2));
+                            }
+                          }}
+                          className="aspect-square min-h-[70px] text-3xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                        >
+                          {num}
+                        </Button>
+                      ))}
+                      {/* C (Clear) */}
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setDiscountValue("");
+                          setPaymentAmount(orderSubtotal.toFixed(2));
+                        }}
+                        className="aspect-square min-h-[70px] text-xl font-bold bg-gray-400 dark:bg-gray-600 hover:bg-gray-500 dark:hover:bg-gray-500 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                      >
+                        C
+                      </Button>
+                      {/* 1, 2, 3 */}
+                      {[1, 2, 3].map((num) => (
+                        <Button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const current = discountValue || "";
+                            const newValue = current + num.toString();
+                            setDiscountValue(newValue);
+                            if (newValue) {
+                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              if (discountType === "percentage") {
+                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                );
+                              } else {
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                );
+                              }
+                            } else {
+                              setPaymentAmount(orderSubtotal.toFixed(2));
+                            }
+                          }}
+                          className="aspect-square min-h-[70px] text-3xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                        >
+                          {num}
+                        </Button>
+                      ))}
+                      {/* Nokta/Virgül */}
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const current = discountValue || "";
+                          if (!current.includes(".") && !current.includes(",")) {
+                            const newValue = current + (discountType === "amount" ? "," : "");
+                            setDiscountValue(newValue);
                           }
-
-                          if (discountAmount <= 0) {
-                            customAlert(
-                              "Lütfen geçerli bir indirim girin",
-                              "Uyarı",
-                              "warning"
-                            );
-                            return;
+                        }}
+                        className="aspect-square min-h-[70px] text-3xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                      >
+                        ,
+                      </Button>
+                      {/* 0 */}
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const current = discountValue || "";
+                          const newValue = current + "0";
+                          setDiscountValue(newValue);
+                          if (newValue) {
+                            const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                            if (discountType === "percentage") {
+                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                              );
+                            } else {
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - numValue).toFixed(2)
+                              );
+                            }
+                          } else {
+                            setPaymentAmount(orderSubtotal.toFixed(2));
                           }
+                        }}
+                        className="aspect-square min-h-[70px] text-3xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 col-span-2"
+                      >
+                        0
+                      </Button>
+                      {/* 00 */}
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const current = discountValue || "";
+                          const newValue = current + "00";
+                          setDiscountValue(newValue);
+                          if (newValue) {
+                            const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                            if (discountType === "percentage") {
+                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                              );
+                            } else {
+                              setPaymentAmount(
+                                Math.max(0, orderSubtotal - numValue).toFixed(2)
+                              );
+                            }
+                          } else {
+                            setPaymentAmount(orderSubtotal.toFixed(2));
+                          }
+                        }}
+                        className="aspect-square min-h-[70px] text-2xl font-extrabold bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                      >
+                        00
+                      </Button>
+                    </div>
 
-                          // İskonto uygula
-                          const currentDiscount = order.discount || 0;
-                          const newDiscount = currentDiscount + discountAmount;
-                          const newSubtotal = order.subtotal;
-                          const newTotal = Math.max(
-                            0,
-                            newSubtotal - newDiscount
-                          );
+                    {/* İndirim Özeti */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          İndirim:
+                        </span>
+                        <span className="text-lg font-semibold text-red-600 dark:text-red-400">
+                          -₺{discount.toFixed(2)}
+                        </span>
+                      </div>
+                      {/* Uygulanan İndirim Bilgisi */}
+                      {order.discount && order.discount > 0 && (
+                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-600">
+                          <span>Uygulanan İndirim:</span>
+                          <span>-₺{order.discount.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
 
-                          try {
-                            setIsProcessingPayment(true);
+                    {/* Butonlar */}
+                    <div className="flex gap-2 pt-2">
+                      {/* İndirimi İptal Et Butonu */}
+                      {order.discount && order.discount > 0 && (
+                        <Button
+                          variant="destructive"
+                          onClick={async () => {
+                            // Tüm indirimleri kaldır
+                            const updatedItems = order.items.map((item) => {
+                              // Orijinal subtotal'ı geri yükle
+                              const originalSubtotal = item.menuPrice * item.quantity;
+                              return {
+                                ...item,
+                                subtotal: originalSubtotal,
+                              };
+                            });
 
-                            // Siparişe indirim uygula
+                            // Yeni toplamları hesapla
+                            const newSubtotal = updatedItems.reduce(
+                              (sum, item) => sum + (item.menuPrice * item.quantity),
+                              0
+                            );
+                            const newTotal = newSubtotal; // İndirim yok
+
+                            // Siparişi güncelle
                             await updateOrder(order.id!, {
-                              discount: newDiscount,
+                              items: updatedItems,
+                              subtotal: newSubtotal,
+                              discount: 0,
                               total: newTotal,
                             });
 
-                            // Siparişi yeniden yükle
+                            // Güncellenmiş siparişi al
                             const updatedOrder = await getOrder(order.id!);
                             if (updatedOrder) {
                               setOrder(updatedOrder);
                             }
 
-                            // Modalı kapat ve ödeme ekranına geri dön
-                            setShowPaymentScreenDiscountModal(false);
-                          } catch (error) {
-                            customAlert(
-                              "İskonto uygulanırken bir hata oluştu",
-                              "Hata",
-                              "error"
+                            // Ödeme tutarını güncelle
+                            const newRemaining = Math.max(
+                              0,
+                              newTotal -
+                                (updatedOrder?.payments?.reduce(
+                                  (sum, p) => sum + p.amount,
+                                  0
+                                ) || 0)
                             );
-                          } finally {
-                            setIsProcessingPayment(false);
-                          }
-                        }}
-                        className="flex-1 h-12 text-base font-semibold"
-                        disabled={isProcessingPayment}
-                      >
-                        {isProcessingPayment ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            İşleniyor...
-                          </>
-                        ) : (
-                          "Uygula"
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setPaymentScreenDiscountType("percentage");
-                          setPaymentScreenDiscountValue("");
-                          setPaymentScreenManualDiscount("");
-                        }}
-                        className="flex-1 h-12 text-base font-semibold"
-                      >
-                        Temizle
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+                            setPaymentAmount(newRemaining.toFixed(2));
 
-            {/* Kurye Seçim Modalı */}
-            {showPaymentScreenCourierModal && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                      Kurye Seç
-                    </h2>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowPaymentScreenCourierModal(false)}
-                      className="h-8 w-8"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {couriers.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        Kurye bulunamadı
-                      </div>
-                    ) : (
-                      couriers.map((courier) => (
-                        <Button
-                          key={courier.id}
-                          variant={
-                            paymentScreenSelectedCourierId === courier.id
-                              ? "default"
-                              : "outline"
-                          }
-                          onClick={() => {
-                            setPaymentScreenSelectedCourierId(courier.id || "");
-                            setShowPaymentScreenCourierModal(false);
+                            // İndirim state'lerini sıfırla
+                            setDiscountType("percentage");
+                            setDiscountValue("");
+                            setShowDiscountModal(false);
                           }}
-                          className="w-full h-12 text-base font-semibold justify-start"
+                          className="flex-1"
                         >
-                          {courier.name}
+                          İndirimi İptal Et
                         </Button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Para Üstü Modalı */}
-            {showPaymentScreenChangeAmountModal && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                      Para Üstü
-                    </h2>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        setShowPaymentScreenChangeAmountModal(false)
-                      }
-                      className="h-8 w-8"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Input
-                      type="number"
-                      value={paymentScreenChangeAmount}
-                      onChange={(e) =>
-                        setPaymentScreenChangeAmount(e.target.value)
-                      }
-                      placeholder="Para üstü tutarı girin (₺)"
-                      step="0.01"
-                      min="0"
-                      className="dark:bg-gray-700 dark:text-white dark:border-gray-600 h-12 text-base"
-                    />
-
-                    {/* Numeric Keypad */}
-                    <div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                          <Button
-                            key={num}
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              const currentValue =
-                                paymentScreenChangeAmount || "";
-                              setPaymentScreenChangeAmount(
-                                currentValue + num.toString()
-                              );
-                            }}
-                            className="h-12 text-lg font-semibold"
-                          >
-                            {num}
-                          </Button>
-                        ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenChangeAmount || "";
-                            setPaymentScreenChangeAmount(
-                              currentValue.slice(0, -1)
-                            );
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenChangeAmount || "";
-                            setPaymentScreenChangeAmount(currentValue + "0");
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          0
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const currentValue =
-                              paymentScreenChangeAmount || "";
-                            if (!currentValue.includes(".")) {
-                              setPaymentScreenChangeAmount(currentValue + ".");
-                            }
-                          }}
-                          className="h-12 text-lg font-semibold"
-                        >
-                          .
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        onClick={() =>
-                          setShowPaymentScreenChangeAmountModal(false)
-                        }
-                        className="flex-1 h-12 text-base font-semibold"
-                      >
-                        Tamam
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setPaymentScreenChangeAmount("0");
-                        }}
-                        className="flex-1 h-12 text-base font-semibold"
-                      >
-                        Temizle
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Taşı Modalı */}
-        {showMoveModal &&
-          (() => {
-            // Alanları grupla
-            const areas = Array.from(
-              new Set(availableTables.map((t) => t.area))
-            ).sort();
-            const tablesByArea = availableTables.filter(
-              (t) => t.area === selectedArea
-            );
-
-            return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                    {isMovingItems && (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    )}
-                    Ürünleri Taşı
-                  </h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    {selectedItems.size} ürün seçildi. Hangi masaya taşımak
-                    istersiniz?
-                  </p>
-
-                  <div className="flex-1 flex flex-col min-h-0">
-                    {/* Alanlar */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Alan Seçin
-                      </label>
-                      <div className="flex gap-2 flex-wrap">
-                        {areas.map((area) => (
-                          <Button
-                            key={area}
-                            type="button"
-                            variant={
-                              selectedArea === area ? "default" : "outline"
-                            }
-                            onClick={() => setSelectedArea(area)}
-                            className={`${
-                              selectedArea === area
-                                ? "bg-blue-600 text-white hover:bg-blue-700"
-                                : "bg-white hover:bg-gray-50"
-                            }`}
-                          >
-                            {area}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Masalar */}
-                    <div className="flex-1 overflow-y-auto">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Masa Seçin
-                      </label>
-                      {tablesByArea.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
-                          Bu alanda başka masa bulunamadı
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {tablesByArea.map((table) => (
-                            <button
-                              key={table.id}
-                              onClick={() => handleMoveSelectedItems(table.id!)}
-                              disabled={isMovingItems}
-                              className="text-left bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <div className="flex flex-col">
-                                <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                                  {table.tableNumber}
-                                </div>
-                                <div
-                                  className={`text-xs px-2 py-1 rounded inline-block w-fit ${
-                                    table.status === "available"
-                                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                                      : table.status === "occupied"
-                                        ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
-                                        : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
-                                  }`}
-                                >
-                                  {table.status === "available"
-                                    ? "Müsait"
-                                    : table.status === "occupied"
-                                      ? "Dolu"
-                                      : table.status === "reserved"
-                                        ? "Rezerve"
-                                        : "Temizlik"}
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
                       )}
+                      <Button
+                        onClick={async () => {
+                          if (discount > 0) {
+                            // Seçili ürünlerin index'lerini belirle (dışarıda da kullanılacak)
+                            let selectedIndices: Set<number> = new Set();
+                            let selectedItemsOriginalSubtotal = 0;
+                            let hasSelectedItems = false; // Seçili ürün var mı kontrolü için
+                            
+                            if (pendingPaymentItems.length > 0) {
+                              // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
+                              pendingPaymentItems.forEach(paymentItem => {
+                                const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+                                if (selectedQty > 0) {
+                                  paymentItem.indices.forEach(idx => selectedIndices.add(idx));
+                                  selectedItemsOriginalSubtotal += selectedQty * paymentItem.menuPrice;
+                                }
+                              });
+                              
+                              // Eğer hiç seçili ürün yoksa, tüm ürünleri seç
+                              if (selectedIndices.size === 0) {
+                                selectedIndices = new Set(order.items.map((_, idx) => idx));
+                                selectedItemsOriginalSubtotal = (order.items || []).reduce(
+                                  (sum, item) => sum + (item.menuPrice * item.quantity),
+                                  0
+                                );
+                                hasSelectedItems = false;
+                              } else {
+                                hasSelectedItems = true;
+                              }
+                            } else if (selectedItems.size > 0) {
+                              // selectedItems varsa, seçili ürünlerin toplamını hesapla
+                              selectedIndices = new Set(selectedItems);
+                              selectedItemsOriginalSubtotal = Array.from(selectedItems).reduce((sum, index) => {
+                                const item = order.items[index];
+                                if (item) {
+                                  return sum + (item.menuPrice * item.quantity);
+                                }
+                                return sum;
+                              }, 0);
+                              hasSelectedItems = true;
+                            } else {
+                              // Seçili ürün yoksa, tüm ürünleri seç
+                              selectedIndices = new Set(order.items.map((_, idx) => idx));
+                              selectedItemsOriginalSubtotal = (order.items || []).reduce(
+                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                                0
+                              );
+                              hasSelectedItems = false;
+                            }
+
+                            // Orijinal subtotal'ı al (eğer yoksa items'tan hesapla)
+                            const originalSubtotal =
+                              order.subtotal ||
+                              (order.items || []).reduce(
+                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                                0
+                              );
+
+                            // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlere uygula
+                            if (selectedIndices.size > 0 && selectedIndices.size < order.items.length) {
+                              // Seçili ürünlere indirim uygula
+                              const discountRatio = selectedItemsOriginalSubtotal > 0
+                                ? discount / selectedItemsOriginalSubtotal
+                                : 0;
+
+                              const updatedItems = order.items.map((item, index) => {
+                                if (selectedIndices.has(index)) {
+                                  // Seçili ürün: indirim uygula
+                                  const originalItemSubtotal = item.menuPrice * item.quantity;
+                                  const itemDiscount = originalItemSubtotal * discountRatio;
+                                  return {
+                                    ...item,
+                                    subtotal: Math.max(0, originalItemSubtotal - itemDiscount),
+                                  };
+                                } else {
+                                  // Seçili olmayan ürün: değiştirme
+                                  return item;
+                                }
+                              });
+
+                              // Yeni toplamları hesapla
+                              const newSubtotal = updatedItems.reduce(
+                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                                0
+                              );
+                              const newTotal = updatedItems.reduce(
+                                (sum, item) => sum + item.subtotal,
+                                0
+                              );
+
+                              // Siparişi güncelle
+                              await updateOrder(order.id!, {
+                                items: updatedItems,
+                                subtotal: newSubtotal,
+                                total: newTotal,
+                              });
+                            } else {
+                              // Tüm ürünlere indirim uygula
+                              // Toplam indirim = mevcut indirim + yeni indirim
+                              const totalDiscount =
+                                (order.discount || 0) + discount;
+
+                              // Yeni toplam = orijinal subtotal - toplam indirim
+                              const newTotal = Math.max(
+                                0,
+                                originalSubtotal - totalDiscount
+                              );
+
+                              // Toplam indirim oranını hesapla
+                              const totalDiscountRatio =
+                                originalSubtotal > 0
+                                  ? totalDiscount / originalSubtotal
+                                  : 0;
+
+                              // Ürünlerin subtotal değerlerini orantılı olarak güncelle
+                              const updatedItems = order.items.map((item) => {
+                                // Orijinal item subtotal'ı hesapla
+                                let originalItemSubtotal = item.menuPrice * item.quantity;
+                                if (
+                                  order.subtotal &&
+                                  order.discount &&
+                                  order.discount > 0
+                                ) {
+                                  // Daha önce indirim uygulanmışsa, orijinal değeri geri yükle
+                                  const previousDiscountRatio =
+                                    order.subtotal > 0
+                                      ? order.discount / order.subtotal
+                                      : 0;
+                                  originalItemSubtotal =
+                                    item.subtotal / (1 - previousDiscountRatio);
+                                }
+                                // Yeni indirimli subtotal (toplam indirim oranı ile)
+                                const newItemSubtotal = Math.max(
+                                  0,
+                                  originalItemSubtotal * (1 - totalDiscountRatio)
+                                );
+                                return {
+                                  ...item,
+                                  subtotal: newItemSubtotal,
+                                };
+                              });
+
+                              // Yeni subtotal'ı hesapla (güncellenmiş ürünlerden)
+                              const newSubtotal = updatedItems.reduce(
+                                (sum, item) => sum + item.subtotal,
+                                0
+                              );
+
+                              // Siparişi güncelle (ürünlerin subtotal'ları da güncellenmiş)
+                              await updateOrder(order.id!, {
+                                items: updatedItems,
+                                discount: totalDiscount,
+                                subtotal: originalSubtotal, // Orijinal subtotal değişmez
+                                total: newTotal,
+                              });
+
+                              // Güncellenmiş siparişi al
+                              const updatedOrder = await getOrder(order.id!);
+                              if (updatedOrder) {
+                                setOrder(updatedOrder);
+                                // Seçili ürünlerin state'ini koru (indirim uygulandıktan sonra kaldırma)
+                                // selectedItems, pendingPaymentItems ve selectedQuantities state'leri korunuyor
+                                
+                                // Eğer seçili ürünler varsa, pendingPaymentItems'ı güncelle (yeni order'a göre)
+                                if (hasSelectedItems && selectedIndices.size > 0 && selectedIndices.size < updatedOrder.items.length) {
+                                  // Seçili ürünlerin menuId'lerini topla
+                                  const selectedMenuIds = new Set<string>();
+                                  selectedIndices.forEach(index => {
+                                    const item = updatedOrder.items[index];
+                                    if (item) {
+                                      selectedMenuIds.add(item.menuId);
+                                    }
+                                  });
+                                  
+                                  // pendingPaymentItems'ı güncelle (yeni order'a göre)
+                                  if (selectedMenuIds.size > 0) {
+                                    const newPendingItems = updatedOrder.items
+                                      .map((item, index) => {
+                                        if (selectedMenuIds.has(item.menuId) && selectedIndices.has(index)) {
+                                          // Aynı menuId'ye sahip tüm item'ları bul
+                                          const allSameItems = updatedOrder.items.filter(
+                                            (o) => o.menuId === item.menuId
+                                          );
+                                          const totalQty = allSameItems.reduce(
+                                            (sum, o) => sum + o.quantity,
+                                            0
+                                          );
+                                          const indices = updatedOrder.items
+                                            .map((o, idx) =>
+                                              o.menuId === item.menuId
+                                                ? idx
+                                                : -1
+                                            )
+                                            .filter((idx) => idx !== -1);
+                                          
+                                          return {
+                                            menuId: item.menuId,
+                                            menuName: item.menuName,
+                                            totalQuantity: totalQty,
+                                            menuPrice: item.menuPrice,
+                                            indices: indices,
+                                          };
+                                        }
+                                        return null;
+                                      })
+                                      .filter((item): item is NonNullable<typeof item> => item !== null);
+                                    
+                                    // Aynı menuId'ye sahip item'ları birleştir
+                                    const mergedPendingItems = new Map<string, typeof newPendingItems[0]>();
+                                    newPendingItems.forEach(item => {
+                                      const existing = mergedPendingItems.get(item.menuId);
+                                      if (existing) {
+                                        existing.totalQuantity += item.totalQuantity;
+                                        existing.indices = [...new Set([...existing.indices, ...item.indices])];
+                                      } else {
+                                        mergedPendingItems.set(item.menuId, { ...item });
+                                      }
+                                    });
+                                    
+                                    setPendingPaymentItems(Array.from(mergedPendingItems.values()));
+                                    
+                                    // selectedQuantities'yi koru (zaten doğru değerler var)
+                                  }
+                                }
+
+                                // Ödeme tutarını güncelle (kalan tutar)
+                                const newRemaining = Math.max(
+                                  0,
+                                  newTotal -
+                                    (updatedOrder?.payments?.reduce(
+                                      (sum, p) => sum + p.amount,
+                                      0
+                                    ) || 0)
+                                );
+                                setPaymentAmount(newRemaining.toFixed(2));
+                              }
+                            }
+                          }
+
+                          // İndirim state'lerini sıfırla (ama seçili ürünlerin state'ini koru)
+                          setDiscountType("percentage");
+                          setDiscountValue("");
+                          setShowDiscountModal(false);
+                          // NOT: selectedItems, pendingPaymentItems ve selectedQuantities state'leri korunuyor
+                        }}
+                        className="flex-1"
+                        disabled={discount === 0}
+                      >
+                        Uygula
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setDiscountType("percentage");
+                          setDiscountValue("");
+                          setPaymentAmount(remaining.toFixed(2));
+                          setShowDiscountModal(false);
+                        }}
+                        className="flex-1"
+                      >
+                        İptal
+                      </Button>
                     </div>
                   </div>
-
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowMoveModal(false);
-                        setSelectedArea("");
-                      }}
-                      className="flex-1"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      İptal
-                    </Button>
-                  </div>
                 </div>
               </div>
-            );
-          })()}
+            </>
+          );
+        })()}
 
-        {/* Cari Seçme Modalı */}
-        {showCustomerModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Cari Seç
-                </h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowCustomerModal(false);
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+      {/* Right Sidebar - Categories (Desktop) */}
+      <div
+        className="hidden lg:flex lg:w-64 flex-col h-full overflow-hidden backdrop-blur-sm"
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
+      >
+        <div className="flex-1 overflow-y-auto p-3">
+          <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
+            Kategoriler
+          </h2>
+          <div className="space-y-1.5">
+            {categories.length === 0 ? (
+              <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">
+                Kategori bulunamadı
               </div>
-
-              <div className="flex-1 overflow-y-auto mb-4">
-                {isLoadingCustomers ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                  </div>
-                ) : customers.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    Henüz cari bulunmuyor
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {customers.map((customer) => (
-                      <button
-                        key={customer.id}
-                        onClick={() => handleSelectCustomer(customer.id!)}
-                        className="w-full p-3 text-left rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <div className="font-medium text-gray-900 dark:text-white">
-                          {customer.name}
-                        </div>
-                        {customer.phone && (
-                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                            {customer.phone}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Button
-                onClick={() => {
-                  setShowNewCustomerModal(true);
-                }}
-                className="w-full"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Yeni Cari Ekle
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Yeni Cari Ekleme Modalı */}
-        {showNewCustomerModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Yeni Cari Ekle
-                </h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowNewCustomerModal(false);
-                    setNewCustomerName("");
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Müşteri Adı
-                  </label>
-                  <Input
-                    value={newCustomerName}
-                    onChange={(e) => setNewCustomerName(e.target.value)}
-                    placeholder="Müşteri adını girin"
-                    className="w-full"
-                    autoFocus
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
+            ) : (
+              categories.map((category) => {
+                const isSelected = selectedCategoryId === category.id;
+                return (
+                  <button
+                    key={category.id}
                     onClick={() => {
-                      setShowNewCustomerModal(false);
-                      setNewCustomerName("");
+                      setSelectedCategoryId(category.id!);
+                      setSelectedCategoryName(category.name);
                     }}
-                    className="flex-1"
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
+                      isSelected
+                        ? "bg-blue-600 dark:bg-blue-500 text-white shadow-md"
+                        : "bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    }`}
                   >
-                    İptal
-                  </Button>
+                    <div className="font-medium">{category.name}</div>
+                    {category.description && (
+                      <div
+                        className={`text-xs mt-1 ${
+                          isSelected
+                            ? "text-blue-100"
+                            : "text-gray-500 dark:text-gray-400"
+                        }`}
+                      >
+                        {category.description}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Miktar Seçim Modalı - İptal için */}
+      {showQuantitySelectionModal &&
+        quantitySelectionAction === "cancel" &&
+        pendingCancelItems.length > 0 && (
+          <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  İptal Edilecek Miktar
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowQuantitySelectionModal(false);
+                    setQuantitySelectionAction(null);
+                    setPendingCancelItems([]);
+                    setSelectedCancelQuantities(new Map());
+                    setCurrentCancelItemIndex(0);
+                  }}
+                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  {pendingCancelItems[currentCancelItemIndex]?.menuName}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500">
+                  Toplam: {pendingCancelItems[currentCancelItemIndex]?.totalQuantity} adet
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 mb-6">
+                <button
+                  onClick={() => {
+                    const currentQty =
+                      selectedCancelQuantities.get(
+                        pendingCancelItems[currentCancelItemIndex]?.menuId
+                      ) || 0;
+                    if (currentQty > 0) {
+                      setSelectedCancelQuantities((prev) => {
+                        const newMap = new Map(prev);
+                        newMap.set(
+                          pendingCancelItems[currentCancelItemIndex]?.menuId,
+                          currentQty - 1
+                        );
+                        return newMap;
+                      });
+                    }
+                  }}
+                  className="w-12 h-12 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold text-xl flex items-center justify-center transition-all active:scale-95"
+                  disabled={
+                    (selectedCancelQuantities.get(
+                      pendingCancelItems[currentCancelItemIndex]?.menuId
+                    ) || 0) === 0
+                  }
+                >
+                  -
+                </button>
+                <div className="w-20 text-center">
+                  <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                    {selectedCancelQuantities.get(
+                      pendingCancelItems[currentCancelItemIndex]?.menuId
+                    ) || 0}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const currentQty =
+                      selectedCancelQuantities.get(
+                        pendingCancelItems[currentCancelItemIndex]?.menuId
+                      ) || 0;
+                    const maxQty =
+                      pendingCancelItems[currentCancelItemIndex]?.totalQuantity || 0;
+                    if (currentQty < maxQty) {
+                      setSelectedCancelQuantities((prev) => {
+                        const newMap = new Map(prev);
+                        newMap.set(
+                          pendingCancelItems[currentCancelItemIndex]?.menuId,
+                          currentQty + 1
+                        );
+                        return newMap;
+                      });
+                    }
+                  }}
+                  className="w-12 h-12 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-xl flex items-center justify-center transition-all active:scale-95"
+                  disabled={
+                    (selectedCancelQuantities.get(
+                      pendingCancelItems[currentCancelItemIndex]?.menuId
+                    ) || 0) >=
+                    (pendingCancelItems[currentCancelItemIndex]?.totalQuantity || 0)
+                  }
+                >
+                  +
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                {currentCancelItemIndex > 0 && (
                   <Button
-                    onClick={handleCreateCustomerAndTable}
-                    disabled={isCreatingCustomer || !newCustomerName.trim()}
+                    onClick={() => {
+                      setCurrentCancelItemIndex(currentCancelItemIndex - 1);
+                    }}
+                    variant="outline"
                     className="flex-1"
                   >
-                    {isCreatingCustomer ? (
+                    Önceki
+                  </Button>
+                )}
+                {currentCancelItemIndex < pendingCancelItems.length - 1 ? (
+                  <Button
+                    onClick={() => {
+                      setCurrentCancelItemIndex(currentCancelItemIndex + 1);
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Sonraki
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={async () => {
+                      // Tüm seçilen miktarları topla ve iptal et
+                      const allIndices: number[] = [];
+                      pendingCancelItems.forEach((item) => {
+                        allIndices.push(...item.indices);
+                      });
+                      await handleCancelSelectedItemsWithQuantities(
+                        selectedCancelQuantities,
+                        allIndices
+                      );
+                    }}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    disabled={isCanceling}
+                  >
+                    {isCanceling ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Oluşturuluyor...
+                        İptal ediliyor...
                       </>
                     ) : (
-                      <>
-                        <Check className="h-4 w-4 mr-2" />
-                        Oluştur
-                      </>
+                      "İptal Et"
                     )}
                   </Button>
-                </div>
+                )}
               </div>
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

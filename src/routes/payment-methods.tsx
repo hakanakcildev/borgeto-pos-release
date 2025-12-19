@@ -11,14 +11,7 @@ import {
 import type { PaymentMethodConfig } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Plus,
-  Trash2,
-  Save,
-  X,
-  CreditCard,
-  Edit,
-} from "lucide-react";
+import { Plus, Trash2, Save, X, CreditCard, Edit } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { customAlert } from "@/components/ui/alert-dialog";
 
@@ -34,11 +27,14 @@ function PaymentMethodsManagement() {
   );
 }
 
-function PaymentMethodsManagementContent() {
+export function PaymentMethodsManagementContent() {
   const { userData, companyId, branchId } = useAuth();
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
+    []
+  );
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
-  const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethodConfig | null>(null);
+  const [editingPaymentMethod, setEditingPaymentMethod] =
+    useState<PaymentMethodConfig | null>(null);
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     name: "",
     code: "",
@@ -51,7 +47,7 @@ function PaymentMethodsManagementContent() {
     const loadPaymentMethods = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) {
         return;
       }
@@ -59,9 +55,11 @@ function PaymentMethodsManagementContent() {
       setLoadingPaymentMethods(true);
       try {
         // Önce varsayılan ödeme yöntemlerini oluştur (yoksa)
-        await createDefaultPaymentMethods(effectiveCompanyId, effectiveBranchId || undefined).catch(() => {
-        });
-        
+        await createDefaultPaymentMethods(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ).catch(() => {});
+
         // Ödeme yöntemlerini yükle
         const methods = await getPaymentMethodsByCompany(
           effectiveCompanyId,
@@ -69,7 +67,11 @@ function PaymentMethodsManagementContent() {
         );
         setPaymentMethods(methods);
       } catch (error) {
-        customAlert("Ödeme yöntemleri yüklenirken bir hata oluştu", "Hata", "error");
+        customAlert(
+          "Ödeme yöntemleri yüklenirken bir hata oluştu",
+          "Hata",
+          "error"
+        );
       } finally {
         setLoadingPaymentMethods(false);
       }
@@ -82,8 +84,12 @@ function PaymentMethodsManagementContent() {
   const handleAddPaymentMethod = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
-    if (!effectiveCompanyId || !newPaymentMethod.name.trim() || !newPaymentMethod.code.trim()) {
+
+    if (
+      !effectiveCompanyId ||
+      !newPaymentMethod.name.trim() ||
+      !newPaymentMethod.code.trim()
+    ) {
       customAlert("Ödeme yöntemi adı ve kodu gereklidir", "Uyarı", "warning");
       return;
     }
@@ -106,7 +112,7 @@ function PaymentMethodsManagementContent() {
         effectiveBranchId || undefined
       );
       setPaymentMethods(methods);
-      
+
       // Formu temizle
       setNewPaymentMethod({
         name: "",
@@ -123,7 +129,7 @@ function PaymentMethodsManagementContent() {
   const handleUpdatePaymentMethod = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     if (!effectiveCompanyId || !editingPaymentMethod?.id) {
       return;
     }
@@ -143,12 +149,19 @@ function PaymentMethodsManagementContent() {
       setPaymentMethods(reloadMethods);
       setEditingPaymentMethod(null);
     } catch (error) {
-      customAlert("Ödeme yöntemi güncellenirken bir hata oluştu", "Hata", "error");
+      customAlert(
+        "Ödeme yöntemi güncellenirken bir hata oluştu",
+        "Hata",
+        "error"
+      );
     }
   };
 
   // Ödeme yöntemini sil
-  const handleDeletePaymentMethod = async (methodId: string, isDefault: boolean) => {
+  const handleDeletePaymentMethod = async (
+    methodId: string,
+    isDefault: boolean
+  ) => {
     if (isDefault) {
       customAlert("Standart ödeme yöntemleri silinemez", "Uyarı", "warning");
       return;
@@ -161,9 +174,9 @@ function PaymentMethodsManagementContent() {
     try {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       await deletePaymentMethod(methodId);
-      
+
       // Ödeme yöntemlerini yeniden yükle
       const methods = await getPaymentMethodsByCompany(
         effectiveCompanyId!,
@@ -191,30 +204,35 @@ function PaymentMethodsManagementContent() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 xl:p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 xl:gap-4 mb-4 xl:mb-6">
           <div>
-            <h2 className="text-lg xl:text-xl font-bold text-gray-900 dark:text-white">Ödeme Yöntemleri</h2>
+            <h2 className="text-lg xl:text-xl font-bold text-gray-900 dark:text-white">
+              Ödeme Yöntemleri
+            </h2>
             <p className="text-xs xl:text-sm text-gray-600 dark:text-gray-400 mt-0.5 xl:mt-1">
               Ödeme yöntemlerini yönetin, ekleyin veya düzenleyin
             </p>
           </div>
           {!isAddingPaymentMethod && !editingPaymentMethod && (
-            <Button onClick={() => setIsAddingPaymentMethod(true)} className="text-xs xl:text-sm py-1.5 xl:py-2 px-3 xl:px-4">
+            <Button
+              onClick={() => setIsAddingPaymentMethod(true)}
+              className="text-xs xl:text-sm py-1.5 xl:py-2 px-3 xl:px-4"
+            >
               <Plus className="h-3 w-3 xl:h-4 xl:w-4 mr-1.5 xl:mr-2" />
               Yeni Ödeme Yöntemi
             </Button>
           )}
         </div>
 
-            {loadingPaymentMethods ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
-              </div>
-            ) : (
-              <>
-                {/* Yeni Ödeme Yöntemi Ekleme Formu */}
-                {isAddingPaymentMethod && (
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 xl:p-4 sm:p-6 mb-4 xl:mb-6 border border-gray-200 dark:border-gray-600">
-                    <h3 className="text-base xl:text-lg font-semibold text-gray-900 dark:text-white mb-3 xl:mb-4">
+        {loadingPaymentMethods ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
+          </div>
+        ) : (
+          <>
+            {/* Yeni Ödeme Yöntemi Ekleme Formu */}
+            {isAddingPaymentMethod && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 xl:p-4 sm:p-6 mb-4 xl:mb-6 border border-gray-200 dark:border-gray-600">
+                <h3 className="text-base xl:text-lg font-semibold text-gray-900 dark:text-white mb-3 xl:mb-4">
                   Yeni Ödeme Yöntemi Ekle
                 </h3>
                 <div className="space-y-3 xl:space-y-4">
@@ -280,7 +298,10 @@ function PaymentMethodsManagementContent() {
                     </div>
                   </div>
                   <div className="flex gap-1.5 xl:gap-2">
-                    <Button onClick={handleAddPaymentMethod} className="text-xs xl:text-sm py-1.5 xl:py-2 px-3 xl:px-4">
+                    <Button
+                      onClick={handleAddPaymentMethod}
+                      className="text-xs xl:text-sm py-1.5 xl:py-2 px-3 xl:px-4"
+                    >
                       <Save className="h-3 w-3 xl:h-4 xl:w-4 mr-1.5 xl:mr-2" />
                       Kaydet
                     </Button>
@@ -305,19 +326,22 @@ function PaymentMethodsManagementContent() {
             )}
 
             {/* Ödeme Yöntemleri Listesi */}
-                {paymentMethods.length === 0 ? (
-                  <div className="text-center py-6 xl:py-8 text-gray-500 dark:text-gray-400">
-                    <CreditCard className="h-10 w-10 xl:h-12 xl:w-12 mx-auto mb-2 xl:mb-3 text-gray-300 dark:text-gray-600" />
-                    <p className="text-sm xl:text-base">Henüz ödeme yöntemi eklenmemiş</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 xl:gap-2">
-                    {paymentMethods.map((method) => (
-                      <div
-                        key={method.id}
-                        className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-1.5 xl:p-2 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
-                      >
-                    {editingPaymentMethod?.id === method.id && editingPaymentMethod ? (
+            {paymentMethods.length === 0 ? (
+              <div className="text-center py-6 xl:py-8 text-gray-500 dark:text-gray-400">
+                <CreditCard className="h-10 w-10 xl:h-12 xl:w-12 mx-auto mb-2 xl:mb-3 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm xl:text-base">
+                  Henüz ödeme yöntemi eklenmemiş
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 xl:gap-2">
+                {paymentMethods.map((method) => (
+                  <div
+                    key={method.id}
+                    className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-1.5 xl:p-2 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
+                  >
+                    {editingPaymentMethod?.id === method.id &&
+                    editingPaymentMethod ? (
                       <div className="space-y-3">
                         <Input
                           value={editingPaymentMethod.name}
@@ -364,7 +388,8 @@ function PaymentMethodsManagementContent() {
                                 setEditingPaymentMethod({
                                   ...editingPaymentMethod,
                                   isActive: e.target.checked,
-                                  companyId: editingPaymentMethod.companyId || "",
+                                  companyId:
+                                    editingPaymentMethod.companyId || "",
                                 })
                               }
                               className="mr-2"
@@ -461,4 +486,3 @@ function PaymentMethodsManagementContent() {
     </div>
   );
 }
-

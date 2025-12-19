@@ -1,17 +1,41 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
-import { Phone, Mail, MessageCircle } from "lucide-react";
-import { POSLayout } from "@/components/layouts/POSLayout";
+import { Phone, Mail, MessageCircle, ArrowLeft } from "lucide-react";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 export const Route = createFileRoute("/support")({
   component: Support,
 });
 
 function Support() {
+  const navigate = useNavigate();
+
   return (
-    <POSLayout>
-      <SupportContent />
-    </POSLayout>
+    <ProtectedRoute requireAuth={true} requireCompanyAccess={true}>
+      <div className="h-[100dvh] flex w-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
+        {/* Main Content */}
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Header - 50px yükseklik */}
+          <header className="h-[50px] shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4">
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/",
+                  search: { area: undefined, activeOnly: false },
+                })
+              }
+              className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="Anasayfaya Dön"
+            >
+              <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            </button>
+          </header>
+          <div className="flex-1 overflow-y-auto h-full">
+            <SupportContent />
+          </div>
+        </main>
+      </div>
+    </ProtectedRoute>
   );
 }
 
@@ -25,7 +49,10 @@ function SupportContent() {
   };
 
   const handleWhatsAppClick = () => {
-    window.open(`https://wa.me/${whatsappNumber.replace(/^0/, "90")}`, "_blank");
+    window.open(
+      `https://wa.me/${whatsappNumber.replace(/^0/, "90")}`,
+      "_blank"
+    );
   };
 
   const handleEmailClick = () => {
@@ -136,6 +163,5 @@ function SupportContent() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-

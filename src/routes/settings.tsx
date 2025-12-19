@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { POSLayout } from "@/components/layouts/POSLayout";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import {
   Settings as SettingsIcon,
   Download,
@@ -15,18 +15,156 @@ import {
   CreditCard,
   Send,
   CheckCircle2,
+  Table as TableIcon,
+  Utensils,
+  Users,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablesManagementContent } from "@/routes/tables";
+import { MenuManagementContent } from "@/routes/menus";
+import { PaymentMethodsManagementContent } from "@/routes/payment-methods";
+import { UsersManagementContent } from "@/routes/users";
+import { PrintersContent } from "@/routes/printers";
 
 export const Route = createFileRoute("/settings")({
   component: Settings,
 });
 
+type SettingsTab =
+  | "general"
+  | "table-management"
+  | "tables"
+  | "menus"
+  | "payment-methods"
+  | "users"
+  | "printers";
+
 function Settings() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+
   return (
-    <POSLayout>
-      <SettingsContent />
-    </POSLayout>
+    <ProtectedRoute requireAuth={true} requireCompanyAccess={true}>
+      <div className="h-[100dvh] flex w-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
+        {/* Sidebar */}
+        <div
+          className="shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col"
+          style={{ width: "280px" }}
+        >
+          {/* Geri Butonu - Sidebar'ın en üstünde */}
+          <div className="shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/",
+                  search: { area: undefined, activeOnly: false },
+                })
+              }
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300"
+              title="Anasayfaya Dön"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span className="font-medium">Anasayfaya Dön</span>
+            </button>
+          </div>
+
+          {/* Sekmeler - Sidebar içinde */}
+          <div className="shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 space-y-1 overflow-y-auto">
+            <button
+              onClick={() => setActiveTab("general")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "general"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <SettingsIcon className="h-4 w-4" />
+              Genel
+            </button>
+            <button
+              onClick={() => setActiveTab("table-management")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "table-management"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <TableIcon className="h-4 w-4" />
+              Masa Ayarları
+            </button>
+            <button
+              onClick={() => setActiveTab("tables")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "tables"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <TableIcon className="h-4 w-4" />
+              Masa Yönetimi
+            </button>
+            <button
+              onClick={() => setActiveTab("menus")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "menus"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Utensils className="h-4 w-4" />
+              Ürün Yönetimi
+            </button>
+            <button
+              onClick={() => setActiveTab("payment-methods")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "payment-methods"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <CreditCard className="h-4 w-4" />
+              Ödeme Yöntemleri
+            </button>
+            <button
+              onClick={() => setActiveTab("users")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "users"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              Kullanıcılar
+            </button>
+            <button
+              onClick={() => setActiveTab("printers")}
+              className={`w-full px-3 py-2 rounded-lg text-left font-medium transition-colors flex items-center gap-2 ${
+                activeTab === "printers"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Printer className="h-4 w-4" />
+              Yazıcı Ayarları
+            </button>
+          </div>
+
+          {/* Sidebar içeriği buraya eklenebilir */}
+          <div className="flex-1 overflow-y-auto"></div>
+        </div>
+
+        {/* Main Content */}
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto h-full">
+            <SettingsContent
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+            />
+          </div>
+        </main>
+      </div>
+    </ProtectedRoute>
   );
 }
 
@@ -38,7 +176,13 @@ interface NavigationSettings {
   returnAfterItemMove: boolean;
 }
 
-function SettingsContent() {
+function SettingsContent({
+  activeTab,
+  setActiveTab,
+}: {
+  activeTab: SettingsTab;
+  setActiveTab: (tab: SettingsTab) => void;
+}) {
   const { theme, setTheme } = useTheme();
   const [pendingUpdate, setPendingUpdate] = useState<{
     version: string;
@@ -162,6 +306,9 @@ function SettingsContent() {
         </p>
       </div>
 
+      {/* Genel Sekme İçeriği */}
+      {activeTab === "general" && (
+        <>
       {/* WiFi IP Bilgisi */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
@@ -313,14 +460,20 @@ function SettingsContent() {
           </button>
         </div>
       </div>
+        </>
+      )}
 
+      {/* Masa Yönetimi Sekme İçeriği */}
+      {activeTab === "table-management" && (
+        <>
       {/* İşlem Sonrası Hareket Kontrolü */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
           İşlem Sonrası Hareket Kontrolü
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          İşlemlerden sonra otomatik olarak masalar sayfasına dönüş yapılsın mı?
+              İşlemlerden sonra otomatik olarak masalar sayfasına dönüş yapılsın
+              mı?
         </p>
 
         <div className="space-y-4">
@@ -505,125 +658,23 @@ function SettingsContent() {
           </div>
         </div>
       </div>
-
-      {/* Güncelleme Bölümü */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          Güncelleme Yönetimi
-        </h2>
-
-        {updateDownloaded ? (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0">
-                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-green-900 dark:text-green-100 mb-1">
-                  Güncelleme İndirildi
-                </h3>
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  Yeni sürüm hazır. Kurmak için aşağıdaki butona tıklayın.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <Button
-                onClick={handleInstallUpdate}
-                className="w-full bg-green-600 hover:bg-green-700 text-white"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Kur ve Yeniden Başlat
-              </Button>
-            </div>
-          </div>
-        ) : downloadProgress > 0 ? (
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center flex-shrink-0">
-                <Download className="h-6 w-6 text-blue-600 dark:text-blue-400 animate-pulse" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                  Güncelleme İndiriliyor
-                </h3>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Lütfen bekleyin...
-                </p>
-              </div>
-            </div>
-            <div className="w-full bg-blue-200 dark:bg-blue-900/40 rounded-full h-3">
-              <div
-                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${downloadProgress}%` }}
-              />
-            </div>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-2 text-center">
-              {Math.round(downloadProgress)}%
-            </p>
-          </div>
-        ) : pendingUpdate ? (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center flex-shrink-0">
-                <Download className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
-                  Yeni Güncelleme Mevcut
-                </h3>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  Versiyon {pendingUpdate.version} indirilebilir.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <Button
-                onClick={handleDownloadUpdate}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                İndir ve Kur
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0">
-                <CheckCircle className="h-6 w-6 text-gray-600 dark:text-gray-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                  Güncel Sürüm
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Şu anda en güncel sürümü kullanıyorsunuz.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <Button
-          onClick={handleCheckForUpdates}
-          disabled={isCheckingUpdate}
-          variant="outline"
-          className="w-full"
-        >
-          {isCheckingUpdate ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Kontrol Ediliyor...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Güncelleme Kontrolü
             </>
           )}
-        </Button>
-      </div>
+
+      {/* Masa Yönetimi Sekmesi */}
+      {activeTab === "tables" && <TablesManagementContent />}
+
+      {/* Ürün Yönetimi Sekmesi */}
+      {activeTab === "menus" && <MenuManagementContent />}
+
+      {/* Ödeme Yöntemleri Sekmesi */}
+      {activeTab === "payment-methods" && <PaymentMethodsManagementContent />}
+
+      {/* Kullanıcılar Sekmesi */}
+      {activeTab === "users" && <UsersManagementContent />}
+
+      {/* Yazıcı Ayarları Sekmesi */}
+      {activeTab === "printers" && <PrintersContent />}
     </div>
   );
 }

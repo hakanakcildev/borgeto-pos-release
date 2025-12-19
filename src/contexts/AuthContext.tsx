@@ -3,6 +3,8 @@ import { type User as FirebaseUser } from "firebase/auth";
 import { onAuthStateChange, getCurrentUserData } from "../lib/firebase/auth";
 import { clearAllTableHistory } from "../lib/firebase/tableHistory";
 import type { User, Branch, Company } from "../lib/firebase/types";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../lib/firebase/firebase";
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -38,7 +40,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [companyData, setCompanyData] = useState<Company | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
-  const [authType, setAuthType] = useState<"firebase" | "staff" | "branch" | null>(null);
+  const [authType, setAuthType] = useState<
+    "firebase" | "staff" | "branch" | null
+  >(null);
   const [loading, setLoading] = useState(true);
 
   // Load auth data from localStorage on mount
@@ -88,8 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setBranchId(null);
             setAuthType(null);
           }
-        } catch (error) {
-        }
+        } catch (error) {}
       }
     };
 
@@ -125,8 +128,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUserData(posAuth.user || null);
             setBranchData(posAuth.branch || null);
             setCompanyData(posAuth.company || null);
-          } catch (error) {
-          }
+          } catch (error) {}
         } else {
           setUserData(null);
           setBranchData(null);
@@ -143,16 +145,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Branch bilgisini yükle (branchId varsa ama branchData yoksa)
+  useEffect(() => {
+    const loadBranchData = async () => {
+      if (branchId && !branchData) {
+        try {
+          const branchDoc = await getDoc(doc(db, "branches", branchId));
+          if (branchDoc.exists()) {
+            const branchDataFromDb = branchDoc.data();
+            const branch = {
+              id: branchDoc.id,
+              ...branchDataFromDb,
+              createdAt: branchDataFromDb.createdAt?.toDate() || new Date(),
+              updatedAt: branchDataFromDb.updatedAt?.toDate() || new Date(),
+            } as Branch;
+            setBranchData(branch);
+          }
+        } catch (error) {
+          console.error("Branch bilgisi yüklenirken hata:", error);
+        }
+      }
+    };
+
+    loadBranchData();
+  }, [branchId, branchData]);
+
   // Masa geçmişi temizleme dinleyicisi (Electron IPC event)
   useEffect(() => {
-    if (typeof window !== "undefined" && window.electronAPI?.onTriggerClearTableHistory) {
+    if (
+      typeof window !== "undefined" &&
+      window.electronAPI?.onTriggerClearTableHistory
+    ) {
       window.electronAPI.onTriggerClearTableHistory(async () => {
         // Eğer authenticated ise companyId ve branchId'yi al
         if (companyId) {
           try {
             await clearAllTableHistory(companyId, branchId || undefined);
-          } catch (error) {
-          }
+          } catch (error) {}
         }
       });
     }
@@ -173,4 +202,3 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-

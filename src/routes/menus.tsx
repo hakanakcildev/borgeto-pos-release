@@ -41,7 +41,7 @@ function MenuManagement() {
   );
 }
 
-function MenuManagementContent() {
+export function MenuManagementContent() {
   const { userData, companyId, branchId } = useAuth();
   const [loading, setLoading] = useState(true);
   const [menus, setMenus] = useState<Menu[]>([]);

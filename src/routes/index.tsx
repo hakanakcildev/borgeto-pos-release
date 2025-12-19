@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -18,28 +18,18 @@ import {
 import type { Table, Order } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
 import { customAlert } from "@/components/ui/alert-dialog";
-import { Utensils, Clock, X, Loader2 } from "lucide-react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { signOutUser } from "@/lib/firebase/auth";
 import {
-  Home,
-  LogOut,
-  Menu,
-  Settings,
-  BarChart3,
-  Utensils as UtensilsIcon,
-  CreditCard,
-  Phone,
-  History,
-  Table as TableIcon,
-  Printer,
-  Bike,
-  Package,
-  User,
-  Users,
-  Calendar,
+  Utensils,
+  Clock,
+  X,
+  Loader2,
+  ArrowLeft,
+  Wifi,
+  Server,
 } from "lucide-react";
-import { useCallback } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { HomePage } from "@/components/HomePage";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -52,278 +42,125 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const { area, activeOnly } = Route.useSearch();
+
+  // Eğer area parametresi varsa (boş string hariç) veya activeOnly true ise TablesView göster, yoksa HomePage göster
+  // area="all" ise tüm masaları göster (area filtresi uygulanmaz)
+  const showTablesView = area !== undefined || activeOnly === true;
+
   return (
     <ProtectedRoute requireAuth={true} requireCompanyAccess={true}>
-      <POSLayoutWithTables />
+      {showTablesView ? <TablesView /> : <HomePage />}
     </ProtectedRoute>
   );
 }
 
-// POS Layout component'ini buraya taşıdık
-function POSLayoutWithTables() {
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [currentPath, setCurrentPath] = useState(location.pathname);
+// Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
+const calculateOptimalGrid = (
+  tableCount: number,
+  width: number,
+  height: number
+) => {
+  if (tableCount === 0 || width === 0 || height === 0)
+    return { cols: 2, gap: 12, cardSize: 100 };
 
-  useEffect(() => {
-    setCurrentPath(location.pathname);
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+  // Padding için alan hesapla
+  const paddingX = 32; // px-4 lg:px-6 için (16px * 2)
+  const paddingY = 48; // py-6 için (24px * 2)
+  const availableWidth = width - paddingX;
+  const availableHeight = height - paddingY;
 
-  const handleLogout = useCallback(async () => {
-    try {
-      // Local storage'ı temizle
-      localStorage.removeItem("posAuth");
+  // Gap değeri (12px)
+  const gap = 12;
 
-      // Storage event tetikle
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: "posAuth",
-          newValue: null,
-        })
-      );
+  // Minimum kart boyutu (çok küçük olmasın)
+  const minCardSize = 80;
 
-      // Firebase'den çıkış yap
-      await signOutUser();
+  // Farklı kolon sayılarını dene ve en iyisini bul
+  let bestCols = 2;
+  let bestCardSize = minCardSize;
+  let bestFit = Infinity;
 
-      // Login sayfasına yönlendir
-      navigate({ to: "/auth/login", replace: true });
-    } catch (error) {
-      // Hata olsa bile temizle ve yönlendir
-      localStorage.removeItem("posAuth");
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: "posAuth",
-          newValue: null,
-        })
-      );
-      navigate({ to: "/auth/login", replace: true });
+  for (let cols = 2; cols <= 20; cols++) {
+    const rows = Math.ceil(tableCount / cols);
+
+    // Her kartın boyutunu hesapla (kare olması için)
+    const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+    const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+
+    // Kare olması için en küçük boyutu kullan
+    const cardSize = Math.min(cardWidth, cardHeight);
+
+    // Minimum boyuttan küçük olmamalı
+    if (cardSize < minCardSize) continue;
+
+    // Tüm kartların sığması için gerekli alan
+    const requiredWidth = cols * cardSize + (cols - 1) * gap;
+    const requiredHeight = rows * cardSize + (rows - 1) * gap;
+
+    // Eğer sığıyorsa ve daha iyi bir fit ise
+    if (requiredWidth <= availableWidth && requiredHeight <= availableHeight) {
+      const unusedSpace =
+        availableWidth - requiredWidth + (availableHeight - requiredHeight);
+      if (unusedSpace < bestFit) {
+        bestFit = unusedSpace;
+        bestCols = cols;
+        bestCardSize = cardSize;
+      }
     }
-  }, [navigate]);
+  }
 
-  const menuItems = [
-    { title: "Masalar", icon: Home, href: "/" },
-    { title: "Masa Yönetimi", icon: TableIcon, href: "/tables" },
-    { title: "Cari Masaları", icon: User, href: "/customer-tables" },
-    { title: "Ürün Yönetimi", icon: UtensilsIcon, href: "/menus" },
-    { title: "Stok Yönetimi", icon: Package, href: "/stocks" },
-    {
-      title: "Ödeme Yöntemleri",
-      icon: CreditCard,
-      href: "/payment-methods",
-    },
-    { title: "Kullanıcılar", icon: Users, href: "/users" },
-    { title: "Vardiya Kontrol", icon: Calendar, href: "/shifts" },
-    { title: "İstatistikler", icon: BarChart3, href: "/statistics" },
-    { title: "Masa Geçmişi", icon: History, href: "/table-history" },
-    { title: "Kurye Yönetimi", icon: Bike, href: "/couriers" },
-    { title: "Yazıcı Ayarları", icon: Printer, href: "/printers" },
-    { title: "Destek", icon: Phone, href: "/support" },
-    { title: "Ayarlar", icon: Settings, href: "/settings" },
-  ];
+  // Eğer hiçbir kolon sayısı sığmıyorsa, en az satır sayısına sahip olanı seç
+  if (bestFit === Infinity) {
+    let minRows = Infinity;
+    for (let cols = 2; cols <= 20; cols++) {
+      const rows = Math.ceil(tableCount / cols);
+      if (rows < minRows) {
+        minRows = rows;
+        bestCols = cols;
+        const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+        const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+        bestCardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
+      }
+    }
+  }
 
-  const getIsActive = useCallback(
-    (href: string) => {
-      if (href === "/") {
-        return currentPath === "/";
-      }
-      if (href === "/settings") {
-        return (
-          currentPath === "/settings" || currentPath.startsWith("/settings/")
-        );
-      }
-      if (href === "/tables") {
-        return currentPath === "/tables" || currentPath.startsWith("/tables/");
-      }
-      if (href === "/customer-tables") {
-        return (
-          currentPath === "/customer-tables" ||
-          currentPath.startsWith("/customer-tables/")
-        );
-      }
-      if (href === "/payment-methods") {
-        return (
-          currentPath === "/payment-methods" ||
-          currentPath.startsWith("/payment-methods/")
-        );
-      }
-      if (href === "/users") {
-        return currentPath === "/users" || currentPath.startsWith("/users/");
-      }
-      if (href === "/support") {
-        return (
-          currentPath === "/support" || currentPath.startsWith("/support/")
-        );
-      }
-      if (href === "/menus") {
-        return currentPath === "/menus" || currentPath.startsWith("/menus/");
-      }
-      if (href === "/stocks") {
-        return currentPath === "/stocks" || currentPath.startsWith("/stocks/");
-      }
-      if (href === "/statistics") {
-        return (
-          currentPath === "/statistics" ||
-          currentPath.startsWith("/statistics/")
-        );
-      }
-      if (href === "/shifts") {
-        return currentPath === "/shifts" || currentPath.startsWith("/shifts/");
-      }
-      return currentPath === href || currentPath === href + "/";
-    },
-    [currentPath]
-  );
-
-  return (
-    <div className="h-[100dvh] flex w-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      {/* Sidebar - Collapsed/Expanded */}
-      <div
-        className={`fixed lg:relative top-0 left-0 h-[100dvh] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col z-50 transition-all duration-300 ease-in-out flex-shrink-0 ${
-          isSidebarExpanded ? "w-64 xl:w-72" : "w-16 xl:w-24"
-        } ${isSidebarExpanded ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
-      >
-        <div className="h-full flex flex-col shadow-lg overflow-hidden">
-          {/* Menü Aç/Kapa Butonu - Menü Öğelerinin Üstünde */}
-          <div
-            className={`flex-shrink-0 transition-all duration-300 ${
-              isSidebarExpanded
-                ? "px-3 xl:px-6 pt-4 xl:pt-6 pb-2"
-                : "px-2 xl:px-3 pt-3 xl:pt-4 pb-2"
-            }`}
-          >
-            <button
-              onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-              className={`w-full flex items-center transition-all duration-200 h-10 xl:h-[44px] ${
-                isSidebarExpanded
-                  ? "gap-2 xl:gap-4 px-3 xl:px-4 text-xs xl:text-sm rounded-xl"
-                  : "justify-center px-2 rounded-lg"
-              } text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white`}
-              title={!isSidebarExpanded ? "Menü" : undefined}
-            >
-              {isSidebarExpanded ? (
-                <X className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
-              ) : (
-                <Menu className="h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
-              )}
-              {isSidebarExpanded && (
-                <span className="font-medium text-xs xl:text-sm">
-                  Menüyü Kapat
-                </span>
-              )}
-            </button>
-          </div>
-          {/* Menü Öğeleri - Scroll Edilebilir */}
-          <div
-            className={`flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col gap-1 ${
-              isSidebarExpanded ? "px-3 xl:px-6" : "px-2 xl:px-3"
-            }`}
-          >
-            {menuItems.map((item, index) => {
-              const isActive = getIsActive(item.href);
-              return (
-                <Link
-                  key={index}
-                  to={item.href as any}
-                  onClick={() => {
-                    setIsSidebarExpanded(false);
-                  }}
-                  className={`flex items-center transition-all duration-200 flex-shrink-0 ${
-                    isSidebarExpanded
-                      ? "gap-2 xl:gap-4 px-3 xl:px-4 py-2 xl:py-2.5 text-xs xl:text-sm rounded-xl"
-                      : "justify-center px-2 py-2 xl:py-2.5 rounded-lg"
-                  } ${
-                    isActive
-                      ? isSidebarExpanded
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-r-4 border-blue-600 dark:border-blue-400 shadow-sm"
-                        : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
-                  }`}
-                  title={!isSidebarExpanded ? item.title : undefined}
-                >
-                  <item.icon
-                    className={`h-4 w-4 xl:h-5 xl:w-5 flex-shrink-0 ${
-                      isActive
-                        ? "text-blue-600 dark:text-blue-400"
-                        : "text-gray-500 dark:text-gray-400"
-                    }`}
-                  />
-                  {isSidebarExpanded && (
-                    <span
-                      className={`${isActive ? "font-semibold" : "font-medium"} text-xs xl:text-sm`}
-                    >
-                      {item.title}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-          {/* Logout Butonu */}
-          <div
-            className={`border-t border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800 transition-all duration-300 flex-shrink-0 ${
-              isSidebarExpanded
-                ? "px-3 xl:px-6 py-4 xl:py-6"
-                : "px-2 xl:px-3 py-3 xl:py-4"
-            }`}
-          >
-            {isSidebarExpanded ? (
-              <button
-                onClick={() => {
-                  setIsSidebarExpanded(false);
-                  handleLogout();
-                }}
-                className="w-full py-2 xl:py-3 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs xl:text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-center"
-              >
-                <LogOut className="h-3 w-3 xl:h-4 xl:w-4 mr-1.5 xl:mr-2" />
-                Çıkış Yap
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setIsSidebarExpanded(false);
-                  handleLogout();
-                }}
-                className="w-full p-2 xl:p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 flex items-center justify-center"
-                title="Çıkış Yap"
-              >
-                <LogOut className="h-4 w-4 xl:h-5 xl:w-5 text-gray-600 dark:text-gray-300" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto h-full">
-          <TablesView />
-        </div>
-      </main>
-    </div>
-  );
-}
+  return { cols: bestCols, gap, cardSize: bestCardSize };
+};
 
 // Masalar sayfası component'i
 function TablesView() {
-  const { userData, companyId, branchId } = useAuth();
+  const { userData, companyId, branchId, companyData, branchData } = useAuth();
   const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
+  const { isOnline } = useNetworkStatus();
+  const [serverStatus, setServerStatus] = useState<
+    "connected" | "disconnected"
+  >("connected");
   const { area, activeOnly } = Route.useSearch();
   const [tables, setTables] = useState<Table[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedArea, setSelectedArea] = useState<string>(area || "");
+  // area="all" ise boş string kullan (tüm masaları göster)
+  const [selectedArea, setSelectedArea] = useState<string>(
+    area === "all" ? "" : area || ""
+  );
   const [showActiveOnly, setShowActiveOnly] = useState<boolean>(
     activeOnly || false
   );
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [defaultTablesCreated, setDefaultTablesCreated] = useState(false);
+
+  // Sunucu durumunu kontrol et
+  useEffect(() => {
+    setServerStatus("connected");
+  }, []);
 
   // URL search params değiştiğinde state'i güncelle
   useEffect(() => {
     if (area !== undefined) {
-      setSelectedArea(area);
+      // area="all" ise boş string kullan
+      setSelectedArea(area === "all" ? "" : area);
       setShowActiveOnly(false);
     }
     if (activeOnly !== undefined) {
@@ -333,15 +170,19 @@ function TablesView() {
       }
     }
   }, [area, activeOnly]);
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [sourceTable, setSourceTable] = useState<Table | null>(null);
-  const [sourceOrder, setSourceOrder] = useState<Order | null>(null);
-  const [moveModalArea, setMoveModalArea] = useState<string>("");
-  const [availableTablesForMove, setAvailableTablesForMove] = useState<Table[]>(
-    []
-  );
+  const [selectedTableForMove, setSelectedTableForMove] = useState<{
+    table: Table;
+    order: Order;
+  } | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPressingRef = useRef<boolean>(false);
+  const longPressCompletedRef = useRef<boolean>(false);
+  const pressingTableIdRef = useRef<string | null>(null);
+  const longPressEndTimeRef = useRef<number>(0);
   const [isMovingTable, setIsMovingTable] = useState(false);
+  const [targetTableIdForMove, setTargetTableIdForMove] = useState<
+    string | null
+  >(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -355,13 +196,16 @@ function TablesView() {
       }
 
       try {
-        // Standart masaları oluştur (yoksa)
-        await createDefaultTables(
-          effectiveCompanyId,
-          effectiveBranchId || undefined
-        ).catch(() => {
-          // Hata olsa bile devam et
-        });
+        // Standart masaları oluştur (sadece ilk yüklemede)
+        if (!defaultTablesCreated) {
+          await createDefaultTables(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => {
+            // Hata olsa bile devam et
+          });
+          setDefaultTablesCreated(true);
+        }
 
         const [tablesData, ordersData] = await Promise.all([
           getTablesByCompany(
@@ -398,36 +242,46 @@ function TablesView() {
           }
         });
 
+        let uniqueTables: Table[];
         if (tablesToUpdate.length > 0) {
           await Promise.all(tablesToUpdate);
           const updatedTables = await getTablesByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
           );
-          const uniqueTables = removeDuplicateTables(updatedTables);
+          uniqueTables = removeDuplicateTables(updatedTables);
           setTables(uniqueTables);
         } else {
-          const uniqueTables = removeDuplicateTables(tablesData);
+          uniqueTables = removeDuplicateTables(tablesData);
           setTables(uniqueTables);
         }
 
         // Sadece ilk yüklemede ve URL'de area yoksa ve selectedArea boşsa otomatik alan seç
-        if (isInitialLoad && tablesData.length > 0 && !selectedArea && !area) {
+        if (
+          isInitialLoad &&
+          uniqueTables.length > 0 &&
+          !selectedArea &&
+          !area
+        ) {
           const areas = Array.from(
             new Set(
-              tablesData
-                .map((t) => t.area)
-                .filter((area) => area && area.trim() !== "")
+              uniqueTables
+                .map((t: Table) => t.area)
+                .filter(
+                  (area: string | undefined): area is string =>
+                    area !== undefined && area.trim() !== ""
+                )
             )
           ).sort();
           if (areas.length > 0) {
-            setSelectedArea(areas[0]);
+            setSelectedArea(areas[0] as string);
           }
           setIsInitialLoad(false);
         } else if (isInitialLoad) {
           setIsInitialLoad(false);
         }
-      } catch (error) {
+      } catch {
+        // Error handling - loading state already set in finally block
       } finally {
         setLoading(false);
       }
@@ -440,6 +294,9 @@ function TablesView() {
     userData?.companyId,
     userData?.assignedBranchId,
     area,
+    defaultTablesCreated,
+    isInitialLoad,
+    selectedArea,
   ]);
 
   useEffect(() => {
@@ -492,11 +349,15 @@ function TablesView() {
                 effectiveCompanyId,
                 effectiveBranchId || undefined
               );
-              setTables(updatedTables);
+              const uniqueTables = removeDuplicateTables(updatedTables);
+              setTables(uniqueTables);
             } else {
-              setTables(tablesData);
+              const uniqueTables = removeDuplicateTables(tablesData);
+              setTables(uniqueTables);
             }
-          } catch (error) {}
+          } catch {
+            // Error handling
+          }
         };
         reloadData();
       }
@@ -509,6 +370,8 @@ function TablesView() {
   }, [userData]);
 
   const removeDuplicateTables = (tables: Table[]): Table[] => {
+    if (!tables || tables.length === 0) return [];
+
     // Önce id bazlı duplicate kontrolü yap
     const idMap = new Map<string, Table>();
     tables.forEach((table) => {
@@ -530,7 +393,11 @@ function TablesView() {
     // Sonra area-tableNumber kombinasyonuna göre duplicate kontrolü yap
     const tableMap = new Map<string, Table>();
     Array.from(idMap.values()).forEach((table) => {
-      const key = `${table.area}-${table.tableNumber}`;
+      // area ve tableNumber boş olabilir, bunları normalize et
+      const normalizedArea = (table.area || "").trim();
+      const normalizedTableNumber = (table.tableNumber || "").trim();
+      const key = `${normalizedArea}-${normalizedTableNumber}`;
+
       const existing = tableMap.get(key);
 
       if (!existing) {
@@ -542,6 +409,11 @@ function TablesView() {
 
         if (currentDate > existingDate) {
           tableMap.set(key, table);
+        } else if (currentDate.getTime() === existingDate.getTime()) {
+          // Aynı tarihse, id'si olanı tercih et
+          if (table.id && !existing.id) {
+            tableMap.set(key, table);
+          }
         }
       }
     });
@@ -558,28 +430,94 @@ function TablesView() {
   const handleLongPressStart = (table: Table, order: Order) => {
     if (!order || order.items.length === 0) return;
 
+    isPressingRef.current = true;
+    longPressCompletedRef.current = false;
+    pressingTableIdRef.current = table.id!;
     longPressTimer.current = setTimeout(() => {
-      setSourceTable(table);
-      setSourceOrder(order);
-      setShowMoveModal(true);
+      if (isPressingRef.current && pressingTableIdRef.current === table.id!) {
+        setSelectedTableForMove({ table, order });
+        longPressCompletedRef.current = true;
+      }
     }, 500);
   };
 
-  const handleLongPressEnd = () => {
+  const handleLongPressEnd = (tableId: string) => {
+    // Timer'ı temizle
     if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+
+    // Eğer long-press tamamlandıysa ve bu masa için yapıldıysa, seçimi koru
+    if (
+      longPressCompletedRef.current &&
+      pressingTableIdRef.current === tableId
+    ) {
+      // Seçim kalmalı, sadece pressing state'i sıfırla
+      // longPressCompletedRef'i true tut ki click handler bilsin
+      isPressingRef.current = false;
+      pressingTableIdRef.current = null;
+      // Long-press bitiş zamanını kaydet (click'i engellemek için)
+      longPressEndTimeRef.current = Date.now();
+      // Seçimi koru - setSelectedTableForMove çağrılmayacak
+      return;
+    }
+
+    // Long-press tamamlanmadıysa veya farklı bir masaysa, her şeyi temizle
+    // Ama eğer masa zaten seçiliyse ve bu masa için değilse, seçimi koru
+    if (selectedTableForMove && selectedTableForMove.table.id !== tableId) {
+      // Farklı bir masa için release, seçimi koru
+      isPressingRef.current = false;
+      pressingTableIdRef.current = null;
+      return;
+    }
+
+    // Long-press tamamlanmadıysa ve seçim yoksa, her şeyi temizle
+    isPressingRef.current = false;
+    pressingTableIdRef.current = null;
+    longPressCompletedRef.current = false;
+  };
+
+  const handleMouseLeave = (tableId: string) => {
+    // Eğer bu masa seçiliyse ve hala basılı tutuluyorsa, seçimi kaldır
+    if (
+      selectedTableForMove &&
+      selectedTableForMove.table.id === tableId &&
+      isPressingRef.current &&
+      pressingTableIdRef.current === tableId
+    ) {
+      setSelectedTableForMove(null);
+      isPressingRef.current = false;
+      pressingTableIdRef.current = null;
+      longPressCompletedRef.current = false;
+    }
+    // Timer'ı da temizle (eğer bu masa için timer çalışıyorsa)
+    if (longPressTimer.current && pressingTableIdRef.current === tableId) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
   };
 
   const handleMoveAllItems = async (targetTableId: string) => {
-    if (!sourceTable || !sourceOrder) return;
+    if (!selectedTableForMove) return;
+
+    const { table: sourceTable, order: sourceOrder } = selectedTableForMove;
+
+    // Aynı masaya taşıma yapılamaz
+    if (sourceTable.id === targetTableId) {
+      setSelectedTableForMove(null);
+      return;
+    }
 
     setIsMovingTable(true);
+    setTargetTableIdForMove(targetTableId);
     try {
       const targetTable = await getTable(targetTableId);
       if (!targetTable) {
         customAlert("Hedef masa bulunamadı", "Hata", "error");
+        setSelectedTableForMove(null);
+        setTargetTableIdForMove(null);
+        setIsMovingTable(false);
         return;
       }
 
@@ -633,54 +571,30 @@ function TablesView() {
           branchId: effectiveBranchId || undefined,
         }),
       ]);
-      setTables(updatedTables);
+
+      // Yinelenen masaları filtrele (removeDuplicateTables fonksiyonunu kullan)
+      const uniqueTables = removeDuplicateTables(updatedTables);
+
+      setTables(uniqueTables);
       setActiveOrders(updatedOrders.filter((o) => o.status === "active"));
 
-      setShowMoveModal(false);
-      setSourceTable(null);
-      setSourceOrder(null);
-      setMoveModalArea("");
-    } catch (error) {
+      setSelectedTableForMove(null);
+      setTargetTableIdForMove(null);
+    } catch {
       customAlert("Ürünler taşınırken bir hata oluştu", "Hata", "error");
+      setTargetTableIdForMove(null);
     } finally {
       setIsMovingTable(false);
     }
   };
 
-  useEffect(() => {
-    const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
-
-    if (showMoveModal && effectiveCompanyId) {
-      const loadTables = async () => {
-        try {
-          const tablesData = await getTablesByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          );
-          const filteredTables = tablesData.filter(
-            (t) => t.id !== sourceTable?.id
-          );
-          setAvailableTablesForMove(filteredTables);
-          if (filteredTables.length > 0 && !moveModalArea) {
-            const firstArea = filteredTables[0].area;
-            setMoveModalArea(firstArea);
-          }
-        } catch (error) {}
-      };
-      loadTables();
-    } else {
-      setAvailableTablesForMove([]);
-    }
-  }, [showMoveModal, userData, sourceTable]);
-
   const getBackgroundColor = (status: Table["status"], isDark: boolean) => {
     if (isDark) {
       switch (status) {
         case "available":
-          return "bg-red-900/40"; // Boş masalar kırmızı
+          return "bg-red-600/60"; // Boş masalar daha açık kırmızı
         case "occupied":
-          return "bg-green-900/40"; // Dolu masalar yeşil
+          return "bg-green-600/60"; // Dolu masalar daha açık yeşil
         case "reserved":
           return "bg-yellow-900/20";
         case "cleaning":
@@ -691,9 +605,9 @@ function TablesView() {
     } else {
       switch (status) {
         case "available":
-          return "bg-red-100"; // Boş masalar kırmızı
+          return "bg-red-300"; // Boş masalar daha açık kırmızı
         case "occupied":
-          return "bg-green-100"; // Dolu masalar yeşil
+          return "bg-green-300"; // Dolu masalar daha açık yeşil
         case "reserved":
           return "bg-yellow-50";
         case "cleaning":
@@ -722,6 +636,22 @@ function TablesView() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // ESC tuşuna basıldığında seçimi kaldır
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedTableForMove) {
+        setSelectedTableForMove(null);
+        longPressCompletedRef.current = false;
+        isPressingRef.current = false;
+        pressingTableIdRef.current = null;
+        longPressEndTimeRef.current = 0;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedTableForMove]);
 
   const getTimeAgo = (date: Date | undefined): string => {
     if (!date) return "";
@@ -758,62 +688,113 @@ function TablesView() {
     )
   ).sort();
 
-  let filteredTables = selectedArea
-    ? tables.filter((t) => t.area === selectedArea)
-    : tables;
+  // Filtrelenmiş masaları memoize et - sadece tables, selectedArea, showActiveOnly veya activeOrders değiştiğinde yeniden hesapla
+  const filteredTables = useMemo(() => {
+    let filtered = selectedArea
+      ? tables.filter((t) => t.area === selectedArea)
+      : tables;
 
-  if (showActiveOnly) {
-    filteredTables = filteredTables.filter((table) => {
-      return activeOrders.some(
-        (order) =>
-          order.tableId === table.id &&
-          order.status === "active" &&
-          order.items &&
-          order.items.length > 0
-      );
-    });
-  }
+    if (showActiveOnly) {
+      filtered = filtered.filter((table) => {
+        return activeOrders.some(
+          (order) =>
+            order.tableId === table.id &&
+            order.status === "active" &&
+            order.items &&
+            order.items.length > 0
+        );
+      });
+    }
+
+    return filtered;
+  }, [tables, selectedArea, showActiveOnly, activeOrders]);
 
   // Aktif masa sayısını tüm masalardan hesapla (sadece filtrelenmiş masalardan değil)
-  const activeTableCount = tables.filter((table) => {
-    return activeOrders.some(
-      (order) =>
-        order.tableId === table.id &&
-        order.status === "active" &&
-        order.items &&
-        order.items.length > 0
-    );
-  }).length;
+  // const activeTableCount = tables.filter((table) => {
+  //   return activeOrders.some(
+  //     (order) =>
+  //       order.tableId === table.id &&
+  //       order.status === "active" &&
+  //       order.items &&
+  //       order.items.length > 0
+  //   );
+  // }).length;
 
   // Ekran boyutunu algıla ve optimal grid yapısını hesapla
   // Hook'lar her zaman return'den önce çağrılmalı!
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [containerSize, setContainerSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const previousGridConfigRef = useRef<{
+    cols: number;
+    gap: number;
+    cardSize: number;
+  } | null>(null);
 
   useEffect(() => {
     const updateSize = () => {
-      if (gridContainerRef.current) {
-        const rect = gridContainerRef.current.getBoundingClientRect();
-        setContainerSize({ width: rect.width, height: rect.height });
-      }
+      // Header yüksekliğini ve sidebar genişliğini hesaba kat
+      const headerHeight = 80;
+      const sidebarWidth = 192; // w-48 = 12rem = 192px
+      const paddingX = 32; // px-4 lg:px-6 için
+      const paddingY = 48; // py-6 için (24px * 2)
+
+      const availableHeight = window.innerHeight - headerHeight - paddingY;
+      const availableWidth = window.innerWidth - sidebarWidth - paddingX;
+
+      setContainerSize({ width: availableWidth, height: availableHeight });
     };
 
     // İlk yüklemede hesapla
+    updateSize();
     const timeoutId = setTimeout(updateSize, 100);
 
+    // Sadece window resize olduğunda güncelle
     window.addEventListener("resize", updateSize);
-    // ResizeObserver kullanarak daha hassas takip
-    const resizeObserver = new ResizeObserver(updateSize);
-    if (gridContainerRef.current) {
-      resizeObserver.observe(gridContainerRef.current);
-    }
 
     return () => {
       clearTimeout(timeoutId);
       window.removeEventListener("resize", updateSize);
-      resizeObserver.disconnect();
     };
-  }, [filteredTables.length, showActiveOnly, selectedArea]);
+  }, []); // Boş dependency array - sadece mount ve unmount'ta çalışır
+
+  // Grid hesaplamasını memoize et - sadece TOPLAM masa sayısı veya container boyutu değiştiğinde yeniden hesapla
+  // NOT: Filtreleme sadece görünümü etkiler, grid boyutlarını etkilememelidir
+  // NOT: Bu hook loading check'inden önce olmalı (React Hooks kuralları)
+  const {
+    cols: optimalColumns,
+    gap,
+    cardSize,
+  } = useMemo(() => {
+    // Eğer containerSize henüz hesaplanmadıysa, önceki değeri kullan
+    if (
+      !containerSize ||
+      containerSize.width === 0 ||
+      containerSize.height === 0
+    ) {
+      if (previousGridConfigRef.current) {
+        return previousGridConfigRef.current;
+      }
+      // İlk render için default değerler
+      return { cols: 2, gap: 12, cardSize: 100 };
+    }
+
+    // Grid hesaplaması için TOPLAM masa sayısını kullan (filtrelenmiş değil)
+    // Bu sayede filtreleme değiştiğinde grid boyutları değişmez
+    const totalTableCount = tables.length;
+
+    const result = calculateOptimalGrid(
+      totalTableCount,
+      containerSize.width,
+      containerSize.height
+    );
+
+    // Önceki değeri güncelle
+    previousGridConfigRef.current = result;
+    return result;
+  }, [tables.length, containerSize]);
 
   if (loading) {
     return (
@@ -826,474 +807,428 @@ function TablesView() {
     );
   }
 
-  // Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
-  const calculateOptimalGrid = (
-    tableCount: number,
-    width: number,
-    height: number
-  ) => {
-    if (tableCount === 0 || width === 0 || height === 0)
-      return { cols: 2, gap: 12 };
-
-    // Padding için alan hesapla
-    const paddingX = 32; // px-4 lg:px-6 için (16px * 2)
-    const paddingY = 16; // pb-4 için
-    const availableWidth = width - paddingX;
-    const availableHeight = height - paddingY;
-
-    // Gap değeri (12px)
-    const gap = 12;
-
-    // Farklı kolon sayılarını dene ve en iyisini bul
-    let bestCols = 2;
-    let bestFit = Infinity;
-
-    for (let cols = 2; cols <= 12; cols++) {
-      const rows = Math.ceil(tableCount / cols);
-
-      // Her kartın boyutunu hesapla
-      const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
-      const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
-
-      // Minimum kart boyutu (çok küçük olmasın)
-      const minCardSize = 100;
-
-      // Kare olması için en küçük boyutu kullan, ama minimum boyuttan küçük olmasın
-      const cardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
-
-      // Tüm kartların sığması için gerekli alan
-      const requiredWidth = cols * cardSize + (cols - 1) * gap;
-      const requiredHeight = rows * cardSize + (rows - 1) * gap;
-
-      // Eğer sığıyorsa ve daha iyi bir fit ise
-      if (
-        requiredWidth <= availableWidth &&
-        requiredHeight <= availableHeight &&
-        cardSize >= minCardSize
-      ) {
-        const unusedSpace =
-          availableWidth - requiredWidth + (availableHeight - requiredHeight);
-        if (unusedSpace < bestFit) {
-          bestFit = unusedSpace;
-          bestCols = cols;
-        }
-      }
-    }
-
-    // Eğer hiçbir kolon sayısı sığmıyorsa, en az satır sayısına sahip olanı seç
-    if (bestFit === Infinity) {
-      let minRows = Infinity;
-      for (let cols = 2; cols <= 12; cols++) {
-        const rows = Math.ceil(tableCount / cols);
-        if (rows < minRows) {
-          minRows = rows;
-          bestCols = cols;
-        }
-      }
-    }
-
-    return { cols: bestCols, gap };
-  };
-
-  const { cols: optimalColumns, gap } = calculateOptimalGrid(
-    filteredTables.length,
-    containerSize.width,
-    containerSize.height
-  );
-
   return (
-    <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
-      <div className="mb-3 xl:mb-4 px-3 xl:px-4 lg:px-6 pt-2 xl:pt-3 lg:pt-4 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 xl:gap-4">
-          <div>
-            <h1 className="text-xl xl:text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-              Masalar
-            </h1>
-            <p className="text-xs xl:text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 xl:mt-1">
-              {filteredTables.length} masa • {activeTableCount} aktif masa
-            </p>
+    <div className="h-[100dvh] bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
+      {/* Header - Anasayfadaki gibi 80px yükseklik */}
+      <header className="h-[80px] shrink-0 px-6 flex items-center justify-between bg-black/20 backdrop-blur-sm">
+        <div className="flex items-center gap-4">
+          {/* Geri Butonu */}
+          <button
+            onClick={() =>
+              navigate({
+                to: "/",
+                search: { area: undefined, activeOnly: false },
+              })
+            }
+            className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition-colors"
+            title="Anasayfaya Dön"
+          >
+            <ArrowLeft className="h-5 w-5 text-white" />
+          </button>
+
+          <div className="flex items-center gap-3">
+            <img
+              src="/images/borgeto-logo.png"
+              alt="Logo"
+              className="h-10 w-10 object-contain"
+            />
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-white">Borgeto Pos</h1>
+              {companyData?.name && (
+                <span className="text-white/80 font-normal text-sm">
+                  {companyData.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Internet Status */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+            <Wifi
+              className={`h-4 w-4 ${isOnline ? "text-green-400" : "text-red-400"}`}
+            />
+            <span className="text-sm text-white font-medium">
+              {isOnline ? "Internet BAĞLI" : "Internet BAĞLI DEĞİL"}
+            </span>
           </div>
 
-          <div className="flex gap-1.5 xl:gap-2 overflow-x-auto pb-2">
-            <button
-              onClick={() => {
-                setSelectedArea("");
-                setShowActiveOnly(false);
-                navigate({
-                  to: "/",
-                  search: { area: undefined, activeOnly: false },
-                  replace: true,
-                });
-              }}
-              className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                !selectedArea && !showActiveOnly
-                  ? "bg-blue-600 text-white shadow-md"
-                  : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-              }`}
-            >
-              Tüm Masalar ({tables.length})
-            </button>
+          {/* Server Status */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+            <Server
+              className={`h-4 w-4 ${serverStatus === "connected" ? "text-green-400" : "text-red-400"}`}
+            />
+            <span className="text-sm text-white font-medium">
+              {serverStatus === "connected"
+                ? "Server BAĞLI"
+                : "Server BAĞLI DEĞİL"}
+            </span>
+          </div>
 
-            {areas.length > 0 &&
-              areas
-                .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
-                .map((area) => {
-                  const areaTables = tables.filter((t) => t.area === area);
+          {/* Branch Info */}
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+              <p className="text-sm text-white font-medium">
+                {userData?.branchName || branchData?.name || ""}
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Ana içerik alanı - Sidebar ile birlikte */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Ana içerik */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Masalar içeriği */}
+          {filteredTables.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-8 sm:p-12 text-center shadow-sm border border-gray-200 dark:border-gray-700 mx-4 lg:mx-6">
+              <Utensils className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {showActiveOnly
+                  ? "Aktif masa yok"
+                  : selectedArea
+                    ? `${selectedArea} alanında masa yok`
+                    : "Henüz masa eklenmemiş"}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {showActiveOnly
+                  ? "Şu anda ürün girişi yapılmış aktif masa bulunmuyor"
+                  : selectedArea
+                    ? "Başka bir alan seçin veya ayarlar sayfasından masa ekleyin"
+                    : "Ayarlar sayfasından masa ekleyebilirsiniz"}
+              </p>
+            </div>
+          ) : (
+            <div
+              ref={gridContainerRef}
+              className="flex-1 px-4 lg:px-6 py-6 min-h-0 overflow-hidden flex items-center justify-center"
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${optimalColumns}, ${cardSize}px)`,
+                gap: `${gap}px`,
+                alignContent: "center",
+                justifyContent: "center",
+                maxHeight: containerSize ? `${containerSize.height}px` : "100%",
+              }}
+            >
+              {filteredTables.map((table) => {
+                const order = getTableOrder(table.id!);
+                const isSelectedForMove =
+                  selectedTableForMove?.table.id === table.id;
+                const isTargetTableForMove = targetTableIdForMove === table.id;
+
+                return (
+                  <div
+                    key={table.id}
+                    onMouseDown={() =>
+                      order &&
+                      order.items.length > 0 &&
+                      handleLongPressStart(table, order)
+                    }
+                    onMouseUp={() => handleLongPressEnd(table.id!)}
+                    onMouseLeave={() => handleMouseLeave(table.id!)}
+                    onTouchStart={() =>
+                      order &&
+                      order.items.length > 0 &&
+                      handleLongPressStart(table, order)
+                    }
+                    onTouchEnd={() => handleLongPressEnd(table.id!)}
+                    onTouchCancel={() => handleMouseLeave(table.id!)}
+                    className="relative w-full"
+                    style={{
+                      width: `${cardSize}px`,
+                      height: `${cardSize}px`,
+                    }}
+                  >
+                    <div
+                      onClick={(e) => {
+                        // Eğer long-press sonrası çok kısa süre geçtiyse (200ms), click'i yok say
+                        // Bu, long-press release'den hemen sonra gelen click'i engeller
+                        const timeSinceLongPressEnd =
+                          Date.now() - longPressEndTimeRef.current;
+                        if (
+                          timeSinceLongPressEnd < 200 &&
+                          longPressCompletedRef.current
+                        ) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
+
+                        // Eğer long-press tamamlandıysa ve bu masa seçiliyse, click'i engelle
+                        // (Long-press sonrası release'de zaten seçim kalıyor, burada sadece engelliyoruz)
+                        if (
+                          longPressCompletedRef.current &&
+                          selectedTableForMove &&
+                          selectedTableForMove.table.id === table.id
+                        ) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Şimdi seçimi kaldır (kullanıcı aynı masaya tıkladı)
+                          setSelectedTableForMove(null);
+                          longPressCompletedRef.current = false;
+                          return;
+                        }
+
+                        // Eğer bir masa seçiliyse ve tıklanan masa farklıysa taşıma yap
+                        if (
+                          selectedTableForMove &&
+                          selectedTableForMove.table.id !== table.id
+                        ) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          longPressCompletedRef.current = false;
+                          handleMoveAllItems(table.id!);
+                        } else if (!selectedTableForMove) {
+                          // Normal tıklama - masa detayına git
+                          navigate({
+                            to: "/table/$tableId",
+                            params: { tableId: table.id! },
+                            search: {
+                              area: area || undefined,
+                              activeOnly: activeOnly || false,
+                            },
+                          });
+                        } else {
+                          // Aynı masaya tıklandı - seçimi kaldır
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedTableForMove(null);
+                          longPressCompletedRef.current = false;
+                        }
+                      }}
+                      className={`${
+                        isSelectedForMove
+                          ? "bg-blue-500 dark:bg-blue-600 border-blue-600 dark:border-blue-700 ring-4 ring-blue-300 dark:ring-blue-500"
+                          : getBackgroundColor(
+                              table.status,
+                              resolvedTheme === "dark"
+                            )
+                      } ${getShadowEffect(table.status, order)} rounded-lg p-2 xl:p-3 border-2 ${
+                        isSelectedForMove
+                          ? "border-blue-600 dark:border-blue-700"
+                          : "border-white"
+                      } hover:shadow-xl transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center ${
+                        isSelectedForMove
+                          ? "animate-pulse"
+                          : table.status === "occupied" &&
+                              order &&
+                              order.total > 0
+                            ? "animate-pulse-subtle"
+                            : ""
+                      }`}
+                    >
+                      <div className="text-center space-y-1 xl:space-y-2">
+                        <div
+                          className={`text-lg xl:text-xl sm:text-2xl font-bold ${
+                            isSelectedForMove ||
+                            (table.status === "occupied" &&
+                              order &&
+                              order.total > 0)
+                              ? "text-white"
+                              : "text-gray-900 dark:text-white"
+                          }`}
+                        >
+                          {table.tableNumber}
+                        </div>
+
+                        <div className="flex flex-col items-center gap-0.5 xl:gap-1">
+                          <span
+                            className={`text-[10px] xl:text-xs font-medium ${
+                              isSelectedForMove ||
+                              (table.status === "occupied" &&
+                                order &&
+                                order.total > 0)
+                                ? "text-white"
+                                : "text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            Toplam
+                          </span>
+                          <span
+                            className={`text-xs xl:text-sm sm:text-base font-bold ${
+                              isSelectedForMove
+                                ? "text-white text-base xl:text-lg sm:text-xl"
+                                : order && order.total > 0
+                                  ? table.status === "occupied"
+                                    ? "text-white text-base xl:text-lg sm:text-xl"
+                                    : "text-blue-600 dark:text-blue-400"
+                                  : "text-gray-400 dark:text-gray-500"
+                            }`}
+                          >
+                            {order && order.total > 0
+                              ? `₺${order.total.toFixed(2)}`
+                              : "₺0.00"}
+                          </span>
+                        </div>
+
+                        {(() => {
+                          const firstItem = getFirstAddedItem(order);
+                          return firstItem?.addedAt ? (
+                            <div
+                              className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
+                                isSelectedForMove ||
+                                (table.status === "occupied" &&
+                                  order &&
+                                  order.total > 0)
+                                  ? "text-white font-medium"
+                                  : "text-gray-500 dark:text-gray-400"
+                              }`}
+                            >
+                              <Clock
+                                className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
+                                  isSelectedForMove ||
+                                  (table.status === "occupied" &&
+                                    order &&
+                                    order.total > 0)
+                                    ? "text-white"
+                                    : ""
+                                }`}
+                              />
+                              <span className="truncate">
+                                {getTimeAgo(firstItem.addedAt)}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+
+                      {/* Loading overlay for target table during move */}
+                      {isTargetTableForMove && (
+                        <div className="absolute inset-0 bg-black/50 dark:bg-black/70 rounded-lg flex items-center justify-center z-10">
+                          <Loader2 className="w-8 h-8 text-white animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ Sidebar - Filtre Butonları */}
+        <aside className="w-48 shrink-0 bg-black/20 backdrop-blur-sm overflow-y-auto">
+          <div className="p-3 pt-4">
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setSelectedArea("");
+                  setShowActiveOnly(false);
+                  navigate({
+                    to: "/",
+                    search: { area: "all", activeOnly: false },
+                    replace: true,
+                  });
+                }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                  !selectedArea && !showActiveOnly
+                    ? "bg-white/20 text-white shadow-md"
+                    : "bg-white/10 text-white/80 hover:bg-white/15"
+                }`}
+              >
+                Tüm Masalar
+              </button>
+
+              {areas.length > 0 &&
+                areas
+                  .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
+                  .map((area) => {
+                    return (
+                      <button
+                        key={area}
+                        onClick={() => {
+                          setSelectedArea(area);
+                          setShowActiveOnly(false);
+                          navigate({
+                            to: "/",
+                            search: { area, activeOnly: false },
+                            replace: true,
+                          });
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                          selectedArea === area && !showActiveOnly
+                            ? "bg-white/20 text-white shadow-md"
+                            : "bg-white/10 text-white/80 hover:bg-white/15"
+                        }`}
+                      >
+                        {area}
+                      </button>
+                    );
+                  })}
+
+              <button
+                onClick={() => {
+                  setShowActiveOnly(true);
+                  setSelectedArea("");
+                  navigate({
+                    to: "/",
+                    search: { area: undefined, activeOnly: true },
+                    replace: true,
+                  });
+                }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                  showActiveOnly
+                    ? "bg-white/20 text-white shadow-md"
+                    : "bg-white/10 text-white/80 hover:bg-white/15"
+                }`}
+              >
+                Aktif Masalar
+              </button>
+
+              {areas.includes("Hızlı Satış") &&
+                (() => {
                   return (
                     <button
-                      key={area}
                       onClick={() => {
-                        setSelectedArea(area);
+                        setSelectedArea("Hızlı Satış");
                         setShowActiveOnly(false);
                         navigate({
                           to: "/",
-                          search: { area, activeOnly: false },
+                          search: { area: "Hızlı Satış", activeOnly: false },
                           replace: true,
                         });
                       }}
-                      className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                        selectedArea === area && !showActiveOnly
-                          ? "bg-blue-600 text-white shadow-md"
-                          : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                        selectedArea === "Hızlı Satış" && !showActiveOnly
+                          ? "bg-white/20 text-white shadow-md"
+                          : "bg-white/10 text-white/80 hover:bg-white/15"
                       }`}
                     >
-                      {area} ({areaTables.length})
+                      Hızlı Satış
                     </button>
                   );
-                })}
+                })()}
 
-            <button
-              onClick={() => {
-                setShowActiveOnly(true);
-                setSelectedArea("");
-                navigate({
-                  to: "/",
-                  search: { area: undefined, activeOnly: true },
-                  replace: true,
-                });
-              }}
-              className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                showActiveOnly
-                  ? "bg-green-600 text-white shadow-md"
-                  : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-              }`}
-            >
-              Aktif Masalar ({activeTableCount})
-            </button>
-
-            {areas.includes("Hızlı Satış") &&
-              (() => {
-                const hizliSatisTables = tables.filter(
-                  (t) => t.area === "Hızlı Satış"
-                );
-                return (
-                  <button
-                    onClick={() => {
-                      setSelectedArea("Hızlı Satış");
-                      setShowActiveOnly(false);
-                      navigate({
-                        to: "/",
-                        search: { area: "Hızlı Satış", activeOnly: false },
-                        replace: true,
-                      });
-                    }}
-                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                      selectedArea === "Hızlı Satış" && !showActiveOnly
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                    }`}
-                  >
-                    Hızlı Satış ({hizliSatisTables.length})
-                  </button>
-                );
-              })()}
-
-            {areas.includes("Paket") &&
-              (() => {
-                const paketTables = tables.filter((t) => t.area === "Paket");
-                return (
-                  <button
-                    onClick={() => {
-                      setSelectedArea("Paket");
-                      setShowActiveOnly(false);
-                      navigate({
-                        to: "/",
-                        search: { area: "Paket", activeOnly: false },
-                        replace: true,
-                      });
-                    }}
-                    className={`px-3 xl:px-4 py-1.5 xl:py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
-                      selectedArea === "Paket" && !showActiveOnly
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                    }`}
-                  >
-                    Paket ({paketTables.length})
-                  </button>
-                );
-              })()}
-          </div>
-        </div>
-      </div>
-
-      {filteredTables.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 sm:p-12 text-center shadow-sm border border-gray-200 dark:border-gray-700 mx-4 lg:mx-6">
-          <Utensils className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            {showActiveOnly
-              ? "Aktif masa yok"
-              : selectedArea
-                ? `${selectedArea} alanında masa yok`
-                : "Henüz masa eklenmemiş"}
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {showActiveOnly
-              ? "Şu anda ürün girişi yapılmış aktif masa bulunmuyor"
-              : selectedArea
-                ? "Başka bir alan seçin veya ayarlar sayfasından masa ekleyin"
-                : "Ayarlar sayfasından masa ekleyebilirsiniz"}
-          </p>
-        </div>
-      ) : (
-        <div
-          ref={gridContainerRef}
-          className="flex-1 px-4 lg:px-6 pb-4 min-h-0 overflow-y-auto"
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${optimalColumns}, minmax(0, 1fr))`,
-            gap: `${gap}px`,
-            alignContent: "start",
-          }}
-        >
-          {filteredTables.map((table) => {
-            const order = getTableOrder(table.id!);
-
-            return (
-              <div
-                key={table.id}
-                onMouseDown={() =>
-                  order &&
-                  order.items.length > 0 &&
-                  handleLongPressStart(table, order)
-                }
-                onMouseUp={handleLongPressEnd}
-                onMouseLeave={handleLongPressEnd}
-                onTouchStart={() =>
-                  order &&
-                  order.items.length > 0 &&
-                  handleLongPressStart(table, order)
-                }
-                onTouchEnd={handleLongPressEnd}
-                className="relative w-full"
-                style={{
-                  aspectRatio: "1",
-                  minHeight: "100px",
-                  maxHeight: "100%",
-                }}
-              >
-                <Link
-                  to="/table/$tableId"
-                  params={{ tableId: table.id! }}
-                  search={(prev) => ({
-                    area: prev?.area || undefined,
-                    activeOnly: prev?.activeOnly || false,
-                  })}
-                  className={`${getBackgroundColor(table.status, resolvedTheme === "dark")} ${getShadowEffect(table.status, order)} rounded-lg p-2 xl:p-3 border border-white hover:shadow-xl transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center ${
-                    table.status === "occupied" && order && order.total > 0
-                      ? "animate-pulse-subtle"
-                      : ""
-                  }`}
-                >
-                  <div className="text-center space-y-1 xl:space-y-2">
-                    <div
-                      className={`text-lg xl:text-xl sm:text-2xl font-bold ${
-                        table.status === "occupied" && order && order.total > 0
-                          ? "text-white"
-                          : "text-gray-900 dark:text-white"
+              {areas.includes("Paket") &&
+                (() => {
+                  return (
+                    <button
+                      onClick={() => {
+                        setSelectedArea("Paket");
+                        setShowActiveOnly(false);
+                        navigate({
+                          to: "/",
+                          search: { area: "Paket", activeOnly: false },
+                          replace: true,
+                        });
+                      }}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                        selectedArea === "Paket" && !showActiveOnly
+                          ? "bg-white/20 text-white shadow-md"
+                          : "bg-white/10 text-white/80 hover:bg-white/15"
                       }`}
                     >
-                      {table.tableNumber}
-                    </div>
-
-                    <div className="flex flex-col items-center gap-0.5 xl:gap-1">
-                      <span
-                        className={`text-[10px] xl:text-xs font-medium ${
-                          table.status === "occupied" &&
-                          order &&
-                          order.total > 0
-                            ? "text-white"
-                            : "text-gray-700 dark:text-gray-300"
-                        }`}
-                      >
-                        Toplam
-                      </span>
-                      <span
-                        className={`text-xs xl:text-sm sm:text-base font-bold ${
-                          order && order.total > 0
-                            ? table.status === "occupied"
-                              ? "text-white text-base xl:text-lg sm:text-xl"
-                              : "text-blue-600 dark:text-blue-400"
-                            : "text-gray-400 dark:text-gray-500"
-                        }`}
-                      >
-                        {order && order.total > 0
-                          ? `₺${order.total.toFixed(2)}`
-                          : "₺0.00"}
-                      </span>
-                    </div>
-
-                    {(() => {
-                      const firstItem = getFirstAddedItem(order);
-                      return firstItem?.addedAt ? (
-                        <div
-                          className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
-                            table.status === "occupied" &&
-                            order &&
-                            order.total > 0
-                              ? "text-white font-medium"
-                              : "text-gray-500 dark:text-gray-400"
-                          }`}
-                        >
-                          <Clock
-                            className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
-                              table.status === "occupied" &&
-                              order &&
-                              order.total > 0
-                                ? "text-white"
-                                : ""
-                            }`}
-                          />
-                          <span className="truncate">
-                            {getTimeAgo(firstItem.addedAt)}
-                          </span>
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {showMoveModal &&
-        sourceTable &&
-        sourceOrder &&
-        (() => {
-          const areas = Array.from(
-            new Set(availableTablesForMove.map((t) => t.area).filter(Boolean))
-          ).sort();
-          const tablesByArea = availableTablesForMove.filter(
-            (t) => t.area === moveModalArea
-          );
-
-          return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  {isMovingTable && (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  )}
-                  Masa Taşı
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  <strong>{sourceTable.tableNumber}</strong> masasındaki tüm
-                  ürünler ({sourceOrder.items.length} ürün) taşınacak. Hangi
-                  masaya taşımak istersiniz?
-                </p>
-
-                <div className="flex-1 flex flex-col min-h-0">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Alan Seçin
-                    </label>
-                    <div className="flex gap-2 flex-wrap">
-                      {areas.map((area) => (
-                        <Button
-                          key={area}
-                          type="button"
-                          variant={
-                            moveModalArea === area ? "default" : "outline"
-                          }
-                          onClick={() => setMoveModalArea(area)}
-                          className={`${
-                            moveModalArea === area
-                              ? "bg-blue-600 text-white hover:bg-blue-700"
-                              : "bg-white hover:bg-gray-50"
-                          }`}
-                        >
-                          {area}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Masa Seçin
-                    </label>
-                    {tablesByArea.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
-                        Bu alanda başka masa bulunamadı
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {tablesByArea.map((table) => (
-                          <button
-                            key={table.id}
-                            onClick={() => handleMoveAllItems(table.id!)}
-                            disabled={isMovingTable}
-                            className="text-left bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <div className="flex flex-col">
-                              <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                                {table.tableNumber}
-                              </div>
-                              <div
-                                className={`text-xs px-2 py-1 rounded inline-block w-fit ${
-                                  table.status === "available"
-                                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                                    : table.status === "occupied"
-                                      ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
-                                      : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
-                                }`}
-                              >
-                                {table.status === "available"
-                                  ? "Müsait"
-                                  : table.status === "occupied"
-                                    ? "Dolu"
-                                    : table.status === "reserved"
-                                      ? "Rezerve"
-                                      : "Temizlik"}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowMoveModal(false);
-                      setSourceTable(null);
-                      setSourceOrder(null);
-                      setMoveModalArea("");
-                    }}
-                    className="flex-1"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    İptal
-                  </Button>
-                </div>
-              </div>
+                      Paket
+                    </button>
+                  );
+                })()}
             </div>
-          );
-        })()}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -264,69 +264,72 @@ function TableHistoryContent() {
                 </p>
               </div>
             ) : (
-          <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[calc(100vh-200px)] overflow-y-auto">
             {bills.map((bill) => (
                   <div
                 key={bill.id}
                 onClick={() => setSelectedBill(bill)}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                   >
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2 flex-1">
-                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
-                      <Receipt className="h-5 w-5" />
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <div className="p-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
+                      <Receipt className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-bold text-gray-900 dark:text-white text-sm">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p className="font-bold text-gray-900 dark:text-white text-xs">
                           {bill.billNumber}
                         </p>
-                        <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
                           Masa {bill.tableNumber}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">
                         {formatDate(bill.createdAt)}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-lg text-gray-900 dark:text-white">
-                      ₺{bill.total.toFixed(2)}
+                    <p className="font-bold text-base text-gray-900 dark:text-white">
+                      ₺{(
+                        bill.items.reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0) - 
+                        (bill.discount || 0)
+                      ).toFixed(2)}
                     </p>
                     {bill.discount && bill.discount > 0 && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 line-through">
-                        ₺{bill.subtotal.toFixed(2)}
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 line-through">
+                        ₺{bill.items.reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0).toFixed(2)}
                       </p>
                     )}
                   </div>
                 </div>
                 
                 {/* Ürünler */}
-                <div className="mb-3 space-y-1">
+                <div className="mb-1.5 space-y-0.5">
                   {bill.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
+                    <div key={idx} className="flex items-center justify-between text-[10px]">
                       <span className="text-gray-700 dark:text-gray-300">
                         {item.menuName} <span className="text-gray-500 dark:text-gray-400">x{item.quantity}</span>
                       </span>
                       <span className="text-gray-900 dark:text-white font-medium">
-                        ₺{item.subtotal.toFixed(2)}
+                        ₺{(item.menuPrice * item.quantity).toFixed(2)}
                       </span>
                     </div>
                   ))}
                 </div>
 
                 {/* Ödemeler */}
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Ödemeler:</p>
-                  <div className="space-y-1">
+                <div className="pt-1 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-[10px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Ödemeler:</p>
+                  <div className="space-y-0.5">
                     {bill.payments.map((payment, idx) => {
                       const paymentMethodName = payment.method === "cash" ? "Nakit" : 
                                                  payment.method === "card" ? "Kart" : 
                                                  payment.method === "mealCard" ? "Yemek Kartı" : 
                                                  payment.method;
                       return (
-                        <div key={idx} className="flex items-center justify-between text-xs">
+                        <div key={idx} className="flex items-center justify-between text-[10px]">
                           <span className="text-gray-600 dark:text-gray-400">
                             {paymentMethodName}
                           </span>
@@ -341,8 +344,8 @@ function TableHistoryContent() {
 
                 {/* İndirim */}
                 {bill.discount && bill.discount > 0 && (
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
-                    <div className="flex items-center justify-between text-xs">
+                  <div className="pt-1 border-t border-gray-200 dark:border-gray-700 mt-1">
+                    <div className="flex items-center justify-between text-[10px]">
                       <span className="text-gray-600 dark:text-gray-400">İndirim:</span>
                       <span className="text-red-600 dark:text-red-400 font-medium">
                         -₺{bill.discount.toFixed(2)}
@@ -443,7 +446,7 @@ function TableHistoryContent() {
                           {item.quantity} adet
                         </p>
                         <p className="font-semibold text-gray-900 dark:text-white">
-                          ₺{item.subtotal.toFixed(2)}
+                          ₺{(item.menuPrice * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -457,7 +460,7 @@ function TableHistoryContent() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Ara Toplam</span>
                     <span className="text-gray-900 dark:text-white">
-                      ₺{selectedBill.subtotal.toFixed(2)}
+                      ₺{selectedBill.items.reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0).toFixed(2)}
                     </span>
                   </div>
                   {selectedBill.discount && selectedBill.discount > 0 && (
@@ -471,7 +474,10 @@ function TableHistoryContent() {
                   <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
                     <span className="text-lg font-bold text-gray-900 dark:text-white">TOPLAM</span>
                     <span className="text-lg font-bold text-gray-900 dark:text-white">
-                      ₺{selectedBill.total.toFixed(2)}
+                      ₺{(
+                        selectedBill.items.reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0) - 
+                        (selectedBill.discount || 0)
+                      ).toFixed(2)}
                     </span>
           </div>
         </div>

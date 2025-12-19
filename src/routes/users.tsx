@@ -36,7 +36,7 @@ function UsersManagement() {
   );
 }
 
-function UsersManagementContent() {
+export function UsersManagementContent() {
   const { userData, companyId, branchId } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);

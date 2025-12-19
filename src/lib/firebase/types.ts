@@ -110,6 +110,7 @@ export interface User {
   username?: string; // Username for login (for staff users)
   passwordHash?: string; // Hashed password (for staff users)
   assignedBranchId?: string; // Assigned branch ID for staff users
+  branchName?: string; // Branch name for staff users
   allowedIp?: string; // İzin verilen WiFi IP adresi (sadece staff kullanıcılar için)
   isActive: boolean;
   lastLoginAt?: Date;

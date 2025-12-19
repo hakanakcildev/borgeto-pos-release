@@ -42,7 +42,7 @@ interface PrinterDevice {
   paperType?: string; // Kağıt tipi (örn: "80mm", "58mm", "110mm")
 }
 
-function PrintersContent() {
+export function PrintersContent() {
   const { userData, companyId, branchId } = useAuth();
   const [printers, setPrinters] = useState<PrinterDevice[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

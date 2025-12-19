@@ -30,11 +30,12 @@ const convertToFirestore = (data: Partial<PaymentMethodConfig>) => {
 
   return {
     ...filteredData,
-    createdAt: filteredData.createdAt && filteredData.createdAt instanceof Date
-      ? Timestamp.fromDate(filteredData.createdAt)
-      : filteredData.createdAt && typeof filteredData.createdAt === 'string'
-      ? Timestamp.fromDate(new Date(filteredData.createdAt))
-      : Timestamp.now(),
+    createdAt:
+      filteredData.createdAt && filteredData.createdAt instanceof Date
+        ? Timestamp.fromDate(filteredData.createdAt)
+        : filteredData.createdAt && typeof filteredData.createdAt === "string"
+          ? Timestamp.fromDate(new Date(filteredData.createdAt))
+          : Timestamp.now(),
     updatedAt: Timestamp.now(),
   };
 };
@@ -68,14 +69,21 @@ export async function getPaymentMethodsByCompany(
       methods = methods.filter((m) => m.branchId === branchId);
     } else {
       // BranchId yoksa, branchId'si null veya undefined olanları al
-      methods = methods.filter((m) => !m.branchId || m.branchId === null || m.branchId === undefined);
+      methods = methods.filter(
+        (m) => !m.branchId || m.branchId === null || m.branchId === undefined
+      );
     }
 
     // Duplicate kontrolü: Aynı code'a sahip olanları filtrele (en son eklenen kalır)
     const uniqueMethods = new Map<string, PaymentMethodConfig>();
     methods.forEach((method) => {
       const key = method.code;
-      if (!uniqueMethods.has(key) || (method.createdAt && uniqueMethods.get(key)!.createdAt && method.createdAt > uniqueMethods.get(key)!.createdAt)) {
+      if (
+        !uniqueMethods.has(key) ||
+        (method.createdAt &&
+          uniqueMethods.get(key)!.createdAt &&
+          method.createdAt > uniqueMethods.get(key)!.createdAt)
+      ) {
         uniqueMethods.set(key, method);
       }
     });
@@ -117,13 +125,13 @@ async function checkPaymentMethodExists(
     }
 
     const snapshot = await getDocs(q);
-    
+
     // BranchId yoksa, sadece branchId'si null/undefined olanları say
     if (!branchId) {
       const methods = snapshot.docs.map((doc) => doc.data());
       return methods.some((m) => !m.branchId || m.branchId === null);
     }
-    
+
     return snapshot.size > 0;
   } catch (error) {
     return false;
@@ -217,14 +225,103 @@ export async function createDefaultPaymentMethods(
       {
         companyId,
         branchId,
-        code: "mealCard",
-        name: "Yemek Kartı",
-        color: "#9333ea", // purple-600
+        code: "online",
+        name: "Online",
+        color: "#0ea5e9", // sky-500
         isDefault: true,
         isActive: true,
         order: 3,
       },
+      {
+        companyId,
+        branchId,
+        code: "pluxee",
+        name: "Pluexee",
+        color: "#8b5cf6", // violet-500
+        isDefault: true,
+        isActive: true,
+        order: 4,
+      },
+      {
+        companyId,
+        branchId,
+        code: "ticket",
+        name: "Ticket",
+        color: "#f59e0b", // amber-500
+        isDefault: true,
+        isActive: true,
+        order: 5,
+      },
+      {
+        companyId,
+        branchId,
+        code: "multinet",
+        name: "Multinet",
+        color: "#ec4899", // pink-500
+        isDefault: true,
+        isActive: true,
+        order: 6,
+      },
+      {
+        companyId,
+        branchId,
+        code: "setcard",
+        name: "SetCard",
+        color: "#10b981", // emerald-500
+        isDefault: true,
+        isActive: true,
+        order: 7,
+      },
+      {
+        companyId,
+        branchId,
+        code: "metropol",
+        name: "Metropol",
+        color: "#6366f1", // indigo-500
+        isDefault: true,
+        isActive: true,
+        order: 8,
+      },
     ];
+
+    // mealCard (Yemek Kartı) kayıtlarını kaldır
+    try {
+      let q = query(
+        collection(db, COLLECTION_NAME),
+        where("companyId", "==", companyId),
+        where("code", "==", "mealCard")
+      );
+
+      if (branchId) {
+        q = query(
+          collection(db, COLLECTION_NAME),
+          where("companyId", "==", companyId),
+          where("branchId", "==", branchId),
+          where("code", "==", "mealCard")
+        );
+      }
+
+      const mealCardSnapshot = await getDocs(q);
+      const mealCardDocs = mealCardSnapshot.docs.filter((doc) => {
+        const data = doc.data();
+        if (branchId) {
+          return data.branchId === branchId;
+        }
+        return (
+          !data.branchId ||
+          data.branchId === null ||
+          data.branchId === undefined
+        );
+      });
+
+      // Tüm mealCard kayıtlarını sil
+      for (const doc of mealCardDocs) {
+        await deleteDoc(doc.ref);
+      }
+    } catch (error) {
+      // mealCard silme hatası kritik değil, devam et
+      console.error("Error removing mealCard:", error);
+    }
 
     // Her standart ödeme yöntemi için ayrı ayrı kontrol et ve yoksa ekle
     for (const method of defaultMethods) {
@@ -241,4 +338,3 @@ export async function createDefaultPaymentMethods(
     throw error;
   }
 }
-

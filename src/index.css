@@ -5,7 +5,8 @@
 
 /* Subtle pulse animation for occupied tables */
 @keyframes pulse-subtle {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -127,36 +128,51 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
   }
+
+  /* Input ve textarea alanlarında seçime izin ver */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Responsive scaling for smaller screens */
   @media (max-width: 1366px) {
     html {
       font-size: 14px;
     }
   }
-  
+
   @media (max-width: 1280px) {
     html {
       font-size: 13px;
     }
   }
-  
+
   @media (max-width: 1024px) {
     html {
       font-size: 12px;
     }
   }
-  
+
   @media (max-width: 768px) {
     html {
       font-size: 11px;
     }
   }
-  
+
   @media (min-width: 1920px) {
     html {
       font-size: 16px;
