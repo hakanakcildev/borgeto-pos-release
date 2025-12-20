@@ -4929,31 +4929,35 @@ function TableDetailContent() {
                 return null;
               }
 
-              // Ödenen ürünleri hesapla (paidItems varsa)
-              const paidItemsMap = new Map<string, number>();
-              order.payments?.forEach((payment) => {
-                payment.paidItems?.forEach((paidItem) => {
-                  const current = paidItemsMap.get(paidItem.menuId) || 0;
-                  paidItemsMap.set(paidItem.menuId, current + paidItem.quantity);
-                });
-              });
-
               // Ödenmemiş ürünlerin toplam tutarını hesapla
-              let unpaidTotalAmount = 0;
+              // NOT: Ödeme yapıldığında ödenen ürünler order.items'dan kaldırılıyor veya miktarları azaltılıyor
+              // Bu yüzden order.items zaten sadece ödenmemiş ürünleri içeriyor
+              // Direkt olarak order.items içindeki aktif ürünlerin toplamını hesaplamalıyız
+              let unpaidSubtotal = 0;
               let unpaidOriginalAmount = 0;
               
               activeItems.forEach((item) => {
-                const paidQty = paidItemsMap.get(item.menuId) || 0;
-                const unpaidQty = item.quantity - paidQty;
-                
-                if (unpaidQty > 0 && item.quantity > 0) {
-                  // Ödenmemiş miktarın orijinal fiyatını hesapla
-                  unpaidOriginalAmount += item.menuPrice * unpaidQty;
-                  // Ödenmemiş miktarın subtotal'ını hesapla (indirim uygulanmış)
-                  const itemSubtotalPerUnit = item.subtotal / item.quantity;
-                  unpaidTotalAmount += itemSubtotalPerUnit * unpaidQty;
-                }
+                // order.items içindeki tüm aktif ürünler zaten ödenmemiş ürünlerdir
+                // Çünkü ödeme yapıldığında ödenen ürünler kaldırılıyor veya miktarları azaltılıyor
+                unpaidOriginalAmount += item.menuPrice * item.quantity;
+                unpaidSubtotal += item.subtotal;
               });
+              
+              // Order'da genel bir indirim varsa (order.discount), bunu da dikkate al
+              // Ancak bu indirim tüm sipariş için olabilir, kalan ürünler için orantılı olarak uygulanmalı
+              // Basit yaklaşım: order.total kullan (zaten güncel olmalı)
+              // Ama order.total güncel olmayabilir, o yüzden manuel hesaplayalım
+              const orderDiscount = order.discount || 0;
+              const orderSubtotal = (order.items || []).reduce((sum, item) => sum + item.subtotal, 0);
+              
+              // Eğer order'da indirim varsa ve orderSubtotal > 0 ise, indirimi orantılı olarak uygula
+              let unpaidTotalAmount = unpaidSubtotal;
+              if (orderDiscount > 0 && orderSubtotal > 0) {
+                // İndirim oranını hesapla
+                const discountRatio = orderDiscount / orderSubtotal;
+                // Kalan ürünlere orantılı indirim uygula
+                unpaidTotalAmount = Math.max(0, unpaidSubtotal - (unpaidSubtotal * discountRatio));
+              }
 
               // Eğer ödenmemiş tutar yoksa, buton ve toplam gösterilmesin
               if (unpaidTotalAmount <= 0) {
@@ -5128,8 +5132,12 @@ function TableDetailContent() {
           const orderListTotalWithDiscount = order.total || orderListTotal - orderDiscount;
 
           // BASIT: Seçili ürünler varsa, sadece seçili ürünlerin toplamını al, indirim uygula, göster
+          // Seçili ürün kontrolü: selectedQuantities içinde seçili miktar olmalı
+          const hasSelectedItems = pendingPaymentItems.length > 0 && 
+            Array.from(selectedQuantities.values()).some(qty => qty > 0);
+          
           let discount = 0;
-          if (pendingPaymentItems.length > 0) {
+          if (hasSelectedItems) {
             // Seçili ürünlerin toplam fiyatını hesapla (orijinal fiyat)
             originalTotal = pendingPaymentItems.reduce((sum, paymentItem) => {
               const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
