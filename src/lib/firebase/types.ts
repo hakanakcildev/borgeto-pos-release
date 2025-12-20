@@ -202,7 +202,8 @@ export interface Payment {
     menuId: string;
     menuName: string;
     quantity: number;
-    subtotal: number;
+    menuPrice: number; // Orijinal birim fiyat (indirimsiz)
+    subtotal: number; // İndirimli toplam fiyat
   }>; // Ödenen ürünler (kısmi ödeme için)
 }
 

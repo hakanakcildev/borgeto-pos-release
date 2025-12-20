@@ -1672,6 +1672,7 @@ function TableDetailContent() {
               menuId: item.menuId,
               menuName: item.menuName,
               quantity,
+              menuPrice: item.menuPrice, // Orijinal birim fiyat (indirimsiz)
               subtotal,
             })
           );
@@ -1690,22 +1691,32 @@ function TableDetailContent() {
 
         // İndirim hesapla
         let discountAmount = 0;
-        let discountBaseAmount = 0; // İndirim hesaplanacak tutar (seçili ürünler varsa onların toplamı, yoksa remaining)
+        let discountBaseAmount = 0; // İndirim hesaplanacak tutar (seçili ürünler varsa onların toplamı, yoksa tüm masanın toplamı)
         
-        // Eğer seçili ürünler varsa, indirimi seçili ürünlerin toplamı üzerinden hesapla
-        if (itemsToUse.size > 0) {
-          // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
-          const selectedItemsArray = Array.from(itemsToUse);
-          selectedItemsArray.forEach((index) => {
-            const item = order.items[index];
-            if (item) {
-              // Orijinal fiyatları kullan
-              discountBaseAmount += item.menuPrice * item.quantity;
+        // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlerin toplam fiyatına uygula
+        // ÖNEMLİ: Sadece pendingItemsToUse (seçili ürünler listesi) kullan, order.items kullanma
+        if (pendingItemsToUse.length > 0) {
+          // Seçili ürünlerin toplam fiyatını hesapla
+          pendingItemsToUse.forEach((paymentItem) => {
+            // Eğer quantitiesToUse varsa, sadece seçilen miktar kadar hesapla
+            if (quantitiesToUse.size > 0) {
+              const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+              if (selectedQty > 0) {
+                // Seçilen miktar * birim fiyat
+                discountBaseAmount += selectedQty * paymentItem.menuPrice;
+              }
+            } else {
+              // Miktar seçimi yoksa, tüm seçili ürünün fiyatını ekle
+              discountBaseAmount += paymentItem.totalQuantity * paymentItem.menuPrice;
             }
           });
         } else {
-          // Seçili ürün yoksa, tüm siparişin toplamını kullan
-          discountBaseAmount = remaining;
+          // Seçili ürün yoksa, tüm masadaki ürünlerin toplam fiyatına indirim uygula
+          const orderSubtotal = (order.items || []).reduce(
+            (sum, item) => sum + (item.menuPrice * item.quantity),
+            0
+          );
+          discountBaseAmount = orderSubtotal;
         }
 
         // İndirim miktarını hesapla
@@ -1719,27 +1730,144 @@ function TableDetailContent() {
         // İndirim varsa uygula
         if (discountAmount > 0) {
           // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlere uygula
-          if (itemsToUse.size > 0) {
-            const selectedItemsArray = Array.from(itemsToUse);
-            
-            // İndirimi seçili ürünlere orantılı olarak uygula
+          // ÖNEMLİ: Sadece pendingItemsToUse (seçili ürünler listesi) kullan
+          if (pendingItemsToUse.length > 0) {
+            // Seçili ürünlerin toplam fiyatına direkt indirim uygula
+            // discountBaseAmount zaten sadece seçili ürünlerin toplam fiyatı
+            // discountAmount zaten bu toplam üzerinden hesaplanmış indirim miktarı
+            // Şimdi bu indirimi seçili ürünlere orantılı olarak dağıt
             const discountRatio = discountBaseAmount > 0 
               ? discountAmount / discountBaseAmount 
               : 0;
 
             // Seçili ürünlerin subtotal değerlerini güncelle
             const updatedItems = [...order.items];
-            selectedItemsArray.forEach((index) => {
-              const item = updatedItems[index];
-              if (item) {
-                const originalSubtotal = item.menuPrice * item.quantity;
-                const itemDiscount = originalSubtotal * discountRatio;
-                updatedItems[index] = {
-                  ...item,
-                  subtotal: Math.max(0, originalSubtotal - itemDiscount),
-                };
+            
+            // ÖNEMLİ: Sadece pendingItemsToUse içindeki ürünlere indirim uygula
+            if (quantitiesToUse.size > 0) {
+              // Miktar seçimi yapılmışsa, sadece seçilen miktarlara indirim uygula
+              pendingItemsToUse.forEach((paymentItem) => {
+                const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+                if (selectedQty > 0) {
+                  // Bu ürün için seçilen miktarın toplam fiyatı
+                  const selectedTotal = selectedQty * paymentItem.menuPrice;
+                  // Bu ürün için indirim miktarı (orantılı)
+                  const itemDiscount = selectedTotal * discountRatio;
+                  
+                  // Bu ürünün indices'lerine indirimi uygula
+                  let remainingQty = selectedQty;
+                  for (const index of paymentItem.indices) {
+                    if (remainingQty <= 0) break;
+                    if (!itemsToUse.has(index)) continue;
+                    const item = updatedItems[index];
+                    if (!item || item.menuId !== paymentItem.menuId) continue;
+                    
+                    const qtyToUse = Math.min(item.quantity, remainingQty);
+                    // Bu index'teki ürün için indirim miktarı (orantılı)
+                    // selectedTotal bu ürün için seçilen miktarın toplam fiyatı
+                    const indexDiscount = (qtyToUse * item.menuPrice / selectedTotal) * itemDiscount;
+                    
+                    // Sadece seçilen miktar kadar indirim uygula
+                    // Eğer ürünün tamamı seçildiyse, subtotal'ı güncelle
+                    // Eğer kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
+                    if (qtyToUse === item.quantity) {
+                      // Tüm ürün seçildiyse, orijinal fiyattan indirim düş
+                      const originalTotal = item.menuPrice * item.quantity;
+                      updatedItems[index] = {
+                        ...item,
+                        subtotal: Math.max(0, originalTotal - indexDiscount),
+                      };
+                    } else {
+                      // Kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
+                      const discountPerUnit = indexDiscount / qtyToUse;
+                      const discountedPricePerUnit = item.menuPrice - discountPerUnit;
+                      // Seçilen kısım indirimli, seçilmeyen kısım normal fiyat
+                      updatedItems[index] = {
+                        ...item,
+                        subtotal: (discountedPricePerUnit * qtyToUse) + (item.menuPrice * (item.quantity - qtyToUse)),
+                      };
+                    }
+                    
+                    remainingQty -= qtyToUse;
+                  }
+                }
+              });
+            } else if (pendingPaymentQuantity) {
+              // Tek ürün için miktar seçildiyse
+              let remainingQty = pendingPaymentQuantity.quantity;
+              for (const index of pendingPaymentQuantity.indices) {
+                if (remainingQty <= 0) break;
+                if (!itemsToUse.has(index)) continue;
+                const item = updatedItems[index];
+                if (!item) continue;
+                
+                const qtyToUse = Math.min(item.quantity, remainingQty);
+                // Orijinal fiyat üzerinden indirim hesapla
+                const originalSubtotalForQty = qtyToUse * item.menuPrice;
+                const itemDiscount = originalSubtotalForQty * discountRatio;
+                
+                if (qtyToUse === item.quantity) {
+                  // Tüm ürün seçildiyse, orijinal fiyattan indirim düş
+                  const originalTotal = item.menuPrice * item.quantity;
+                  updatedItems[index] = {
+                    ...item,
+                    subtotal: Math.max(0, originalTotal - itemDiscount),
+                  };
+                } else {
+                  // Kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
+                  const discountPerUnit = itemDiscount / qtyToUse;
+                  const discountedPricePerUnit = item.menuPrice - discountPerUnit;
+                  updatedItems[index] = {
+                    ...item,
+                    subtotal: (discountedPricePerUnit * qtyToUse) + (item.menuPrice * (item.quantity - qtyToUse)),
+                  };
+                }
+                
+                remainingQty -= qtyToUse;
               }
-            });
+              
+              // Diğer seçili ürünleri ekle (pendingPaymentQuantity.indices içinde olmayan)
+              const pendingIndicesSet = new Set(pendingPaymentQuantity.indices);
+              const selectedItemsArray = Array.from(itemsToUse);
+              selectedItemsArray.forEach((index) => {
+                if (!pendingIndicesSet.has(index)) {
+                  const item = updatedItems[index];
+                  if (item) {
+                    const originalSubtotal = item.menuPrice * item.quantity;
+                    const itemDiscount = originalSubtotal * discountRatio;
+                    updatedItems[index] = {
+                      ...item,
+                      subtotal: Math.max(0, originalSubtotal - itemDiscount),
+                    };
+                  }
+                }
+              });
+            } else {
+              // Hiç miktar seçilmediyse, tüm seçili ürünlerin tamamına indirim uygula
+              // ÖNEMLİ: Sadece pendingItemsToUse içindeki ürünlere uygula
+              pendingItemsToUse.forEach((paymentItem) => {
+                // Bu ürün için toplam fiyat
+                const itemTotal = paymentItem.totalQuantity * paymentItem.menuPrice;
+                // Bu ürün için indirim miktarı (orantılı)
+                const itemDiscount = itemTotal * discountRatio;
+                
+                // Bu ürünün indices'lerine indirimi uygula
+                for (const index of paymentItem.indices) {
+                  if (!itemsToUse.has(index)) continue;
+                  const item = updatedItems[index];
+                  if (!item || item.menuId !== paymentItem.menuId) continue;
+                  
+                  // Bu index'teki ürün için indirim miktarı (orantılı)
+                  const indexDiscount = (item.menuPrice * item.quantity / itemTotal) * itemDiscount;
+                  
+                  const originalSubtotal = item.menuPrice * item.quantity;
+                  updatedItems[index] = {
+                    ...item,
+                    subtotal: Math.max(0, originalSubtotal - indexDiscount),
+                  };
+                }
+              });
+            }
 
             // Sipariş toplamlarını güncelle
             // order.subtotal her zaman orijinal fiyatların toplamı olmalı
@@ -3984,7 +4112,7 @@ function TableDetailContent() {
                 // Ödenen ürünler order.items'dan kaldırılmış olabilir, bu yüzden paidItems'dan direkt al
                 const paidItemsMap = new Map<
                   string,
-                  { menuName: string; quantity: number; subtotal: number }
+                  { menuName: string; quantity: number; menuPrice: number; subtotal: number; originalTotal: number }
                 >();
                 order.payments?.forEach((payment) => {
                   payment.paidItems?.forEach((paidItem) => {
@@ -3993,11 +4121,19 @@ function TableDetailContent() {
                     if (existing) {
                       existing.quantity += paidItem.quantity;
                       existing.subtotal += paidItem.subtotal;
+                      // Orijinal toplam fiyatı hesapla (menuPrice * quantity)
+                      // menuPrice aynı kalmalı, sadece quantity artıyor
+                      existing.originalTotal = existing.menuPrice * existing.quantity;
                     } else {
+                      // İlk kez ekleniyor, menuPrice'ı kaydet
+                      const menuPrice = paidItem.menuPrice || 0;
+                      const originalTotal = menuPrice * paidItem.quantity;
                       paidItemsMap.set(paidItem.menuId, {
                         menuName: paidItem.menuName,
                         quantity: paidItem.quantity,
+                        menuPrice: menuPrice,
                         subtotal: paidItem.subtotal,
+                        originalTotal: originalTotal,
                       });
                     }
                   });
@@ -4052,29 +4188,36 @@ function TableDetailContent() {
                           Ödenen Ürünler
                         </div>
                         <div className="space-y-3">
-                          {Array.from(paidItemsMap.values()).map((item) => (
-                            <div
-                              key={item.menuName}
-                              className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-base font-semibold text-green-900 dark:text-green-200 truncate">
-                                    {item.menuName}
-                                  </p>
-                                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                                    {item.quantity} adet × ₺
-                                    {(item.subtotal / item.quantity)
-                                      .toFixed(2)
-                                      .replace(".", ",")}
-                                  </p>
+                          {Array.from(paidItemsMap.values()).map((item) => {
+                            const hasDiscount = item.originalTotal > item.subtotal;
+                            return (
+                              <div
+                                key={item.menuName}
+                                className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-base font-semibold text-green-900 dark:text-green-200 truncate">
+                                      {item.menuName}
+                                    </p>
+                                    <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                                      {item.quantity} adet
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col items-end ml-2">
+                                    {hasDiscount && (
+                                      <span className="text-sm text-gray-500 dark:text-gray-400 line-through mb-1">
+                                        ₺{item.originalTotal.toFixed(2).replace(".", ",")}
+                                      </span>
+                                    )}
+                                    <span className="font-bold text-base text-green-900 dark:text-green-200">
+                                      ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                                    </span>
+                                  </div>
                                 </div>
-                                <span className="font-bold text-base text-green-900 dark:text-green-200 ml-2">
-                                  ₺{item.subtotal.toFixed(2).replace(".", ",")}
-                                </span>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -4795,33 +4938,26 @@ function TableDetailContent() {
                 });
               });
 
-              // Aktif ürünlerden ödenmemiş olanları bul
-              const unpaidItems = activeItems.filter((item) => {
+              // Ödenmemiş ürünlerin toplam tutarını hesapla
+              let unpaidTotalAmount = 0;
+              let unpaidOriginalAmount = 0;
+              
+              activeItems.forEach((item) => {
                 const paidQty = paidItemsMap.get(item.menuId) || 0;
-                // Eğer bu ürün için ödeme yapılmamışsa veya kısmi ödeme yapılmışsa
-                // (yani ödenen miktar, toplam miktardan azsa) ödenmemiş sayılır
-                return paidQty < item.quantity;
+                const unpaidQty = item.quantity - paidQty;
+                
+                if (unpaidQty > 0 && item.quantity > 0) {
+                  // Ödenmemiş miktarın orijinal fiyatını hesapla
+                  unpaidOriginalAmount += item.menuPrice * unpaidQty;
+                  // Ödenmemiş miktarın subtotal'ını hesapla (indirim uygulanmış)
+                  const itemSubtotalPerUnit = item.subtotal / item.quantity;
+                  unpaidTotalAmount += itemSubtotalPerUnit * unpaidQty;
+                }
               });
 
-              // Eğer ödenmemiş ürün yoksa ve genel ödeme varsa kontrol et
-              if (unpaidItems.length === 0) {
-                // Tüm ödemelerin toplamını hesapla
-                const totalPaid = (order.payments || []).reduce(
-                  (sum, payment) => sum + payment.amount,
-                  0
-                );
-                const orderSubtotal = activeItems.reduce(
-                  (sum, item) => sum + item.subtotal,
-                  0
-                );
-                const orderDiscount = order.discount || 0;
-                const orderTotal = order.total || orderSubtotal - orderDiscount;
-                const isFullyPaid = totalPaid >= orderTotal && orderTotal > 0;
-
-                // Eğer tam ödeme alındıysa toplam ve buton gösterilmesin
-                if (isFullyPaid) {
-                  return null;
-                }
+              // Eğer ödenmemiş tutar yoksa, buton ve toplam gösterilmesin
+              if (unpaidTotalAmount <= 0) {
+                return null;
               }
 
               return (
@@ -4832,24 +4968,17 @@ function TableDetailContent() {
                       TOPLAM
                     </span>
                     <div className="flex flex-col items-end">
-                      {order.discount && order.discount > 0 ? (
+                      {unpaidOriginalAmount > unpaidTotalAmount ? (
                         <>
                           <span className="text-sm font-medium text-gray-500 dark:text-gray-400 line-through">
                             ₺
-                            {order.items
-                              .reduce((sum, item) => sum + (item.menuPrice * item.quantity), 0)
+                            {unpaidOriginalAmount
                               .toFixed(2)
                               .replace(".", ",")}
                           </span>
                           <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
                             ₺
-                            {(
-                              order.total ||
-                              order.items.reduce(
-                                (sum, item) => sum + item.subtotal,
-                                0
-                              )
-                            )
+                            {unpaidTotalAmount
                               .toFixed(2)
                               .replace(".", ",")}
                           </span>
@@ -4857,8 +4986,7 @@ function TableDetailContent() {
                       ) : (
                         <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
                           ₺
-                          {order.items
-                            .reduce((sum, item) => sum + item.subtotal, 0)
+                          {unpaidTotalAmount
                             .toFixed(2)
                             .replace(".", ",")}
                         </span>
@@ -4999,69 +5127,56 @@ function TableDetailContent() {
           const orderDiscount = order.discount || 0;
           const orderListTotalWithDiscount = order.total || orderListTotal - orderDiscount;
 
+          // BASIT: Seçili ürünler varsa, sadece seçili ürünlerin toplamını al, indirim uygula, göster
+          let discount = 0;
           if (pendingPaymentItems.length > 0) {
-            // Seçili miktarlara göre hesapla (sadece seçili miktar > 0 olanlar)
-            // ÖNEMLİ: Seçili ürünlere indirim uygulanmışsa, subtotal (indirimli fiyat) kullanılmalı!
-            let selectedSubtotalOriginal = 0; // Orijinal fiyat (indirim öncesi)
-            let selectedSubtotalDiscounted = 0; // İndirimli fiyat (subtotal)
-            
-            pendingPaymentItems.forEach((paymentItem) => {
-              const selectedQty =
-                selectedQuantities.get(paymentItem.menuId) || 0;
+            // Seçili ürünlerin toplam fiyatını hesapla (orijinal fiyat)
+            originalTotal = pendingPaymentItems.reduce((sum, paymentItem) => {
+              const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
               if (selectedQty > 0) {
-                // Seçili ürünlerin order.items içindeki gerçek değerlerini bul
-                let remainingQty = selectedQty;
-                paymentItem.indices.forEach((index) => {
-                  if (remainingQty <= 0) return;
-                  const item = order.items[index];
-                  if (!item || item.menuId !== paymentItem.menuId) return;
-                  
-                  const qtyToUse = Math.min(item.quantity, remainingQty);
-                  // Orijinal fiyat (indirim öncesi)
-                  selectedSubtotalOriginal += qtyToUse * item.menuPrice;
-                  // İndirimli fiyat (subtotal - zaten indirim uygulanmış)
-                  selectedSubtotalDiscounted += (item.subtotal / item.quantity) * qtyToUse;
-                  
-                  remainingQty -= qtyToUse;
-                });
+                return sum + (selectedQty * paymentItem.menuPrice);
               }
-            });
-
-            // Eğer hiç seçili ürün yoksa, sipariş listesindeki toplam tutarı göster
-            if (selectedSubtotalOriginal === 0) {
-              remaining = orderListTotalWithDiscount;
-              originalTotal = orderListTotal; // İndirim öncesi toplam
-            } else {
-              // Seçili ürünlerin indirimli toplamını kullan (subtotal)
-              originalTotal = selectedSubtotalOriginal; // Seçili ürünlerin indirim öncesi toplamı
-              remaining = selectedSubtotalDiscounted; // Seçili ürünlerin indirimli toplamı (zaten indirim uygulanmış)
-            }
-          } else {
-            // Eğer pendingPaymentItems yoksa, sipariş listesindeki toplam tutarı kullan
-            // Bu, sipariş listesinde gösterilen TOPLAM ile aynı olmalı
-            remaining = orderListTotalWithDiscount;
-            originalTotal = orderListTotal; // İndirim öncesi toplam
-          }
-
-          const calculateDiscount = () => {
-            if (discountType === "percentage" && discountValue) {
+              return sum;
+            }, 0);
+            
+            // İndirim hesapla
+            if (discountType === "percentage" && discountValue && discountValue.trim() !== "") {
               const percentage = parseFloat(discountValue);
-              // İndirim hesaplanırken orijinal fiyat kullanılmalı (remaining değil)
-              return (originalTotal * percentage) / 100;
-            } else if (discountType === "amount" && discountValue) {
-              return parseFloat(discountValue);
+              if (!isNaN(percentage) && percentage > 0) {
+                discount = (originalTotal * percentage) / 100;
+              }
+            } else if (discountType === "amount" && discountValue && discountValue.trim() !== "") {
+              const amount = parseFloat(discountValue);
+              if (!isNaN(amount) && amount > 0) {
+                discount = Math.min(amount, originalTotal);
+              }
             }
-            return 0;
-          };
-          const discount = calculateDiscount();
-          // const finalAmount = Math.max(0, remaining - discount);
+            
+            // Kalan tutar = Seçili ürünlerin toplamı - İndirim
+            remaining = Math.max(0, originalTotal - discount);
+          } else {
+            // Seçili ürün yoksa, tüm masanın toplamını kullan
+            originalTotal = orderListTotal;
+            if (discountType === "percentage" && discountValue && discountValue.trim() !== "") {
+              const percentage = parseFloat(discountValue);
+              if (!isNaN(percentage) && percentage > 0) {
+                discount = (originalTotal * percentage) / 100;
+              }
+            } else if (discountType === "amount" && discountValue && discountValue.trim() !== "") {
+              const amount = parseFloat(discountValue);
+              if (!isNaN(amount) && amount > 0) {
+                discount = Math.min(amount, originalTotal);
+              }
+            }
+            remaining = orderListTotalWithDiscount;
+          }
 
           return (
             <>
               {/* Overlay */}
               <div
                 className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[550px] lg:right-0"
-                onClick={() => {
+                onClick={async () => {
                   setShowPaymentModal(false);
                   setPaymentAmount("");
                   setPaymentMethod("");
@@ -5080,6 +5195,20 @@ function TableDetailContent() {
                   setPackageCount("1");
                   setChangeAmount("0");
                   setAppliedPayments([]);
+                  // Order'ı refresh et ki ödeme al butonu görünsün
+                  if (order?.id) {
+                    setIsRefreshingOrder(true);
+                    try {
+                      const refreshedOrder = await getOrder(order.id);
+                      if (refreshedOrder) {
+                        setOrder(refreshedOrder);
+                      }
+                    } catch (error) {
+                      console.error("Order refresh error:", error);
+                    } finally {
+                      setIsRefreshingOrder(false);
+                    }
+                  }
                 }}
               />
               {/* Ödeme Paneli */}
@@ -5095,11 +5224,17 @@ function TableDetailContent() {
                       Seçili Ürünler
                     </h2>
                   </div>
-                  <div className="flex-1 overflow-y-auto min-h-0">
+                  <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     {(() => {
                       const selectedItemsList = pendingPaymentItems.filter(
                         (item) => (selectedQuantities.get(item.menuId) || 0) > 0
                       );
+
+                      // Seçili ürünlerin toplam fiyatını hesapla
+                      const selectedItemsTotal = selectedItemsList.reduce((sum, paymentItem) => {
+                        const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+                        return sum + (selectedQty * paymentItem.menuPrice);
+                      }, 0);
 
                       if (selectedItemsList.length === 0) {
                         return (
@@ -5114,84 +5249,99 @@ function TableDetailContent() {
                       }
 
                       return (
-                        <div className="space-y-2 p-3">
-                          {selectedItemsList.map((paymentItem) => {
-                            const selectedQty =
-                              selectedQuantities.get(paymentItem.menuId) || 0;
-                            const itemTotal =
-                              selectedQty * paymentItem.menuPrice;
-                            return (
-                              <div
-                                key={paymentItem.menuId}
-                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                                    {paymentItem.menuName}
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs text-gray-600 dark:text-gray-400">
-                                      {selectedQty} /{" "}
-                                      {paymentItem.totalQuantity} adet
-                                    </span>
-                                    <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                      ₺{itemTotal.toFixed(2).replace(".", ",")}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 ml-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newQty = Math.max(
-                                        0,
-                                        selectedQty - 1
-                                      );
-                                      setSelectedQuantities((prev) => {
-                                        const newMap = new Map(prev);
-                                        if (newQty === 0) {
-                                          newMap.delete(paymentItem.menuId);
-                                        } else {
-                                          newMap.set(
-                                            paymentItem.menuId,
-                                            newQty
+                        <>
+                          <div className="flex-1 overflow-y-auto min-h-0">
+                            <div className="space-y-2 p-3">
+                              {selectedItemsList.map((paymentItem) => {
+                                const selectedQty =
+                                  selectedQuantities.get(paymentItem.menuId) || 0;
+                                const itemTotal =
+                                  selectedQty * paymentItem.menuPrice;
+                                return (
+                                  <div
+                                    key={paymentItem.menuId}
+                                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                        {paymentItem.menuName}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                                          {selectedQty} /{" "}
+                                          {paymentItem.totalQuantity} adet
+                                        </span>
+                                        <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                          ₺{itemTotal.toFixed(2).replace(".", ",")}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 ml-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newQty = Math.max(
+                                            0,
+                                            selectedQty - 1
                                           );
+                                          setSelectedQuantities((prev) => {
+                                            const newMap = new Map(prev);
+                                            if (newQty === 0) {
+                                              newMap.delete(paymentItem.menuId);
+                                            } else {
+                                              newMap.set(
+                                                paymentItem.menuId,
+                                                newQty
+                                              );
+                                            }
+                                            return newMap;
+                                          });
+                                        }}
+                                        className="w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95"
+                                      >
+                                        -
+                                      </button>
+                                      <div className="w-12 text-center text-base font-bold text-gray-900 dark:text-white">
+                                        {selectedQty}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newQty = Math.min(
+                                            paymentItem.totalQuantity,
+                                            selectedQty + 1
+                                          );
+                                          setSelectedQuantities((prev) => {
+                                            const newMap = new Map(prev);
+                                            newMap.set(paymentItem.menuId, newQty);
+                                            return newMap;
+                                          });
+                                        }}
+                                        className="w-9 h-9 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={
+                                          selectedQty >= paymentItem.totalQuantity
                                         }
-                                        return newMap;
-                                      });
-                                    }}
-                                    className="w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95"
-                                  >
-                                    -
-                                  </button>
-                                  <div className="w-12 text-center text-base font-bold text-gray-900 dark:text-white">
-                                    {selectedQty}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newQty = Math.min(
-                                        paymentItem.totalQuantity,
-                                        selectedQty + 1
-                                      );
-                                      setSelectedQuantities((prev) => {
-                                        const newMap = new Map(prev);
-                                        newMap.set(paymentItem.menuId, newQty);
-                                        return newMap;
-                                      });
-                                    }}
-                                    className="w-9 h-9 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={
-                                      selectedQty >= paymentItem.totalQuantity
-                                    }
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Seçili Ürünler Toplamı - Sabit */}
+                          <div className="flex-shrink-0 p-3 border-t border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                Seçili Ürünler Toplamı
+                              </span>
+                              <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                                ₺{selectedItemsTotal.toFixed(2).replace(".", ",")}
+                              </span>
+                            </div>
+                          </div>
+                        </>
                       );
                     })()}
                   </div>
@@ -5205,7 +5355,7 @@ function TableDetailContent() {
                         Ödeme Al
                       </h2>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setShowPaymentModal(false);
                           setPaymentAmount("");
                           setDiscountType("percentage");
@@ -5223,6 +5373,20 @@ function TableDetailContent() {
                             }),
                             replace: true,
                           });
+                          // Order'ı refresh et ki ödeme al butonu görünsün
+                          if (order?.id) {
+                            setIsRefreshingOrder(true);
+                            try {
+                              const refreshedOrder = await getOrder(order.id);
+                              if (refreshedOrder) {
+                                setOrder(refreshedOrder);
+                              }
+                            } catch (error) {
+                              console.error("Order refresh error:", error);
+                            } finally {
+                              setIsRefreshingOrder(false);
+                            }
+                          }
                         }}
                         className="p-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
                       >
@@ -5315,12 +5479,12 @@ function TableDetailContent() {
                             KALAN TUTAR
                           </div>
                           <div className="flex flex-col items-end">
-                            {order.discount && order.discount > 0 ? (
+                            {discount > 0 ? (
                               <>
                                 <span className="text-lg font-medium text-gray-500 dark:text-gray-400 line-through">
                                   ₺
                                   {(
-                                    // İndirim öncesi toplam (orijinal fiyat) - appliedPayments çıkarma
+                                    // İndirim öncesi toplam (orijinal fiyat)
                                     originalTotal
                                   )
                                     .toFixed(2)
@@ -6600,11 +6764,9 @@ function TableDetailContent() {
                             }
                           }
 
-                          // İndirim state'lerini sıfırla (ama seçili ürünlerin state'ini koru)
-                          setDiscountType("percentage");
-                          setDiscountValue("");
+                          // İndirim modal'ını kapat (ama discountValue'yu koru - kalan tutar kısmında gösterilmek için)
                           setShowDiscountModal(false);
-                          // NOT: selectedItems, pendingPaymentItems ve selectedQuantities state'leri korunuyor
+                          // NOT: discountValue, discountType, selectedItems, pendingPaymentItems ve selectedQuantities state'leri korunuyor
                         }}
                         className="flex-1"
                         disabled={discount === 0}
