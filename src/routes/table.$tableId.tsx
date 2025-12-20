@@ -33,6 +33,7 @@ import {
   getCustomersByCompany,
   addCustomer,
   getCustomer,
+  updateCustomer,
 } from "@/lib/firebase/customers";
 import type { Courier, CustomerAccount } from "@/lib/firebase/types";
 import {
@@ -296,6 +297,7 @@ function TableDetailContent() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [customers, setCustomers] = useState<CustomerAccount[]>([]);
+  const [customerTables, setCustomerTables] = useState<Table[]>([]);
   const [newCustomerName, setNewCustomerName] = useState<string>("");
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
@@ -3652,9 +3654,9 @@ function TableDetailContent() {
     }
   }, [showAddNoteModal, openKeyboard]);
 
-  // Cari modalı açıldığında carileri yükle
+  // Cari modalı açıldığında carileri ve cari masalarını yükle
   useEffect(() => {
-    const loadCustomers = async () => {
+    const loadCustomersAndTables = async () => {
       if (!showCustomerModal) return;
 
       const effectiveCompanyId = companyId || userData?.companyId;
@@ -3664,11 +3666,20 @@ function TableDetailContent() {
 
       setIsLoadingCustomers(true);
       try {
+        // Carileri yükle
         const customersData = await getCustomersByCompany(
           effectiveCompanyId,
           effectiveBranchId || undefined
         );
         setCustomers(customersData);
+
+        // Cari masalarını yükle
+        const tablesData = await getTablesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        );
+        const cariTables = tablesData.filter((t) => t.area === "Cari");
+        setCustomerTables(cariTables);
       } catch (error) {
         customAlert("Cariler yüklenirken bir hata oluştu", "Hata", "error");
       } finally {
@@ -3676,7 +3687,7 @@ function TableDetailContent() {
       }
     };
 
-    loadCustomers();
+    loadCustomersAndTables();
   }, [showCustomerModal, companyId, branchId, userData]);
 
   // Yeni cari ekle ve masa oluştur
@@ -3714,12 +3725,19 @@ function TableDetailContent() {
         status: "available",
       });
 
-      // Carileri yeniden yükle
+      // Carileri ve cari masalarını yeniden yükle
       const customersData = await getCustomersByCompany(
         effectiveCompanyId,
         effectiveBranchId || undefined
       );
       setCustomers(customersData);
+
+      const tablesData = await getTablesByCompany(
+        effectiveCompanyId,
+        effectiveBranchId || undefined
+      );
+      const cariTables = tablesData.filter((t) => t.area === "Cari");
+      setCustomerTables(cariTables);
 
       // Yeni oluşturulan cariyi seç
       setNewCustomerName("");
@@ -3751,10 +3769,18 @@ function TableDetailContent() {
             );
             const total = subtotal - (targetOrder.discount || 0);
 
+            // Gönderilen ürün ID'lerini ekle (yeni eklenenler)
+            const existingSentItems = targetOrder.sentItems || [];
+            const newSentItemIds = order.items.map((item) => item.menuId);
+            const updatedSentItems = Array.from(
+              new Set([...existingSentItems, ...newSentItemIds])
+            );
+
             await updateOrder(targetOrder.id!, {
               items: mergedItems,
               subtotal: subtotal,
               total: total,
+              sentItems: updatedSentItems, // Gönderilen ürünleri güncelle
             });
           } else {
             // Yeni sipariş oluştur
@@ -3771,6 +3797,21 @@ function TableDetailContent() {
               paymentStatus: "unpaid",
               discount: order.discount,
             });
+          }
+
+          // Müşterinin lastOrderAt alanını güncelle
+          try {
+            const customer = customersData.find(
+              (c) => c.name === newCustomerName.trim()
+            );
+            if (customer?.id) {
+              await updateCustomer(customer.id, {
+                lastOrderAt: new Date(),
+              });
+            }
+          } catch (error) {
+            // Müşteri güncelleme hatası kritik değil, devam et
+            console.error("Müşteri tarihi güncellenirken hata:", error);
           }
 
           // Mevcut masadan siparişi kaldır ve kapat
@@ -3844,6 +3885,222 @@ function TableDetailContent() {
     currentTable,
   ]);
 
+  // Cari masaya kaydet (seçili ürünler veya tüm masa)
+  const handleSaveToCustomerTable = useCallback(
+    async (tableId: string) => {
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+      if (!effectiveCompanyId) {
+        customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
+        return;
+      }
+
+      if (!order || order.items.length === 0) {
+        customAlert("Kaydedilecek ürün bulunamadı", "Uyarı", "warning");
+        return;
+      }
+
+      try {
+        // Hedef masayı al
+        const targetTable = await getTable(tableId);
+        if (!targetTable) {
+          customAlert("Hedef masa bulunamadı", "Hata", "error");
+          return;
+        }
+
+        // Seçili ürünler var mı kontrol et
+        const hasSelectedItems = pendingPaymentItems.length > 0 && 
+          Array.from(selectedQuantities.values()).some(qty => qty > 0);
+
+        let itemsToSave: OrderItem[] = [];
+
+        if (hasSelectedItems) {
+          // Seçili ürünleri kaydet
+          pendingPaymentItems.forEach((paymentItem) => {
+            const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+            if (selectedQty > 0) {
+              let remainingQty = selectedQty;
+              for (const index of paymentItem.indices) {
+                if (remainingQty <= 0) break;
+                const item = order.items[index];
+                if (!item || item.menuId !== paymentItem.menuId) continue;
+
+                const qtyToSave = Math.min(item.quantity, remainingQty);
+                const pricePerUnit = item.subtotal / item.quantity;
+                itemsToSave.push({
+                  ...item,
+                  quantity: qtyToSave,
+                  subtotal: pricePerUnit * qtyToSave,
+                });
+                remainingQty -= qtyToSave;
+              }
+            }
+          });
+        } else {
+          // Tüm masayı kaydet
+          itemsToSave = [...order.items];
+        }
+
+        if (itemsToSave.length === 0) {
+          customAlert("Kaydedilecek ürün bulunamadı", "Uyarı", "warning");
+          return;
+        }
+
+        // Hedef masada aktif sipariş var mı kontrol et
+        const allOrders = await getOrdersByCompany(effectiveCompanyId, {
+          branchId: effectiveBranchId || undefined,
+        });
+        const targetOrder = allOrders.find(
+          (o) => o.tableId === tableId && o.status === "active"
+        );
+
+        if (targetOrder) {
+          // Mevcut siparişe ekle
+          const existingItems = targetOrder.items || [];
+          const mergedItems = [...existingItems, ...itemsToSave];
+          const subtotal = mergedItems.reduce(
+            (sum, item) => sum + item.subtotal,
+            0
+          );
+          const total = subtotal - (targetOrder.discount || 0);
+
+          // Gönderilen ürün ID'lerini ekle (yeni eklenenler)
+          const existingSentItems = targetOrder.sentItems || [];
+          const newSentItemIds = itemsToSave.map((item) => item.menuId);
+          const updatedSentItems = Array.from(
+            new Set([...existingSentItems, ...newSentItemIds])
+          );
+
+          await updateOrder(targetOrder.id!, {
+            items: mergedItems,
+            subtotal: subtotal,
+            total: total,
+            sentItems: updatedSentItems, // Gönderilen ürünleri güncelle
+          });
+        } else {
+          // Yeni sipariş oluştur
+          await addOrder({
+            companyId: effectiveCompanyId,
+            branchId: effectiveBranchId || targetTable.branchId,
+            tableId: tableId,
+            tableNumber: targetTable.tableNumber,
+            items: itemsToSave,
+            sentItems: itemsToSave.map((item) => item.menuId),
+            createdBy: userData!.id!,
+            status: "active",
+            paymentStatus: "unpaid",
+            discount: 0,
+          });
+        }
+
+        // Müşterinin lastOrderAt alanını güncelle
+        try {
+          const allCustomers = await getCustomersByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          );
+          const customer = allCustomers.find(
+            (c) => c.name === targetTable.tableNumber
+          );
+          if (customer?.id) {
+            await updateCustomer(customer.id, {
+              lastOrderAt: new Date(),
+            });
+          }
+        } catch (error) {
+          // Müşteri güncelleme hatası kritik değil, devam et
+          console.error("Müşteri tarihi güncellenirken hata:", error);
+        }
+
+        // Seçili ürünler kaydedildiyse, mevcut masadan kaldır
+        if (hasSelectedItems) {
+          const updatedItems = order.items.map((item, index) => {
+            let remainingQty = item.quantity;
+            
+            pendingPaymentItems.forEach((paymentItem) => {
+              if (paymentItem.menuId === item.menuId && paymentItem.indices.includes(index)) {
+                const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+                if (selectedQty > 0) {
+                  let qtyToRemove = selectedQty;
+                  for (const idx of paymentItem.indices) {
+                    if (idx === index && qtyToRemove > 0) {
+                      const qty = Math.min(item.quantity, qtyToRemove);
+                      remainingQty -= qty;
+                      qtyToRemove -= qty;
+                    }
+                  }
+                }
+              }
+            });
+
+            if (remainingQty <= 0) {
+              return null; // Bu item tamamen kaldırılacak
+            }
+
+            const pricePerUnit = item.subtotal / item.quantity;
+            return {
+              ...item,
+              quantity: remainingQty,
+              subtotal: pricePerUnit * remainingQty,
+            };
+          }).filter((item): item is OrderItem => item !== null);
+
+          const newSubtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+          const newTotal = newSubtotal - (order.discount || 0);
+
+          await updateOrder(order.id!, {
+            items: updatedItems,
+            subtotal: newSubtotal,
+            total: newTotal,
+          });
+
+          // Order'ı yeniden yükle
+          const refreshedOrder = await getOrder(order.id!);
+          if (refreshedOrder) {
+            setOrder(refreshedOrder);
+          }
+        } else {
+          // Tüm masa kaydedildiyse, mevcut masadan siparişi kaldır ve kapat
+          await updateOrder(order.id!, {
+            items: [],
+            subtotal: 0,
+            total: 0,
+          });
+          await updateTableStatus(currentTable.id!, "available", undefined);
+          await updateOrderStatus(order.id!, "closed");
+          setOrder(null);
+        }
+
+        // Cari masalarını yeniden yükle
+        const tablesData = await getTablesByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        );
+        const cariTables = tablesData.filter((t) => t.area === "Cari");
+        setCustomerTables(cariTables);
+
+        customAlert(
+          hasSelectedItems 
+            ? "Seçili ürünler cari masasına kaydedildi"
+            : "Masa cari masasına kaydedildi",
+          "Başarılı",
+          "success"
+        );
+
+        setShowCustomerModal(false);
+        setShowPaymentModal(false);
+      } catch (error: any) {
+        customAlert(
+          `Kaydetme işlemi sırasında bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
+          "Hata",
+          "error"
+        );
+      }
+    },
+    [companyId, branchId, userData, order, currentTable, pendingPaymentItems, selectedQuantities]
+  );
+
   // Cari seç ve masaya yönlendir
   const handleSelectCustomer = useCallback(
     async (customerId: string) => {
@@ -3912,10 +4169,18 @@ function TableDetailContent() {
               );
               const total = subtotal - (targetOrder.discount || 0);
 
+              // Gönderilen ürün ID'lerini ekle (yeni eklenenler)
+              const existingSentItems = targetOrder.sentItems || [];
+              const newSentItemIds = order.items.map((item) => item.menuId);
+              const updatedSentItems = Array.from(
+                new Set([...existingSentItems, ...newSentItemIds])
+              );
+
               await updateOrder(targetOrder.id!, {
                 items: mergedItems,
                 subtotal: subtotal,
                 total: total,
+                sentItems: updatedSentItems, // Gönderilen ürünleri güncelle
               });
             } else {
               // Yeni sipariş oluştur
@@ -3944,6 +4209,16 @@ function TableDetailContent() {
             // Masa durumunu güncelle ve siparişi kapat
             await updateOrderStatus(order.id!, "closed");
             await updateTableStatus(currentTable.id!, "available", undefined);
+
+            // Müşterinin lastOrderAt alanını güncelle
+            try {
+              await updateCustomer(customerId, {
+                lastOrderAt: new Date(),
+              });
+            } catch (error) {
+              // Müşteri güncelleme hatası kritik değil, devam et
+              console.error("Müşteri tarihi güncellenirken hata:", error);
+            }
 
             customAlert(
               "Cari seçildi ve sipariş cari masasına taşındı",
@@ -4051,18 +4326,44 @@ function TableDetailContent() {
       >
         <div className="p-3 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Sipariş -{" "}
-              {(() => {
-                // Masa adını formatla: "Masa Salon 1" -> "Salon 1", "Masa Bahçe 1" -> "Bahçe 1"
-                const tableName = currentTable.tableNumber.toString();
-                if (tableName.toLowerCase().startsWith("masa ")) {
-                  return tableName.substring(5); // "Masa " kısmını kaldır
-                }
-                return tableName;
-              })()}
-            </h2>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4" />
+                Sipariş -{" "}
+                {(() => {
+                  // Masa adını formatla: "Masa Salon 1" -> "Salon 1", "Masa Bahçe 1" -> "Bahçe 1"
+                  const tableName = currentTable.tableNumber.toString();
+                  if (tableName.toLowerCase().startsWith("masa ")) {
+                    return tableName.substring(5); // "Masa " kısmını kaldır
+                  }
+                  return tableName;
+                })()}
+              </h2>
+              {order && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {order.createdAt 
+                      ? new Date(order.createdAt).toLocaleDateString("tr-TR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : order.updatedAt
+                        ? new Date(order.updatedAt).toLocaleDateString("tr-TR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : ""}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -4274,6 +4575,15 @@ function TableDetailContent() {
                                   existing.item.quantity += item.quantity;
                                   existing.item.subtotal += item.subtotal;
                                   existing.indices.push(index);
+                                  // En eski eklenme tarihini koru
+                                  if (item.addedAt && existing.item.addedAt) {
+                                    existing.item.addedAt = 
+                                      item.addedAt < existing.item.addedAt 
+                                        ? item.addedAt 
+                                        : existing.item.addedAt;
+                                  } else if (item.addedAt && !existing.item.addedAt) {
+                                    existing.item.addedAt = item.addedAt;
+                                  }
                                 } else {
                                   mergedItems.set(item.menuId, {
                                     item: { ...item },
@@ -4399,13 +4709,26 @@ function TableDetailContent() {
                                         <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
                                           {item.quantity}x
                                         </span>
-                                        <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
-                                          {item.menuName}
-                                        </p>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                            {item.menuName}
+                                          </p>
+                                          {item.addedAt && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                              {new Date(item.addedAt).toLocaleDateString("tr-TR", {
+                                                day: "2-digit",
+                                                month: "2-digit",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                              })}
+                                            </p>
+                                          )}
+                                        </div>
                                       </div>
 
-                                      {/* Gönderilmemiş ürünler için butonlar */}
-                                      {isUnsent ? (
+                                      {/* Gönderilmemiş ürünler için butonlar - Cari masalarda gösterilmez */}
+                                      {isUnsent && currentTable.area !== "Cari" ? (
                                         <div
                                           className="flex items-center gap-3 ml-2"
                                           onClick={(e) => e.stopPropagation()}
@@ -4530,9 +4853,22 @@ function TableDetailContent() {
                                         <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
                                           {item.quantity}x
                                         </span>
-                                        <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
-                                          {item.menuName}
-                                        </p>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                            {item.menuName}
+                                          </p>
+                                          {item.addedAt && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                              {new Date(item.addedAt).toLocaleDateString("tr-TR", {
+                                                day: "2-digit",
+                                                month: "2-digit",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                              })}
+                                            </p>
+                                          )}
+                                        </div>
                                       </div>
 
                                       {/* Cart ürünleri için butonlar */}
@@ -5722,7 +6058,7 @@ function TableDetailContent() {
                                   <Button
                                     type="button"
                                     onClick={() => {
-                                      setPaymentMethod("customerAccount");
+                                      setShowCustomerModal(true);
                                     }}
                                     className="h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
                                   >
@@ -7000,6 +7336,179 @@ function TableDetailContent() {
             </div>
           </div>
         )}
+
+      {/* Cari Masaları Modalı */}
+      {showCustomerModal && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() => {
+              setShowCustomerModal(false);
+              setShowNewCustomerModal(false);
+              setNewCustomerName("");
+            }}
+          />
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Cari Masaları
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCustomerModal(false);
+                    setShowNewCustomerModal(false);
+                    setNewCustomerName("");
+                  }}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {isLoadingCustomers ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+                  </div>
+                ) : (
+                  <>
+                    {/* Yeni Cari Masa Oluştur Butonu */}
+                    {!showNewCustomerModal && (
+                      <Button
+                        onClick={() => setShowNewCustomerModal(true)}
+                        className="w-full mb-4 bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Plus className="h-5 w-5 mr-2" />
+                        Yeni Cari Masa Oluştur
+                      </Button>
+                    )}
+
+                    {/* Yeni Cari Masa Formu */}
+                    {showNewCustomerModal && (
+                      <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Yeni Cari Masa Oluştur
+                        </h3>
+                        <div className="flex gap-2">
+                          <Input
+                            value={newCustomerName}
+                            onChange={(e) => setNewCustomerName(e.target.value)}
+                            placeholder="Masa sahibinin adı"
+                            className="flex-1"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleCreateCustomerAndTable();
+                              }
+                            }}
+                          />
+                          <Button
+                            onClick={handleCreateCustomerAndTable}
+                            disabled={!newCustomerName.trim() || isCreatingCustomer}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            {isCreatingCustomer ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Oluşturuluyor...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4 mr-2" />
+                                Oluştur
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setShowNewCustomerModal(false);
+                              setNewCustomerName("");
+                            }}
+                            variant="outline"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cari Masaları Listesi */}
+                    {customerTables.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <CreditCard className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                        <p className="text-lg font-medium">Henüz cari masa yok</p>
+                        <p className="text-sm mt-1">Yeni cari masa oluşturun</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {customerTables.map((table) => {
+                          const customer = customers.find(
+                            (c) => c.name === table.tableNumber
+                          );
+                          return (
+                            <div
+                              key={table.id}
+                              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            >
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                  {table.tableNumber}
+                                </h3>
+                                {customer && (
+                                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    Bakiye: ₺{customer.balance.toFixed(2).replace(".", ",")}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => {
+                                    if (customer?.id) {
+                                      handleSelectCustomer(customer.id);
+                                    } else {
+                                      // Masa var ama cari yoksa, masaya direkt git
+                                      navigate({
+                                        to: "/table/$tableId",
+                                        params: { tableId: table.id! },
+                                        search: { area: undefined, activeOnly: false },
+                                      });
+                                      setShowCustomerModal(false);
+                                    }
+                                  }}
+                                  variant="outline"
+                                  className="text-sm"
+                                >
+                                  Masaya Git
+                                </Button>
+                                {(order && order.items.length > 0) && (
+                                  <Button
+                                    onClick={() => handleSaveToCustomerTable(table.id!)}
+                                    className="bg-green-600 hover:bg-green-700 text-white text-sm"
+                                  >
+                                    {pendingPaymentItems.length > 0 && 
+                                     Array.from(selectedQuantities.values()).some(qty => qty > 0)
+                                      ? "Seçili Ürünleri Kaydet"
+                                      : "Masayı Kaydet"}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

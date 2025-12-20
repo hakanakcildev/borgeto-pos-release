@@ -684,15 +684,22 @@ function TablesView() {
 
   const areas = Array.from(
     new Set(
-      tables.map((t) => t.area).filter((area) => area && area.trim() !== "")
+      tables
+        .filter((t) => t.area !== "Cari") // Cari masaları filtrele
+        .map((t) => t.area)
+        .filter((area) => area && area.trim() !== "")
     )
   ).sort();
 
   // Filtrelenmiş masaları memoize et - sadece tables, selectedArea, showActiveOnly veya activeOrders değiştiğinde yeniden hesapla
   const filteredTables = useMemo(() => {
-    let filtered = selectedArea
-      ? tables.filter((t) => t.area === selectedArea)
-      : tables;
+    // Cari masaları filtrele (masalar sayfasında görünmesin)
+    let filtered = tables.filter((t) => t.area !== "Cari");
+
+    // Alan filtresi uygula
+    if (selectedArea) {
+      filtered = filtered.filter((t) => t.area === selectedArea);
+    }
 
     if (showActiveOnly) {
       filtered = filtered.filter((table) => {
