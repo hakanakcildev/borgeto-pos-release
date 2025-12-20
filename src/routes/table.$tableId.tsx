@@ -4339,7 +4339,7 @@ function TableDetailContent() {
                   return tableName;
                 })()}
               </h2>
-              {order && (
+              {order && currentTable.area === "Cari" && (
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
                   <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -4713,7 +4713,7 @@ function TableDetailContent() {
                                           <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                                             {item.menuName}
                                           </p>
-                                          {item.addedAt && (
+                                          {item.addedAt && currentTable.area === "Cari" && (
                                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                               {new Date(item.addedAt).toLocaleDateString("tr-TR", {
                                                 day: "2-digit",
@@ -4857,7 +4857,7 @@ function TableDetailContent() {
                                           <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                                             {item.menuName}
                                           </p>
-                                          {item.addedAt && (
+                                          {item.addedAt && currentTable.area === "Cari" && (
                                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                               {new Date(item.addedAt).toLocaleDateString("tr-TR", {
                                                 day: "2-digit",
