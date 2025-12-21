@@ -55,7 +55,6 @@ import type {
 } from "@/lib/firebase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 import {
   ArrowLeft,
@@ -65,7 +64,6 @@ import {
   Trash2,
   Send,
   ShoppingCart,
-  Edit,
   X,
   CreditCard,
   Check,
@@ -74,7 +72,6 @@ import {
   Loader2,
   Utensils,
   Delete,
-  Printer,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 
@@ -87,7 +84,7 @@ export const Route = createFileRoute("/table/$tableId")({
       payment: (search.payment as string) || undefined,
     };
   },
-  loader: async ({ params, context }) => {
+  loader: async ({ params }) => {
     try {
       const table = await getTable(params.tableId);
       if (!table) {
@@ -106,7 +103,7 @@ export const Route = createFileRoute("/table/$tableId")({
 });
 
 function TableDetail() {
-  const { table } = Route.useLoaderData();
+  const { tableId } = Route.useParams();
   const search = Route.useSearch();
 
   return (
@@ -126,6 +123,7 @@ function TableDetail() {
 
 function TableDetailContent() {
   const { table } = Route.useLoaderData();
+  const { tableId } = Route.useParams();
   const navigate = useNavigate();
   const { userData, companyId, branchId, currentUser, companyData } = useAuth();
   const [currentTable, setCurrentTable] = useState<Table>(table);
@@ -150,7 +148,7 @@ function TableDetailContent() {
   }, [navigate, search, currentTable]);
 
   // Zaman farkını hesapla ve "X dakika önce" formatında göster
-  const getTimeAgo = useCallback((date: Date | undefined): string => {
+  const _getTimeAgo = useCallback((date: Date | undefined): string => {
     if (!date) return "";
     const now = new Date();
     const diff = now.getTime() - new Date(date).getTime();
@@ -179,14 +177,14 @@ function TableDetailContent() {
   const [showCart, setShowCart] = useState(false);
 
   // Miktar girme modalı için state'ler
-  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [_showQuantityModal, setShowQuantityModal] = useState(false);
   const [selectedMenuForQuantity, setSelectedMenuForQuantity] =
     useState<Menu | null>(null);
   const [quantityInput, setQuantityInput] = useState("");
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ekstra malzeme seçimi için state'ler
-  const [showExtraModal, setShowExtraModal] = useState(false);
+  const [_showExtraModal, setShowExtraModal] = useState(false);
   const [selectedMenuForExtra, setSelectedMenuForExtra] = useState<Menu | null>(
     null
   );
@@ -194,15 +192,15 @@ function TableDetailContent() {
 
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showFullScreenPayment, setShowFullScreenPayment] = useState(false);
+  const [_showFullScreenPayment, setShowFullScreenPayment] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [showCancelItemModal, setShowCancelItemModal] = useState(false);
+  const [_showCancelItemModal, setShowCancelItemModal] = useState(false);
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
-  const [selectedMenuForNote, setSelectedMenuForNote] = useState<Menu | null>(
+  const [_selectedMenuForNote, setSelectedMenuForNote] = useState<Menu | null>(
     null
   );
-  const [itemNote, setItemNote] = useState("");
+  const [_itemNote, setItemNote] = useState("");
   const itemNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { openKeyboard } = useTouchKeyboard();
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -213,7 +211,7 @@ function TableDetailContent() {
   const [appliedPayments, setAppliedPayments] = useState<
     Array<{ method: string; methodName: string; amount: number; id: string }>
   >([]);
-  const [cancelItemOptions, setCancelItemOptions] = useState<
+  const [_cancelItemOptions, _setCancelItemOptions] = useState<
     Array<{ item: OrderItem; index: number }>
   >([]);
   const [discountType, setDiscountType] = useState<
@@ -229,20 +227,20 @@ function TableDetailContent() {
   const [packageCount, setPackageCount] = useState<string>("1");
   const [changeAmount, setChangeAmount] = useState<string>("0");
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [availableTables, setAvailableTables] = useState<Table[]>([]);
-  const [selectedArea, setSelectedArea] = useState<string>("");
+  const [_availableTables, setAvailableTables] = useState<Table[]>([]);
+  const [_selectedArea, setSelectedArea] = useState<string>("");
   const [showQuantitySelectionModal, setShowQuantitySelectionModal] =
     useState(false);
   const [quantitySelectionAction, setQuantitySelectionAction] = useState<
     "cancel" | "move" | "payment" | null
   >(null);
-  const [selectedItemForQuantity, setSelectedItemForQuantity] = useState<{
+  const [_selectedItemForQuantity, _setSelectedItemForQuantity] = useState<{
     menuId: string;
     menuName: string;
     totalQuantity: number;
     indices: number[];
   } | null>(null);
-  const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
+  const [_selectedQuantity, _setSelectedQuantity] = useState<number>(1);
   const [pendingPaymentQuantity, setPendingPaymentQuantity] = useState<{
     menuId: string;
     quantity: number;
@@ -253,44 +251,45 @@ function TableDetailContent() {
       menuId: string;
       menuName: string;
       totalQuantity: number;
+      menuPrice: number;
       indices: number[];
     }>
   >([]);
-  const [currentPaymentItemIndex, setCurrentPaymentItemIndex] =
+  const [_currentPaymentItemIndex, setCurrentPaymentItemIndex] =
     useState<number>(0);
   const [selectedQuantities, setSelectedQuantities] = useState<
     Map<string, number>
   >(new Map());
 
   // Tam ekran ödeme ekranı için state'ler
-  const [paymentScreenSelectedItems, setPaymentScreenSelectedItems] = useState<
+  const [_paymentScreenSelectedItems, _setPaymentScreenSelectedItems] = useState<
     Set<number>
   >(new Set());
-  const [paymentScreenSelectedQuantities, setPaymentScreenSelectedQuantities] =
+  const [_paymentScreenSelectedQuantities, _setPaymentScreenSelectedQuantities] =
     useState<Map<number, number>>(new Map()); // key: item index, value: selected quantity
-  const [_paymentScreenAmount, setPaymentScreenAmount] = useState<string>("");
-  const [paymentScreenDiscountType, setPaymentScreenDiscountType] = useState<
+  const [_paymentScreenAmount, _setPaymentScreenAmount] = useState<string>("");
+  const [_paymentScreenDiscountType, _setPaymentScreenDiscountType] = useState<
     "percentage" | "amount" | "manual"
   >("percentage");
-  const [paymentScreenDiscountValue, setPaymentScreenDiscountValue] =
+  const [_paymentScreenDiscountValue, _setPaymentScreenDiscountValue] =
     useState<string>("");
-  const [paymentScreenManualDiscount, setPaymentScreenManualDiscount] =
+  const [_paymentScreenManualDiscount, _setPaymentScreenManualDiscount] =
     useState<string>("");
-  const [showPaymentScreenDiscountModal, setShowPaymentScreenDiscountModal] =
+  const [_showPaymentScreenDiscountModal, _setShowPaymentScreenDiscountModal] =
     useState(false);
-  const [, setSelectedNumericKey] = useState<number | null>(null);
-  const [paymentScreenQuantityInput, setPaymentScreenQuantityInput] =
+  const [, _setSelectedNumericKey] = useState<number | null>(null);
+  const [_paymentScreenQuantityInput, _setPaymentScreenQuantityInput] =
     useState<string>("");
   // Paket masaları için kurye atama state'leri
-  const [paymentScreenSelectedCourierId, setPaymentScreenSelectedCourierId] =
+  const [_paymentScreenSelectedCourierId, _setPaymentScreenSelectedCourierId] =
     useState<string>("");
-  const [paymentScreenChangeAmount, setPaymentScreenChangeAmount] =
+  const [_paymentScreenChangeAmount, _setPaymentScreenChangeAmount] =
     useState<string>("0");
-  const [showPaymentScreenCourierModal, setShowPaymentScreenCourierModal] =
+  const [_showPaymentScreenCourierModal, _setShowPaymentScreenCourierModal] =
     useState(false);
   const [
-    showPaymentScreenChangeAmountModal,
-    setShowPaymentScreenChangeAmountModal,
+    _showPaymentScreenChangeAmountModal,
+    _setShowPaymentScreenChangeAmountModal,
   ] = useState(false);
 
   // Cari yönetimi için state'ler
@@ -316,7 +315,7 @@ function TableDetailContent() {
   const [selectedCancelQuantities, setSelectedCancelQuantities] = useState<
     Map<string, number>
   >(new Map());
-  const [selectedItemsForCancel, setSelectedItemsForCancel] = useState<
+  const [_selectedItemsForCancel, _setSelectedItemsForCancel] = useState<
     Set<number>
   >(new Set());
 
@@ -329,7 +328,7 @@ function TableDetailContent() {
       indices: number[];
     }>
   >([]);
-  const [currentMoveItemIndex, setCurrentMoveItemIndex] = useState<number>(0);
+  const [_currentMoveItemIndex, setCurrentMoveItemIndex] = useState<number>(0);
   const [selectedMoveQuantities, setSelectedMoveQuantities] = useState<
     Map<string, number>
   >(new Map());
@@ -337,11 +336,11 @@ function TableDetailContent() {
   // Loading states
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [processingPaymentMethodId, setProcessingPaymentMethodId] = useState<
+  const [_processingPaymentMethodId, _setProcessingPaymentMethodId] = useState<
     string | null
   >(null);
   const [isCanceling, setIsCanceling] = useState(false);
-  const [isMovingItems, setIsMovingItems] = useState(false);
+  const [_isMovingItems, setIsMovingItems] = useState(false);
 
   // Yazıcılar için state
   const [printers, setPrinters] = useState<
@@ -571,6 +570,7 @@ function TableDetailContent() {
       const groupedItems = new Map<
         string,
         {
+          menuId: string;
           menuName: string;
           totalQuantity: number;
           menuPrice: number;
@@ -585,6 +585,7 @@ function TableDetailContent() {
           existing.indices.push(index);
         } else {
           groupedItems.set(item.menuId, {
+            menuId: item.menuId,
             menuName: item.menuName,
             totalQuantity: item.quantity,
             menuPrice: item.menuPrice,
@@ -642,7 +643,7 @@ function TableDetailContent() {
     : menus;
 
   // Sepete ürün ekle (not ile birlikte) - sadece modal'dan yeni ürün eklemek için
-  const addToCartWithNote = useCallback(
+  const _addToCartWithNote = useCallback(
     (menu: Menu, note?: string, extras?: SelectedExtra[]) => {
       const extrasTotal =
         extras?.reduce((sum, extra) => sum + extra.price, 0) || 0;
@@ -717,7 +718,7 @@ function TableDetailContent() {
   );
 
   // Ekstra malzemeleri seçip sepete ekle
-  const handleAddToCartWithExtras = useCallback(() => {
+  const _handleAddToCartWithExtras = useCallback(() => {
     if (!selectedMenuForExtra) return;
 
     // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
@@ -798,7 +799,7 @@ function TableDetailContent() {
   }, []);
 
   // Miktar girme modalından ürün ekle
-  const handleAddWithQuantity = useCallback(() => {
+  const _handleAddWithQuantity = useCallback(() => {
     if (!selectedMenuForQuantity || !quantityInput) return;
 
     // Virgülü noktaya çevir
@@ -860,7 +861,7 @@ function TableDetailContent() {
   }, [selectedMenuForQuantity, quantityInput, selectedExtras]);
 
   // Sepetteki ürün miktarını güncelle (cartItemId ile)
-  const updateQuantity = useCallback((cartItemId: string, delta: number) => {
+  const _updateQuantity = useCallback((cartItemId: string, delta: number) => {
     setCart((prev) => {
       const item = prev.find((i) => i.cartItemId === cartItemId);
       if (!item) return prev;
@@ -944,11 +945,11 @@ function TableDetailContent() {
     async (menuId: string) => {
       if (!order) return;
 
-      const effectiveCompanyId = companyId || userData?.companyId;
-      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      const _effectiveCompanyId = companyId || userData?.companyId;
+      const _effectiveBranchId = branchId || userData?.assignedBranchId;
 
       // Gönderilmemiş ürünleri bul (sentItems içinde olmayan)
-      const unsentItems = order.items.filter(
+      const _unsentItems = order.items.filter(
         (item) => !item.canceledAt && !order.sentItems?.includes(item.menuId)
       );
 
@@ -997,8 +998,8 @@ function TableDetailContent() {
     async (menuId: string) => {
       if (!order) return;
 
-      const effectiveCompanyId = companyId || userData?.companyId;
-      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      const _effectiveCompanyId = companyId || userData?.companyId;
+      const _effectiveBranchId = branchId || userData?.assignedBranchId;
 
       // İlgili ürünü bul ve miktarını azalt
       const updatedItems = order.items
@@ -1057,8 +1058,8 @@ function TableDetailContent() {
     async (menuId: string) => {
       if (!order) return;
 
-      const effectiveCompanyId = companyId || userData?.companyId;
-      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      const _effectiveCompanyId = companyId || userData?.companyId;
+      const _effectiveBranchId = branchId || userData?.assignedBranchId;
 
       // İlgili gönderilmemiş ürünleri kaldır
       const updatedItems = order.items.filter(
@@ -1365,6 +1366,7 @@ function TableDetailContent() {
     companyId,
     branchId,
     companyData,
+    tableId,
   ]);
 
   // Ödeme alma
@@ -1376,6 +1378,7 @@ function TableDetailContent() {
         menuId: string;
         menuName: string;
         totalQuantity: number;
+        menuPrice: number;
         indices: number[];
       }>,
       overrideSelectedQuantities?: Map<string, number>,
@@ -1415,6 +1418,7 @@ function TableDetailContent() {
             let remainingQty = selectedQty;
             for (const index of paymentItem.indices) {
               if (remainingQty <= 0) break;
+              if (!order) continue;
               const item = order.items[index];
               if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
               
@@ -1428,14 +1432,16 @@ function TableDetailContent() {
       } else if (pendingItemsToUse.length > 0) {
         // Eğer pendingItemsToUse varsa ama quantitiesToUse yoksa, tüm pendingItemsToUse'u kullan
         itemsToUse = new Set<number>();
-        pendingItemsToUse.forEach((paymentItem) => {
-          paymentItem.indices.forEach((index) => {
-            const item = order.items[index];
-            if (item && item.menuId === paymentItem.menuId) { // menuId kontrolü ekle
-              itemsToUse.add(index);
-            }
+        if (order) {
+          pendingItemsToUse.forEach((paymentItem) => {
+            paymentItem.indices.forEach((index) => {
+              const item = order.items[index];
+              if (item && item.menuId === paymentItem.menuId) { // menuId kontrolü ekle
+                itemsToUse.add(index);
+              }
+            });
           });
-        });
+        }
       } else {
         // Hiç seçili ürün yoksa, selectedItems state'ini kullan
         itemsToUse = selectedItems;
@@ -1537,6 +1543,7 @@ function TableDetailContent() {
               menuId: string;
               menuName: string;
               quantity: number;
+              menuPrice: number;
               subtotal: number;
             }>
           | undefined;
@@ -2392,7 +2399,7 @@ function TableDetailContent() {
         const updatedOrderDiscount = updatedOrder?.discount || 0;
         const orderTotalAmount =
           updatedOrder?.total || updatedOrderSubtotal - updatedOrderDiscount;
-        const isFullyPaid =
+        const _isFullyPaid =
           totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0;
 
         // Eğer TAM ödeme alındıysa (ve partial ödeme değilse) veya tüm ürünler kaldırıldıysa siparişi kapat
@@ -2533,9 +2540,11 @@ function TableDetailContent() {
 
           // URL'den payment parametresini kaldır (sadece returnAfterPayment kapalıysa)
           navigate({
-            to: Route.fullPath,
+            to: "/table/$tableId",
+            params: { tableId: tableId },
             search: (prev) => ({
-              ...prev,
+              area: prev?.area ?? undefined,
+              activeOnly: prev?.activeOnly ?? false,
               payment: undefined,
             }),
             replace: true,
@@ -2583,9 +2592,11 @@ function TableDetailContent() {
 
         // URL'den payment parametresini kaldır (sadece returnAfterPayment kapalıysa)
         navigate({
-          to: Route.fullPath,
+          to: "/table/$tableId",
+          params: { tableId: tableId },
           search: (prev) => ({
-            ...prev,
+            area: (prev?.area ?? undefined) as string | undefined,
+            activeOnly: prev?.activeOnly ?? false,
             payment: undefined,
           }),
           replace: true,
@@ -2622,7 +2633,7 @@ function TableDetailContent() {
   );
 
   // Ürün iptal etme
-  const handleCancelItem = useCallback(async () => {
+  const _handleCancelItem = useCallback(async () => {
     if (!order || !selectedItem) return;
 
     try {
@@ -2880,7 +2891,7 @@ function TableDetailContent() {
   ]);
 
   // Ürün seçimi toggle
-  const toggleItemSelection = useCallback((index: number) => {
+  const _toggleItemSelection = useCallback((index: number) => {
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(index)) {
@@ -3109,7 +3120,7 @@ function TableDetailContent() {
   );
 
   // Seçili ürünleri taşı
-  const handleMoveSelectedItems = useCallback(
+  const _handleMoveSelectedItems = useCallback(
     async (targetTableId: string) => {
       if (!order || selectedItems.size === 0) return;
 
@@ -3834,9 +3845,11 @@ function TableDetailContent() {
           setShowCustomerModal(false);
           // URL'den payment parametresini kaldır
           navigate({
-            to: Route.fullPath,
+            to: "/table/$tableId",
+            params: { tableId: tableId },
             search: (prev) => ({
-              ...prev,
+              area: prev?.area ?? undefined,
+              activeOnly: prev?.activeOnly ?? false,
               payment: undefined,
             }),
             replace: true,
@@ -3862,7 +3875,7 @@ function TableDetailContent() {
       navigate({
         to: "/table/$tableId",
         params: { tableId },
-        search: { area: undefined, activeOnly: false },
+        search: { area: undefined, activeOnly: false, payment: undefined },
       });
     } catch (error: any) {
       const errorMessage = error?.message || "Bilinmeyen bir hata oluştu";
@@ -4238,7 +4251,7 @@ function TableDetailContent() {
         navigate({
           to: "/table/$tableId",
           params: { tableId: customerTable.id! },
-          search: { area: undefined, activeOnly: false },
+          search: { area: undefined, activeOnly: false, payment: undefined },
         });
 
         setShowCustomerModal(false);
@@ -4594,7 +4607,7 @@ function TableDetailContent() {
                             });
 
                             return Array.from(mergedItems.values()).map(
-                              ({ item, indices }, idx) => {
+                              ({ item, indices }, _idx) => {
                                 const isSelected = indices.some((idx) =>
                                   selectedItems.has(idx)
                                 );
@@ -4815,7 +4828,7 @@ function TableDetailContent() {
                             });
 
                             return Array.from(mergedItems.values()).map(
-                              ({ item, cartItemIds }, idx) => {
+                              ({ item, cartItemIds }, _idx) => {
                                 const isSelected = cartItemIds.some((id) =>
                                   selectedCartItems.has(id)
                                 );
@@ -4945,7 +4958,7 @@ function TableDetailContent() {
                 });
 
                 return Array.from(mergedItems.values()).map(
-                  ({ item, cartItemIds }, idx) => {
+                  ({ item, cartItemIds }, _idx) => {
                     const isSelected = cartItemIds.some((id) =>
                       selectedCartItems.has(id)
                     );
@@ -5343,9 +5356,11 @@ function TableDetailContent() {
                       setPaymentMethod("");
                       // URL'e payment parametresi ekle
                       navigate({
-                        to: Route.fullPath,
+                        to: "/table/$tableId",
+                        params: { tableId: tableId },
                         search: (prev) => ({
-                          ...prev,
+                          area: (prev?.area ?? undefined) as string | undefined,
+                          activeOnly: prev?.activeOnly ?? false,
                           payment: "true",
                         }),
                         replace: true,
@@ -5528,9 +5543,11 @@ function TableDetailContent() {
                   setDiscountValue("");
                   // URL'den payment parametresini kaldır
                   navigate({
-                    to: Route.fullPath,
+                    to: "/table/$tableId",
+                    params: { tableId: tableId },
                     search: (prev) => ({
-                      ...prev,
+                      area: (prev?.area ?? undefined) as string | undefined,
+                      activeOnly: prev?.activeOnly ?? false,
                       payment: undefined,
                     }),
                     replace: true,
@@ -5710,9 +5727,11 @@ function TableDetailContent() {
                           setAppliedPayments([]);
                           // URL'den payment parametresini kaldır
                           navigate({
-                            to: Route.fullPath,
+                            to: "/table/$tableId",
+                            params: { tableId: tableId },
                             search: (prev) => ({
-                              ...prev,
+                              area: (prev?.area ?? undefined) as string | undefined,
+                              activeOnly: prev?.activeOnly ?? false,
                               payment: undefined,
                             }),
                             replace: true,
@@ -5944,9 +5963,11 @@ function TableDetailContent() {
                                 setShowPaymentModal(false);
                                 // URL'den payment parametresini kaldır
                                 navigate({
-                                  to: Route.fullPath,
+                                  to: "/table/$tableId",
+                                  params: { tableId: tableId },
                                   search: (prev) => ({
-                                    ...prev,
+                                    area: (prev?.area ?? undefined) as string | undefined,
+                                    activeOnly: prev?.activeOnly ?? false,
                                     payment: undefined,
                                   }),
                                   replace: true,
@@ -6084,10 +6105,12 @@ function TableDetailContent() {
                                           ...order,
                                           items: updatedItems,
                                         };
-                                        await updateOrder(
-                                          order.id,
-                                          updatedOrder
-                                        );
+                                        if (order.id) {
+                                          await updateOrder(
+                                            order.id,
+                                            updatedOrder
+                                          );
+                                        }
                                         setOrder(updatedOrder);
                                         setPaymentAmount("0");
                                       }
@@ -7012,10 +7035,10 @@ function TableDetailContent() {
                               });
 
                               // Yeni subtotal'ı hesapla (güncellenmiş ürünlerden)
-                              const newSubtotal = updatedItems.reduce(
-                                (sum, item) => sum + item.subtotal,
-                                0
-                              );
+                              // const _newSubtotal = updatedItems.reduce(
+                              //   (sum, item) => sum + item.subtotal,
+                              //   0
+                              // );
 
                               // Siparişi güncelle (ürünlerin subtotal'ları da güncellenmiş)
                               await updateOrder(order.id!, {
@@ -7475,7 +7498,7 @@ function TableDetailContent() {
                                       navigate({
                                         to: "/table/$tableId",
                                         params: { tableId: table.id! },
-                                        search: { area: undefined, activeOnly: false },
+                                        search: { area: undefined, activeOnly: false, payment: undefined },
                                       });
                                       setShowCustomerModal(false);
                                     }

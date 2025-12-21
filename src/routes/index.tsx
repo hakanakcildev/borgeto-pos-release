@@ -16,12 +16,10 @@ import {
   updateOrderStatus,
 } from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
-import { Button } from "@/components/ui/button";
 import { customAlert } from "@/components/ui/alert-dialog";
 import {
   Utensils,
   Clock,
-  X,
   Loader2,
   ArrowLeft,
   Wifi,
@@ -179,7 +177,7 @@ function TablesView() {
   const longPressCompletedRef = useRef<boolean>(false);
   const pressingTableIdRef = useRef<string | null>(null);
   const longPressEndTimeRef = useRef<number>(0);
-  const [isMovingTable, setIsMovingTable] = useState(false);
+  const [_isMovingTable, setIsMovingTable] = useState(false);
   const [targetTableIdForMove, setTargetTableIdForMove] = useState<
     string | null
   >(null);
@@ -996,6 +994,7 @@ function TablesView() {
                             search: {
                               area: area || undefined,
                               activeOnly: activeOnly || false,
+                              payment: undefined,
                             },
                           });
                         } else {

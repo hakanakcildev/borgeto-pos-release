@@ -20,7 +20,9 @@ export default defineConfig({
       target: "react",
       autoCodeSplitting: true,
     }),
-    react(),
+    react({
+      jsxRuntime: "automatic",
+    }),
     tailwindcss(),
     electron([
       {
@@ -75,7 +77,7 @@ export default defineConfig({
     mainFields: ["module", "jsnext:main", "jsnext", "main"],
   },
   optimizeDeps: {
-    include: ["bcryptjs"],
+    include: ["bcryptjs", "react/jsx-runtime"],
     exclude: ["electron"],
   },
   server: {

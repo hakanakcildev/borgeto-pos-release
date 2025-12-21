@@ -4,10 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import {
   Home,
-  ShoppingBasket,
   Bike,
-  ChefHat,
-  Utensils,
   Package,
   User,
   BarChart3,

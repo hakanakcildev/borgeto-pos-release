@@ -190,7 +190,7 @@ function CustomerTablesManagementContent() {
                     <Link
                       to="/table/$tableId"
                       params={{ tableId: table.id! }}
-                      search={{ area: undefined, activeOnly: false }}
+                      search={{ area: undefined, activeOnly: false, payment: undefined }}
                       className="flex-1 min-w-0"
                     >
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate">
@@ -231,7 +231,7 @@ function CustomerTablesManagementContent() {
                     <Link
                       to="/table/$tableId"
                       params={{ tableId: table.id! }}
-                      search={{ area: undefined, activeOnly: false }}
+                      search={{ area: undefined, activeOnly: false, payment: undefined }}
                     >
                       <Button size="sm" variant="outline">
                         Aç

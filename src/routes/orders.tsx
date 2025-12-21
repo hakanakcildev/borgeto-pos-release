@@ -119,7 +119,7 @@ function ActiveTablesContent() {
                 key={table.id}
                 to="/table/$tableId"
                 params={{ tableId: table.id! }}
-                search={{ area: undefined, activeOnly: false }}
+                search={{ area: undefined, activeOnly: false, payment: undefined }}
                 className="bg-white rounded-lg p-2 shadow-sm border border-gray-200 hover:shadow-md transition-shadow min-h-[44px]"
               >
                 {/* Table Header */}

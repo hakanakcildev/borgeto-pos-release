@@ -4,8 +4,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import {
   Settings as SettingsIcon,
-  Download,
-  CheckCircle,
   RefreshCw,
   Sun,
   Moon,
@@ -20,7 +18,6 @@ import {
   Users,
   Printer,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { TablesManagementContent } from "@/routes/tables";
 import { MenuManagementContent } from "@/routes/menus";
 import { PaymentMethodsManagementContent } from "@/routes/payment-methods";
@@ -183,14 +180,16 @@ function SettingsContent({
   activeTab: SettingsTab;
   setActiveTab: (tab: SettingsTab) => void;
 }) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _setActiveTab = setActiveTab;
   const { theme, setTheme } = useTheme();
-  const [pendingUpdate, setPendingUpdate] = useState<{
+  const [_pendingUpdate, setPendingUpdate] = useState<{
     version: string;
     timestamp: number;
   } | null>(null);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [updateDownloaded, setUpdateDownloaded] = useState(false);
+  const [_isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [_downloadProgress, setDownloadProgress] = useState(0);
+  const [_updateDownloaded, setUpdateDownloaded] = useState(false);
 
   // Navigation settings
   const [navSettings, setNavSettings] = useState<NavigationSettings>({
@@ -245,7 +244,7 @@ function SettingsContent({
     }
   }, []);
 
-  const handleCheckForUpdates = async () => {
+  const _handleCheckForUpdates = async () => {
     if (!window.electronAPI?.checkForUpdates) {
       return;
     }
@@ -261,13 +260,13 @@ function SettingsContent({
     }
   };
 
-  const handleDownloadUpdate = () => {
+  const _handleDownloadUpdate = () => {
     if (window.electronAPI?.startDownloadUpdate) {
       window.electronAPI.startDownloadUpdate();
     }
   };
 
-  const handleInstallUpdate = () => {
+  const _handleInstallUpdate = () => {
     if (window.electronAPI?.quitAndInstall) {
       window.electronAPI.quitAndInstall();
     }
