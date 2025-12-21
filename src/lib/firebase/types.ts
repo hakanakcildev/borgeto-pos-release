@@ -198,6 +198,7 @@ export interface Payment {
   method: string; // Ödeme yöntemi kodu (PaymentMethodConfig.code)
   paidAt: Date;
   notes?: string;
+  isGift?: boolean; // İkram olarak mı işaretlendi?
   paidItems?: Array<{
     menuId: string;
     menuName: string;

@@ -26,6 +26,7 @@ import {
   Users,
   ChevronRight,
   X,
+  Utensils,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
@@ -194,7 +195,7 @@ function StatisticsContent() {
 
   // İstatistikleri hesapla
   const calculateStats = useCallback(() => {
-    // Yardımcı: Bir siparişte gerçekten ödenmiş tüm ürünleri (kısmi ve tam) topla
+    // Yardımcı: Bir siparişte gerçekten ödenmiş tüm ürünleri (kısmi ve tam) topla (ikramlar hariç)
     const getPaidItemsForOrder = (order: Order) => {
       const paidItems: Array<{
         menuId: string;
@@ -204,11 +205,11 @@ function StatisticsContent() {
       }> = [];
 
       const paymentsWithItems =
-        order.payments?.filter((p) => p.paidItems && p.paidItems.length > 0) ??
+        order.payments?.filter((p) => p.paidItems && p.paidItems.length > 0 && !p.isGift) ??
         [];
 
       if (paymentsWithItems.length > 0) {
-        // Kısmi veya item bazlı ödemelerde, paidItems'ları ekle
+        // Kısmi veya item bazlı ödemelerde, paidItems'ları ekle (ikramlar hariç)
         paymentsWithItems.forEach((payment) => {
           payment.paidItems!.forEach((pi) => {
             paidItems.push({
@@ -223,15 +224,24 @@ function StatisticsContent() {
 
       // Sipariş kapandıysa, kapanış anında kalan ürünler de artık tamamen ödenmiş demektir.
       // (Kısmi ödemelerde, daha önce ödenen kısımlar zaten items'tan düşürülmüş durumda.)
+      // Ancak eğer son ödeme ikram ise, bu ürünleri ekleme
       if (order.status === "closed" && order.items && order.items.length > 0) {
-        order.items.forEach((item) => {
-          paidItems.push({
-            menuId: item.menuId,
-            menuName: item.menuName,
-            quantity: item.quantity,
-            subtotal: item.subtotal,
+        // Son ödemenin ikram olup olmadığını kontrol et
+        const lastPayment = order.payments && order.payments.length > 0 
+          ? order.payments[order.payments.length - 1] 
+          : null;
+        const isLastPaymentGift = lastPayment?.isGift || false;
+        
+        if (!isLastPaymentGift) {
+          order.items.forEach((item) => {
+            paidItems.push({
+              menuId: item.menuId,
+              menuName: item.menuName,
+              quantity: item.quantity,
+              subtotal: item.subtotal,
+            });
           });
-        });
+        }
       }
 
       return paidItems;
@@ -239,6 +249,26 @@ function StatisticsContent() {
 
     // Tüm siparişlerden ödenmiş ürünleri topla
     const allPaidItems = orders.flatMap(getPaidItemsForOrder);
+
+    // İkram ödemelerini ayrı olarak topla
+    let totalGiftRevenue = 0;
+    orders.forEach((order) => {
+      if (order.payments && order.payments.length > 0) {
+        order.payments.forEach((payment: Payment) => {
+          if (payment.isGift) {
+            // Eğer kısmi ödeme ise, paidItems'ları kullan
+            if (payment.paidItems && payment.paidItems.length > 0) {
+              payment.paidItems.forEach((paidItem) => {
+                totalGiftRevenue += paidItem.subtotal;
+              });
+            } else {
+              // Tam ödeme ise, amount'u kullan
+              totalGiftRevenue += payment.amount;
+            }
+          }
+        });
+      }
+    });
 
     // Toplam satışlar: Ödemesi alınan tüm ürünler
     const totalRevenue = allPaidItems.reduce(
@@ -355,10 +385,13 @@ function StatisticsContent() {
       }
     });
 
-    // Sonra siparişlerden gelen ödemeleri ekle
+    // Sonra siparişlerden gelen ödemeleri ekle (ikramlar hariç)
     orders.forEach((order) => {
       if (order.payments && order.payments.length > 0) {
         order.payments.forEach((payment: Payment) => {
+          // İkram ödemelerini ödeme yöntemi istatistiklerine dahil etme
+          if (payment.isGift) return;
+          
           const existing = paymentMethodMap.get(payment.method);
           if (existing) {
             existing.total += payment.amount;
@@ -462,6 +495,7 @@ function StatisticsContent() {
 
     return {
       totalRevenue,
+      totalGiftRevenue,
       totalOrders,
       averageOrderValue,
       topProducts,
@@ -829,6 +863,19 @@ function StatisticsContent() {
               </p>
             </div>
             <Bike className="h-5 w-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
+                İkramlar
+              </p>
+              <p className="text-base font-bold text-orange-600 dark:text-orange-400 truncate">
+                ₺{stats.totalGiftRevenue.toFixed(2)}
+              </p>
+            </div>
+            <Utensils className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
           </div>
         </div>
       </div>

@@ -1385,7 +1385,8 @@ function TableDetailContent() {
       overridePaymentMethod?: string,
       overrideCourierId?: string,
       overridePackageCount?: string,
-      overrideChangeAmount?: string
+      overrideChangeAmount?: string,
+      isGift?: boolean
     ) => {
       // Eğer overrideAmount verilmişse onu kullan, yoksa state'ten oku
       const amountToUse = overrideAmount || paymentAmount;
@@ -1915,6 +1916,7 @@ function TableDetailContent() {
           amount,
           method: paymentMethodToUse, // overridePaymentMethod veya paymentMethod state'i
           paidAt: new Date(),
+          isGift: isGift || false,
           paidItems: isPartialPayment ? paidItems : undefined,
         };
 
@@ -6089,30 +6091,80 @@ function TableDetailContent() {
                                   <Button
                                     type="button"
                                     onClick={async () => {
-                                      if (
-                                        order &&
-                                        order.items &&
-                                        order.items.length > 0
-                                      ) {
-                                        const updatedItems = order.items.map(
-                                          (item) => ({
-                                            ...item,
-                                            subtotal: 0,
-                                            menuPrice: 0,
-                                          })
+                                      if (!order || !order.items || order.items.length === 0) {
+                                        customAlert(
+                                          "Sipariş bulunamadı",
+                                          "Uyarı",
+                                          "warning"
                                         );
-                                        const updatedOrder = {
-                                          ...order,
-                                          items: updatedItems,
-                                        };
-                                        if (order.id) {
-                                          await updateOrder(
-                                            order.id,
-                                            updatedOrder
-                                          );
+                                        return;
+                                      }
+
+                                      // Seçili ürünler var mı kontrol et
+                                      const hasSelectedItems = 
+                                        (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) ||
+                                        selectedItems.size > 0;
+
+                                      // Seçili ürünler varsa sadece onları, yoksa tüm masayı ikram olarak işaretle
+                                      if (hasSelectedItems) {
+                                        // Seçili ürünlerin toplam tutarını hesapla
+                                        let giftAmount = 0;
+                                        
+                                        if (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) {
+                                          // Miktar seçimi yapılmışsa
+                                          pendingPaymentItems.forEach((paymentItem) => {
+                                            const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+                                            if (selectedQty > 0) {
+                                              giftAmount += selectedQty * paymentItem.menuPrice;
+                                            }
+                                          });
+                                        } else if (selectedItems.size > 0) {
+                                          // Ürün seçimi yapılmışsa
+                                          const selectedItemsArray = Array.from(selectedItems);
+                                          selectedItemsArray.forEach((index) => {
+                                            const item = order.items[index];
+                                            if (item) {
+                                              giftAmount += item.subtotal;
+                                            }
+                                          });
                                         }
-                                        setOrder(updatedOrder);
-                                        setPaymentAmount("0");
+
+                                        // İndirim oranını hesapla
+                                        const orderSubtotal = order.items.reduce(
+                                          (sum, item) => sum + item.subtotal,
+                                          0
+                                        );
+                                        const orderDiscount = order.discount || 0;
+                                        const discountRatio = orderSubtotal > 0 ? orderDiscount / orderSubtotal : 0;
+                                        const finalGiftAmount = Math.max(0, giftAmount - (giftAmount * discountRatio));
+
+                                        // İkram ödemesi yap
+                                        await handlePayment(
+                                          finalGiftAmount.toString(),
+                                          selectedItems.size > 0 ? selectedItems : undefined,
+                                          pendingPaymentItems.length > 0 ? pendingPaymentItems : undefined,
+                                          selectedQuantities.size > 0 ? selectedQuantities : undefined,
+                                          "cash", // İkram için ödeme yöntemi
+                                          undefined,
+                                          undefined,
+                                          undefined,
+                                          true // isGift = true
+                                        );
+                                      } else {
+                                        // Tüm masayı ikram olarak işaretle
+                                        const totalAmount = order.total || 0;
+                                        
+                                        await handlePayment(
+                                          totalAmount.toString(),
+                                          undefined,
+                                          undefined,
+                                          undefined,
+                                          "cash", // İkram için ödeme yöntemi
+                                          undefined,
+                                          undefined,
+                                          undefined,
+                                          true // isGift = true
+                                        );
                                       }
                                     }}
                                     className="h-12 bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
