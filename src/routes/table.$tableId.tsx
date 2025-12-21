@@ -4762,39 +4762,42 @@ function TableDetailContent() {
                       </div>
                     )}
 
-                    {/* Ödenen Ürünler - İndirimli Gruplar */}
-                    {paymentGroups.length > 0 && (
-                      <div className="mb-4 pb-4 border-b-2 border-green-400 px-4">
-                        <div className="text-sm font-bold text-green-500 mb-3 flex items-center gap-2">
+                    {/* Ödenen Ürünler - Tümü Birleştirilmiş */}
+                    {(paymentGroups.length > 0 || Array.from(paidItemsMap.values()).length > 0) && (
+                      <div className="mb-4">
+                        <div className="text-sm font-bold text-green-500 mb-2 px-4 flex items-center gap-2">
                           <CheckCircle className="h-4 w-4" />
                           Ödenen Ürünler
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+                          {/* İndirimli gruplar - ürünler sadece orijinal fiyatla */}
                           {paymentGroups.map((group) => (
-                            <div
-                              key={group.paymentId}
-                              className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-300 dark:border-green-700"
-                            >
-                              {/* Grup içindeki ürünler - sadece isim ve miktar */}
-                              <div className="space-y-2 mb-3">
-                                {group.items.map((item, idx) => (
-                                  <div key={`${group.paymentId}-${item.menuName}-${idx}`} className="flex items-center">
+                            <div key={group.paymentId}>
+                              {group.items.map((item, idx) => (
+                                <div
+                                  key={`${group.paymentId}-${item.menuName}-${idx}`}
+                                  className="flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700"
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                      {item.quantity}x
+                                    </span>
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-semibold text-green-600 dark:text-green-300 truncate">
+                                      <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                                         {item.menuName}
-                                      </p>
-                                      <p className="text-xs text-green-500 dark:text-green-400 mt-0.5">
-                                        {item.quantity} adet
                                       </p>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
+                                  <span className="font-bold text-base text-gray-700 dark:text-gray-300 ml-2">
+                                    ₺{(item.menuPrice * item.quantity).toFixed(2).replace(".", ",")}
+                                  </span>
+                                </div>
+                              ))}
                               
-                              {/* Grup toplamı - sağ tarafta */}
+                              {/* Grup toplamı - indirimli gruplarda göster */}
                               {group.hasDiscount && (
-                                <div className="pt-3 border-t border-green-300 dark:border-green-700 flex items-center justify-between">
-                                  <p className="text-sm font-bold text-green-600 dark:text-green-300">
+                                <div className="flex items-center justify-between py-3 px-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white">
                                     Toplam
                                   </p>
                                   <div className="flex flex-col items-end">
@@ -4809,80 +4812,58 @@ function TableDetailContent() {
                               )}
                             </div>
                           ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Ödenen Ürünler - İndirimsiz */}
-                    {Array.from(paidItemsMap.values()).length > 0 && (
-                      <div className="mb-4 pb-4 border-b-2 border-green-400 px-4">
-                        <div className="text-sm font-bold text-green-500 mb-3 flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4" />
-                          Ödenen Ürünler
-                        </div>
-                        <div className="space-y-3">
-                          {Array.from(paidItemsMap.values()).map((item) => {
-                            const hasDiscount = item.originalTotal > item.subtotal;
-                            return (
-                              <div
-                                key={item.menuName}
-                                className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-300 dark:border-green-700"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-base font-semibold text-green-600 dark:text-green-300 truncate">
-                                      {item.menuName}
-                                    </p>
-                                    <p className="text-sm text-green-500 dark:text-green-400 mt-1">
-                                      {item.quantity} adet
-                                    </p>
-                                  </div>
-                                  <div className="flex flex-col items-end ml-2">
-                                    {hasDiscount && (
-                                      <span className="text-sm text-gray-500 dark:text-gray-400 line-through mb-1">
-                                        ₺{item.originalTotal.toFixed(2).replace(".", ",")}
-                                      </span>
-                                    )}
-                                    <span className="font-bold text-base text-green-600 dark:text-green-300">
-                                      ₺{item.subtotal.toFixed(2).replace(".", ",")}
-                                    </span>
-                                  </div>
+                          
+                          {/* İndirimsiz ödenen ürünler */}
+                          {Array.from(paidItemsMap.values()).map((item) => (
+                            <div
+                              key={item.menuName}
+                              className="flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700"
+                            >
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                  {item.quantity}x
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                    {item.menuName}
+                                  </p>
                                 </div>
                               </div>
-                            );
-                          })}
+                              <span className="font-bold text-base text-gray-900 dark:text-white ml-2">
+                                ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
 
                     {/* İptal Edilen Ürünler */}
                     {Array.from(canceledItemsMap.values()).length > 0 && (
-                      <div className="mb-4 pb-4 border-b-2 border-red-400 px-4">
-                        <div className="text-sm font-bold text-red-500 mb-3 flex items-center gap-2">
+                      <div className="mb-4">
+                        <div className="text-sm font-bold text-red-500 mb-2 px-4 flex items-center gap-2">
                           <X className="h-4 w-4" />
                           İptal Edilen Ürünler
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
                           {Array.from(canceledItemsMap.values()).map((item) => (
                             <div
                               key={item.menuName}
-                              className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-300 dark:border-red-700"
+                              className="flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700"
                             >
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                  {item.quantity}x
+                                </span>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-base font-semibold text-red-600 dark:text-red-300 truncate">
+                                  <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                                     {item.menuName}
                                   </p>
-                                  <p className="text-sm text-red-500 dark:text-red-400 mt-1">
-                                    {item.quantity} adet • ₺
-                                    {(item.subtotal / item.quantity).toFixed(2)}{" "}
-                                    birim fiyat
-                                  </p>
                                 </div>
-                                <span className="font-bold text-base text-red-600 dark:text-red-300 line-through ml-2">
-                                  ₺{item.subtotal.toFixed(2)}
-                                </span>
                               </div>
+                              <span className="font-bold text-base text-gray-500 dark:text-gray-400 line-through ml-2">
+                                ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                              </span>
                             </div>
                           ))}
                         </div>
