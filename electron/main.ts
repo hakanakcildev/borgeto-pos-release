@@ -201,6 +201,12 @@ function registerIpcHandlers() {
     // Handler doesn't exist yet, that's fine
   }
 
+  try {
+    ipcMain.removeHandler("open-dev-tools");
+  } catch (e) {
+    // Handler doesn't exist yet, that's fine
+  }
+
   // Register quit-app handler
   ipcMain.handle("quit-app", async () => {
     console.log("quit-app IPC handler called - quitting application");
@@ -1054,6 +1060,14 @@ try {
     }
   });
 
+  // DevTools'u açmak için IPC handler
+  ipcMain.handle("open-dev-tools", async () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.openDevTools();
+      safeLog("🔧 DevTools açıldı (IPC handler)");
+    }
+  });
+
   console.log(
     "IPC handlers registered: quit-app, check-for-updates, quit-and-install, clear-table-history, get-system-printers, print, get-local-ip at",
     new Date().toISOString()
@@ -1356,26 +1370,58 @@ const createWindow = (): void => {
     }
 
     // Production'da da DevTools'u otomatik aç (beyaz ekran sorununu debug etmek için)
+    // Dokunmatik ekran kullanıldığı için klavye yok, bu yüzden otomatik açılması kritik
     if (!isDev && mainWindow) {
-      // Sayfa yüklendiğinde DevTools'u aç - DOMContentLoaded event'ini de dinle
+      // ÇOKLU YAKLAŞIM: Birden fazla event'te DevTools'u aç
+
+      // 1. ready-to-show event'inde aç (en erken)
+      safeLog("🔧 Production'da DevTools açılacak (ready-to-show)");
+      setTimeout(() => {
+        safeLog("🔧 DevTools açılıyor (ready-to-show timeout)");
+        mainWindow?.webContents.openDevTools();
+      }, 1000);
+
+      // 2. did-finish-load event'inde aç
       mainWindow.webContents.once("did-finish-load", () => {
-        safeLog("🔧 Production'da DevTools açılıyor (debug için)");
-        // Biraz bekle ki script'ler yüklensin
+        safeLog("🔧 Production'da DevTools açılıyor (did-finish-load)");
         setTimeout(() => {
           mainWindow?.webContents.openDevTools();
-        }, 500);
+        }, 300);
       });
-      
-      // DOMContentLoaded event'ini de dinle (daha erken)
-      mainWindow.webContents.executeJavaScript(`
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', () => {
-            console.log('✅ DOMContentLoaded fired');
-          });
-        } else {
-          console.log('✅ DOM already loaded');
-        }
-      `).catch(() => {});
+
+      // 3. DOMContentLoaded event'ini de dinle (daha erken)
+      mainWindow.webContents
+        .executeJavaScript(
+          `
+        (function() {
+          function openDevTools() {
+            console.log('🔧 DevTools açılıyor (DOMContentLoaded)');
+            // DevTools'u açmak için IPC kullan
+            if (window.electronAPI && window.electronAPI.openDevTools) {
+              window.electronAPI.openDevTools().catch(() => {
+                console.error('DevTools açılamadı (IPC)');
+              });
+            }
+          }
+          
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', openDevTools);
+          } else {
+            openDevTools();
+          }
+          
+          // Fallback: 2 saniye sonra da aç
+          setTimeout(openDevTools, 2000);
+        })();
+      `
+        )
+        .catch(() => {});
+
+      // 4. Ekstra güvenlik: 3 saniye sonra da aç
+      setTimeout(() => {
+        safeLog("🔧 DevTools açılıyor (fallback timeout)");
+        mainWindow?.webContents.openDevTools();
+      }, 3000);
     }
 
     // Production'da console hatalarını yakala ve log'la

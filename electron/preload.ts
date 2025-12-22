@@ -105,6 +105,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     console.log("Preload: getLocalIP called, invoking get-local-ip IPC");
     return ipcRenderer.invoke("get-local-ip");
   },
+  openDevTools: () => {
+    console.log("Preload: openDevTools called, invoking open-dev-tools IPC");
+    return ipcRenderer.invoke("open-dev-tools");
+  },
 });
 
 // Type definitions for TypeScript
@@ -155,6 +159,7 @@ declare global {
         error?: string;
       }>;
       getLocalIP: () => Promise<{ ip: string | null }>;
+      openDevTools: () => Promise<void>;
     };
   }
 }
