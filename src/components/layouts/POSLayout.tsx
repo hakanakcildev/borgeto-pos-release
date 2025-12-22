@@ -185,10 +185,10 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
                         {companyData.name}
                       </span>
                     )
-              )}
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
             <div className="flex items-center gap-4">
               {/* Internet Status */}
