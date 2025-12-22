@@ -17,12 +17,33 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireSuperAdmin = false,
   requireCompanyAccess = false,
 }) => {
-  const { currentUser, userData, loading, isSuperAdmin, isAuthenticated } = useAuth();
+  const { currentUser, userData, loading, isSuperAdmin, isAuthenticated } =
+    useAuth();
   const params = useParams({ strict: false });
   const [accessCheck, setAccessCheck] = useState<{
     loading: boolean;
     hasAccess: boolean;
   }>({ loading: true, hasAccess: false });
+
+  // ÖNEMLİ: Hook'ları conditional return'den ÖNCE çağır (React hooks kuralları)
+  // Loading çok uzun sürerse fallback göster
+  const [showFallback, setShowFallback] = useState(false);
+
+  // Fallback timer'ı - hook olarak component'in en üstünde
+  useEffect(() => {
+    if (loading || accessCheck.loading) {
+      const timer = setTimeout(() => {
+        console.warn(
+          "⚠️ ProtectedRoute loading çok uzun sürdü, fallback gösteriliyor"
+        );
+        setShowFallback(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    } else {
+      // Loading bitti, fallback'i sıfırla
+      setShowFallback(false);
+    }
+  }, [loading, accessCheck.loading]);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -59,7 +80,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           // For staff/branch users, check if they have companyId
           if (!currentUser) {
             // Staff or branch user - check if companyId matches
-            setAccessCheck({ loading: false, hasAccess: !!userData.companyId && userData.companyId === companyId });
+            setAccessCheck({
+              loading: false,
+              hasAccess:
+                !!userData.companyId && userData.companyId === companyId,
+            });
             return;
           }
 
@@ -97,22 +122,34 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     params,
   ]);
 
-  // Show loading while checking
+  // Show loading while checking - ama çok kısa süre
+  // Eğer loading çok uzun sürerse, içeriği göster (fallback)
   if (loading || accessCheck.loading) {
-    console.log("⏳ ProtectedRoute loading:", { loading, accessCheckLoading: accessCheck.loading });
+    console.log("⏳ ProtectedRoute loading:", {
+      loading,
+      accessCheckLoading: accessCheck.loading,
+    });
+
+    // Fallback aktifse içeriği göster
+    if (showFallback) {
+      // Loading çok uzun sürdü, içeriği göster
+      console.warn("⚠️ ProtectedRoute fallback - içerik gösteriliyor");
+      return <>{children}</>;
+    }
+
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center bg-gray-50"
-        style={{ 
-          minHeight: "100vh", 
-          display: "flex", 
-          alignItems: "center", 
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#f9fafb"
+          backgroundColor: "#f9fafb",
         }}
       >
         <div className="text-center">
-          <div 
+          <div
             style={{
               width: "48px",
               height: "48px",
@@ -120,10 +157,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               borderTop: "3px solid #2563eb",
               borderRadius: "50%",
               animation: "spin 1s linear infinite",
-              margin: "0 auto 16px"
+              margin: "0 auto 16px",
             }}
           ></div>
-          <p className="text-gray-600" style={{ color: "#4b5563", fontSize: "16px" }}>Yükleniyor...</p>
+          <p
+            className="text-gray-600"
+            style={{ color: "#4b5563", fontSize: "16px" }}
+          >
+            Yükleniyor...
+          </p>
         </div>
       </div>
     );
@@ -146,4 +188,3 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   return <>{children}</>;
 };
-

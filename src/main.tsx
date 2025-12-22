@@ -55,6 +55,15 @@ const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   notFoundMode: "root",
+  // Router'ın her durumda çalışmasını sağla
+  defaultErrorComponent: () => (
+    <div style={{ padding: "20px", textAlign: "center" }}>
+      <h1>Sayfa bulunamadı</h1>
+      <button onClick={() => (window.location.href = "/")}>
+        Ana Sayfaya Dön
+      </button>
+    </div>
+  ),
 });
 
 // Register the router instance for type safety
@@ -90,6 +99,18 @@ if (!rootElement) {
   if (shouldRender) {
     try {
       console.log("🚀 React uygulaması render ediliyor...");
+      console.log("🔍 Environment:", {
+        NODE_ENV: import.meta.env.MODE,
+        PROD: import.meta.env.PROD,
+        DEV: import.meta.env.DEV,
+        BASE_URL: import.meta.env.BASE_URL,
+      });
+      console.log("🔍 Router state:", {
+        hasRouter: !!router,
+        hasState: !!router?.state,
+        status: router?.state?.status,
+      });
+
       const root = ReactDOM.createRoot(rootElement);
       root.render(
         <StrictMode>
@@ -108,6 +129,19 @@ if (!rootElement) {
         </StrictMode>
       );
       console.log("✅ React uygulaması render edildi");
+
+      // Router'ın initialize olduğunu kontrol et
+      setTimeout(() => {
+        if (router && router.state) {
+          console.log("✅ Router initialized:", {
+            status: router.state.status,
+            location: router.state.location,
+            matches: router.state.matches.length,
+          });
+        } else {
+          console.error("❌ Router initialize olmadı!");
+        }
+      }, 100);
 
       // Production'da render kontrolü - 3 saniye sonra içerik yoksa hata göster
       // Electron'da process.env.NODE_ENV her zaman "production" olabilir, bu yüzden import.meta.env kullan

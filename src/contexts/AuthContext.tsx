@@ -60,14 +60,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setCompanyData(posAuth.company || null);
         }
       } catch (error) {
+        console.error("❌ Auth loading hatası:", error);
       } finally {
-        // Minimum loading time ekle (çok hızlı bitmesin, UI flash'ı önlemek için)
-        // Ayrıca React'in render olması için zaman tanı
-        const minLoadingTime = 100; // 100ms minimum loading (daha hızlı)
-        setTimeout(() => {
-          console.log("✅ Auth loading tamamlandı");
-          setLoading(false);
-        }, minLoadingTime);
+        // Hemen loading'i bitir - timeout yok
+        // Çünkü localStorage okuma çok hızlı, timeout gereksiz
+        console.log("✅ Auth loading tamamlandı");
+        setLoading(false);
       }
     };
 

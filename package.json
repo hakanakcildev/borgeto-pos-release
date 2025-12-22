@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "2.0.22",
+  "version": "2.0.33",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -109,7 +109,10 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "icon": "public/images/borgeto-logo-512.png",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [

@@ -116,9 +116,20 @@ function RootComponent() {
     });
   }, [location.pathname, authLoading, isAuthenticated, router]);
 
+  // ÖNEMLİ: Eğer auth loading çok uzun sürerse, router'ın çalışmasını engelleme
+  // Router'ın kendi mekanizmasına güven - auth loading bitmeden de çalışabilir
+
+  // ÖNEMLİ: Her zaman render et - loading state'i render'ı engellemesin
+  console.log("🎨 RootComponent rendering, Outlet çalışıyor mu?", {
+    hasRouter: !!router,
+    hasState: !!router?.state,
+    matchesCount: router?.state?.matches?.length || 0,
+  });
+
   return (
     <>
       <NetworkStatus />
+      {/* Outlet her zaman render edilmeli - router'ın kendi mekanizması çalışsın */}
       <Outlet />
       <TouchKeyboard
         isOpen={isOpen}

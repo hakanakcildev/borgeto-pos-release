@@ -1225,6 +1225,34 @@ const createWindow = (): void => {
     }
 
     safeLog("📄 Loading index.html from:", indexPath);
+    safeLog("📄 __dirname:", __dirname);
+    safeLog("📄 indexPath exists:", existsSync(indexPath));
+
+    // Production'da detaylı log'lar
+    mainWindow.webContents.once("did-finish-load", () => {
+      safeLog("✅ index.html yüklendi");
+      // Root element'in var olup olmadığını kontrol et
+      mainWindow?.webContents
+        .executeJavaScript(
+          `
+        console.log("🔍 Production Debug - Root element kontrolü:");
+        const root = document.getElementById('root');
+        console.log("  - Root element var mı?", !!root);
+        console.log("  - Root innerHTML:", root ? root.innerHTML.substring(0, 200) : "N/A");
+        console.log("  - Document readyState:", document.readyState);
+        console.log("  - Window location:", window.location.href);
+        console.log("  - Scripts loaded:", document.scripts.length);
+        // Tüm script'leri listele
+        Array.from(document.scripts).forEach((script, i) => {
+          console.log(\`  - Script \${i}: \${script.src || 'inline'}\`);
+        });
+      `
+        )
+        .catch((err) => {
+          safeError("❌ Root element kontrolü hatası:", err);
+        });
+    });
+
     mainWindow.loadFile(indexPath);
 
     // Ensure proper routing by handling navigation
@@ -1311,9 +1339,17 @@ const createWindow = (): void => {
     }, 500);
 
     // Open DevTools in development
-    // Production'da da hata ayıklama için DevTools açılabilir (Ctrl+Shift+I ile)
     if (isDev) {
       mainWindow?.webContents.openDevTools();
+    }
+
+    // Production'da da DevTools'u otomatik aç (beyaz ekran sorununu debug etmek için)
+    if (!isDev && mainWindow) {
+      // Sayfa yüklendiğinde DevTools'u aç
+      mainWindow.webContents.once("did-finish-load", () => {
+        safeLog("🔧 Production'da DevTools açılıyor (debug için)");
+        mainWindow?.webContents.openDevTools();
+      });
     }
 
     // Production'da console hatalarını yakala ve log'la
