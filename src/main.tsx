@@ -64,68 +64,109 @@ declare module "@tanstack/react-router" {
   }
 }
 
-// Electron'da ilk yükleme sonrası route kontrolü
-if (typeof window !== "undefined") {
-  window.addEventListener("DOMContentLoaded", () => {
-    // Kısa bir gecikme ile router state'ini kontrol et
-    setTimeout(() => {
-      const posAuthStr = localStorage.getItem("posAuth");
-      const isAuthenticated = !!posAuthStr;
-
-      // Eğer authenticated ise ve pathname "/" değilse veya file:// protokolü kullanılıyorsa
-      if (
-        isAuthenticated &&
-        (window.location.pathname !== "/" ||
-          window.location.protocol === "file:")
-      ) {
-        // History API ile "/" path'ine yönlendir
-        window.history.replaceState(null, "", "/");
-        // Router'ı manuel olarak navigate et
-        router.navigate({
-          to: "/",
-          search: { area: undefined, activeOnly: false },
-          replace: true,
-        });
-      } else if (
-        !isAuthenticated &&
-        window.location.pathname !== "/auth/login"
-      ) {
-        window.history.replaceState(null, "", "/auth/login");
-        router.navigate({ to: "/auth/login", replace: true });
-      }
-    }, 100);
-  });
-}
+// Electron'da ilk yükleme sonrası route kontrolü - KALDIRILDI
+// Route kontrolü artık __root.tsx'de yapılıyor, burada agresif kontrol gerekmiyor
+// Çünkü bu kontrol React render edilmeden önce çalışıyor ve beyaz sayfaya neden olabiliyor
+// __root.tsx'deki route kontrolü daha güvenli ve React render edildikten sonra çalışıyor
 
 // Render the app
-const rootElement = document.getElementById("root")!;
-if (!rootElement.innerHTML) {
-  try {
-    const root = ReactDOM.createRoot(rootElement);
-    root.render(
-      <StrictMode>
-        <ErrorBoundary>
-          <ThemeProvider>
-            <AuthProvider>
-              <AlertDialogProvider>
-                <TouchKeyboardProvider>
-                  <NetworkStatus />
-                  <RouterProvider router={router} />
-                </TouchKeyboardProvider>
-              </AlertDialogProvider>
-            </AuthProvider>
-          </ThemeProvider>
-        </ErrorBoundary>
-      </StrictMode>
-    );
-  } catch (error) {
-    console.error("Render hatası:", error);
-    rootElement.innerHTML = `
-      <div style="padding: 20px; text-align: center; color: red;">
-        <h1>Render Hatası</h1>
-        <p>${error instanceof Error ? error.message : "Bilinmeyen hata"}</p>
-        <button onclick="window.location.reload()">Yeniden Yükle</button>
-      </div>
-    `;
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  console.error("❌ Root element bulunamadı!");
+  document.body.innerHTML = `
+    <div style="padding: 20px; text-align: center; color: red; background: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+      <h1 style="font-size: 24px; margin-bottom: 16px;">Kritik Hata</h1>
+      <p style="margin-bottom: 16px;">Root element (#root) bulunamadı!</p>
+      <button onclick="window.location.reload()" style="padding: 10px 20px; font-size: 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px;">
+        Yeniden Yükle
+      </button>
+    </div>
+  `;
+} else {
+  // Root element boşsa veya sadece whitespace içeriyorsa render et
+  const shouldRender =
+    !rootElement.innerHTML || rootElement.innerHTML.trim() === "";
+
+  if (shouldRender) {
+    try {
+      console.log("🚀 React uygulaması render ediliyor...");
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <StrictMode>
+          <ErrorBoundary>
+            <ThemeProvider>
+              <AuthProvider>
+                <AlertDialogProvider>
+                  <TouchKeyboardProvider>
+                    <NetworkStatus />
+                    <RouterProvider router={router} />
+                  </TouchKeyboardProvider>
+                </AlertDialogProvider>
+              </AuthProvider>
+            </ThemeProvider>
+          </ErrorBoundary>
+        </StrictMode>
+      );
+      console.log("✅ React uygulaması render edildi");
+
+      // Production'da render kontrolü - 3 saniye sonra içerik yoksa hata göster
+      // Electron'da process.env.NODE_ENV her zaman "production" olabilir, bu yüzden import.meta.env kullan
+      const isProduction = import.meta.env.PROD || !import.meta.env.DEV;
+      if (isProduction) {
+        setTimeout(() => {
+          const checkElement = document.getElementById("root");
+          // Root element var ama içerik yoksa veya sadece React root container varsa
+          if (checkElement) {
+            const hasContent =
+              checkElement.children.length > 0 ||
+              (checkElement.innerHTML &&
+                checkElement.innerHTML.trim() !== "" &&
+                !checkElement.innerHTML.includes("data-reactroot"));
+            if (!hasContent) {
+              console.error("❌ React render edildi ama içerik görünmüyor!");
+              // Sadece log'la, kullanıcıya hata gösterme (çünkü bu false positive olabilir)
+              // Ama eğer gerçekten içerik yoksa, 5 saniye sonra tekrar kontrol et
+              setTimeout(() => {
+                const recheckElement = document.getElementById("root");
+                if (recheckElement) {
+                  const stillNoContent =
+                    recheckElement.children.length === 0 ||
+                    !recheckElement.innerHTML ||
+                    recheckElement.innerHTML.trim() === "";
+                  if (stillNoContent) {
+                    recheckElement.innerHTML = `
+                      <div style="padding: 20px; text-align: center; color: #dc2626; background: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <h1 style="font-size: 24px; margin-bottom: 16px;">Render Sorunu</h1>
+                        <p style="margin-bottom: 16px;">React render edildi ama içerik görünmüyor.</p>
+                        <p style="margin-bottom: 16px; font-size: 14px; color: #666;">Lütfen Ctrl+Shift+I ile DevTools'u açıp console'u kontrol edin.</p>
+                        <button onclick="window.location.reload()" style="padding: 10px 20px; font-size: 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px; margin-top: 8px;">
+                          Yeniden Yükle
+                        </button>
+                      </div>
+                    `;
+                  }
+                }
+              }, 5000);
+            }
+          }
+        }, 3000);
+      }
+    } catch (error) {
+      console.error("❌ Render hatası:", error);
+      rootElement.innerHTML = `
+        <div style="padding: 20px; text-align: center; color: red; background: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <h1 style="font-size: 24px; margin-bottom: 16px;">Render Hatası</h1>
+          <p style="margin-bottom: 16px;">${error instanceof Error ? error.message : "Bilinmeyen hata"}</p>
+          <pre style="text-align: left; overflow: auto; max-height: 400px; background: #f5f5f5; padding: 10px; border-radius: 4px; max-width: 90%;">
+${error instanceof Error ? error.stack : String(error)}
+          </pre>
+          <button onclick="window.location.reload()" style="margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px;">
+            Yeniden Yükle
+          </button>
+        </div>
+      `;
+    }
+  } else {
+    console.warn("⚠️ Root element zaten içerik içeriyor, render atlandı");
   }
 }

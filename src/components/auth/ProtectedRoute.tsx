@@ -99,11 +99,31 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Show loading while checking
   if (loading || accessCheck.loading) {
+    console.log("⏳ ProtectedRoute loading:", { loading, accessCheckLoading: accessCheck.loading });
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div 
+        className="min-h-screen flex items-center justify-center bg-gray-50"
+        style={{ 
+          minHeight: "100vh", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center",
+          backgroundColor: "#f9fafb"
+        }}
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Yükleniyor...</p>
+          <div 
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "3px solid #e5e7eb",
+              borderTop: "3px solid #2563eb",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px"
+            }}
+          ></div>
+          <p className="text-gray-600" style={{ color: "#4b5563", fontSize: "16px" }}>Yükleniyor...</p>
         </div>
       </div>
     );

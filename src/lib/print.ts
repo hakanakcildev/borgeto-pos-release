@@ -39,8 +39,8 @@ export function formatPrintContent(
   const tableNum = String(tableNumber);
   const isPaid = additionalInfo?.isPaid || type === "payment";
 
-  // Kağıt genişliği - her zaman 110 karakter (otomatik algılama yok)
-  const separatorWidth = 110; // Sabit 110 karakter genişliği
+  // Kağıt genişliği - 220 karakter (iki katına çıkarıldı)
+  const separatorWidth = 220; // Sabit 220 karakter genişliği (önceden 110 idi)
 
   // İçeriği oluştur
   let content = "";
@@ -280,7 +280,7 @@ export function getExamplePrintOutput(
   companyName: string = "Firma Adi",
   tableNumber: string = "5"
 ): string {
-  const maxPaperWidth = 110; // Varsayılan kağıt genişliği
+  const maxPaperWidth = 220; // Varsayılan kağıt genişliği (iki katına çıkarıldı)
   const separatorWidth = maxPaperWidth;
 
   let content = "";

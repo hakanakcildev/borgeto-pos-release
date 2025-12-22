@@ -62,57 +62,59 @@ function RootComponent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // AGRES İF ROUTE KONTROLÜ - Her durumda doğru sayfaya yönlendir
+  // Route kontrolü - GEÇİCİ OLARAK DEVRE DIŞI (beyaz ekran sorununu çözmek için)
+  // Router'ın kendi mekanizmasına tamamen güveniyoruz
+  // useEffect(() => {
+  //   // Auth yüklenene kadar bekle
+  //   if (authLoading) {
+  //     return;
+  //   }
+
+  //   // Router'ın hazır olmasını bekle - ama render'ı engelleme
+  //   if (!router || !router.state) {
+  //     return;
+  //   }
+
+  //   const isLoginPage =
+  //     location.pathname === "/auth/login" || location.pathname === "/auth";
+
+  //   // Sadece çok spesifik durumlarda yönlendirme yap:
+  //   // 1. Authenticated kullanıcı login sayfasındaysa -> ana sayfaya
+  //   // 2. Unauthenticated kullanıcı login sayfasında değilse -> login'e
+  //   // Diğer tüm durumlarda router'ın kendi mekanizmasına güven
+
+  //   if (isAuthenticated && isLoginPage) {
+  //     // Authenticated kullanıcı login sayfasında - ana sayfaya yönlendir
+  //     // Ama içeriğin render olması için biraz bekle
+  //     const timer = setTimeout(() => {
+  //       navigate({
+  //         to: "/",
+  //         search: { area: undefined, activeOnly: false },
+  //         replace: true,
+  //       });
+  //     }, 300);
+  //     return () => clearTimeout(timer);
+  //   } else if (!isAuthenticated && !isLoginPage) {
+  //     // Unauthenticated kullanıcı login sayfasında değil - login'e yönlendir
+  //     // Ama içeriğin render olması için biraz bekle
+  //     const timer = setTimeout(() => {
+  //       navigate({ to: "/auth/login", replace: true });
+  //     }, 300);
+  //     return () => clearTimeout(timer);
+  //   }
+  //   // Diğer tüm durumlarda hiçbir şey yapma - router kendi işini yapsın
+  // }, [authLoading, isAuthenticated, location.pathname, navigate, router]);
+
+  // Debug log'ları ekle
   useEffect(() => {
-    try {
-      // Auth yüklenene kadar bekle
-      if (authLoading) {
-        return;
-      }
-
-      const isLoginPage =
-        location.pathname === "/auth/login" || location.pathname === "/auth";
-      const hasRouteMatch = router.state.matches.length > 0;
-
-      // Eğer kullanıcı giriş yapmışsa
-      if (isAuthenticated) {
-        // Login sayfasındaysa ANINDA ana sayfaya yönlendir
-        if (isLoginPage) {
-          navigate({
-            to: "/",
-            search: { area: undefined, activeOnly: false },
-            replace: true,
-          });
-          return;
-        }
-
-        // Route match YOKSA ANINDA ana sayfaya yönlendir
-        if (!hasRouteMatch) {
-          navigate({
-            to: "/",
-            search: { area: undefined, activeOnly: false },
-            replace: true,
-          });
-          return;
-        }
-      } else {
-        // Eğer kullanıcı giriş yapmamışsa
-        // Login sayfasında değilse ANINDA login'e yönlendir
-        if (!isLoginPage) {
-          navigate({ to: "/auth/login", replace: true });
-          return;
-        }
-      }
-    } catch (error) {
-      console.error("Route kontrolü hatası:", error);
-    }
-  }, [
-    authLoading,
-    isAuthenticated,
-    location.pathname,
-    router.state.matches.length,
-    navigate,
-  ]);
+    console.log("🔍 RootComponent render:", {
+      pathname: location.pathname,
+      authLoading,
+      isAuthenticated,
+      routerReady: !!router?.state,
+      matchesCount: router?.state?.matches?.length || 0,
+    });
+  }, [location.pathname, authLoading, isAuthenticated, router]);
 
   return (
     <>

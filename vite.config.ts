@@ -22,6 +22,9 @@ export default defineConfig({
     }),
     react({
       jsxRuntime: "automatic",
+      babel: {
+        plugins: [],
+      },
     }),
     tailwindcss(),
     electron([
@@ -76,11 +79,15 @@ export default defineConfig({
     conditions: ["development", "browser", "module", "import", "default"],
     mainFields: ["module", "jsnext:main", "jsnext", "main"],
   },
-  ssr: {
-    noExternal: ["@tanstack/react-router"],
-  },
+  // @tanstack/react-router'ın jsx import sorununu çözmek için
   optimizeDeps: {
-    include: ["bcryptjs", "react", "react-dom", "react/jsx-runtime"],
+    include: [
+      "bcryptjs",
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "@tanstack/react-router",
+    ],
     exclude: ["electron"],
     esbuildOptions: {
       jsx: "automatic",
@@ -95,7 +102,7 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     commonjsOptions: {
-      include: [/bcryptjs/],
+      include: [/bcryptjs/, /react/, /react-dom/, /use-sync-external-store/],
       transformMixedEsModules: true,
     },
     rollupOptions: {
@@ -103,19 +110,9 @@ export default defineConfig({
         format: "es",
         preserveModules: false,
       },
-      external: (id) => {
-        // Externalize react and related modules to avoid bundling issues
-        if (
-          id === "react" ||
-          id.startsWith("react/") ||
-          id === "react-dom" ||
-          id.startsWith("react-dom/") ||
-          id.startsWith("use-sync-external-store")
-        ) {
-          return true;
-        }
-        return false;
-      },
+      // Tüm bağımlılıkları bundle'a dahil et
+      // @tanstack/react-router'ın jsx import sorununu çözmek için
+      external: [],
     },
   },
 });

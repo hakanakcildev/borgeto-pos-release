@@ -158,7 +158,6 @@ function TableDetailContent() {
   >(null);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [, setNotes] = useState("");
   const [showCart, setShowCart] = useState(false);
 
@@ -363,7 +362,12 @@ function TableDetailContent() {
     setPaymentAmount("");
     setPaymentMethod("");
     setAppliedPayments([]);
+    // İlk yükleme flag'ini reset et - yeni masada cart temizlensin
+    isInitialLoadRef.current = true;
   }, [table?.id]);
+
+  // İlk yükleme flag'i - cart'ı sadece ilk yüklemede temizlemek için
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     const loadData = async () => {
@@ -373,6 +377,11 @@ function TableDetailContent() {
       if (!effectiveCompanyId) {
         setLoading(false);
         return;
+      }
+
+      const isInitialLoad = isInitialLoadRef.current;
+      if (isInitialLoad) {
+        isInitialLoadRef.current = false;
       }
 
       try {
@@ -494,14 +503,21 @@ function TableDetailContent() {
         // Sadece aktif sipariş varsa göster, yoksa temizle
         if (orderData && orderData.status === "active") {
           setOrder(orderData);
-          // Cart'ı temiz tut - sadece yeni eklenen ürünler cart'ta olacak
-          setCart([]);
-          setNotes("");
+          // Cart'ı sadece ilk yüklemede temizle
+          if (isInitialLoad) {
+            setCart([]);
+            setNotes("");
+          }
+          // Sonraki yüklemelerde cart'ı koru - kullanıcı yeni ürün eklemiş olabilir
         } else {
-          // Aktif sipariş yoksa temizle
+          // Aktif sipariş yoksa
           setOrder(null);
-          setCart([]);
-          setNotes("");
+          // Cart'ı sadece ilk yüklemede temizle
+          if (isInitialLoad) {
+            setCart([]);
+            setNotes("");
+          }
+          // Sonraki yüklemelerde cart'ı koru - kullanıcı yeni ürün eklemiş olabilir
         }
 
         // İlk kategoriyi seç
@@ -1232,7 +1248,37 @@ function TableDetailContent() {
           updateData.notes = currentOrder.notes;
         }
         await updateOrder(currentOrder.id!, updateData);
+        // Order'ı yükle ve items'ın doğru yüklendiğinden emin ol
         updatedOrder = await getOrder(currentOrder.id!);
+
+        // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
+        if (
+          !updatedOrder ||
+          !updatedOrder.items ||
+          updatedOrder.items.length === 0
+        ) {
+          console.warn("⚠️ Order items boş, tekrar yükleniyor...");
+          // Biraz bekle ve tekrar yükle (Firebase'in güncellemesi için)
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          updatedOrder = await getOrder(currentOrder.id!);
+
+          // Hala boşsa, finalItems'ı manuel olarak ekle
+          if (
+            !updatedOrder ||
+            !updatedOrder.items ||
+            updatedOrder.items.length === 0
+          ) {
+            console.error(
+              "❌ Order items hala boş, manuel olarak ekleniyor..."
+            );
+            updatedOrder = {
+              ...updatedOrder!,
+              items: finalItems,
+              subtotal: subtotal,
+              total: total,
+            };
+          }
+        }
       } else {
         // Yeni sipariş oluştur
         const newOrderData: Omit<
@@ -1255,6 +1301,35 @@ function TableDetailContent() {
         // notes alanını ekleme (undefined gönderme)
         const orderId = await addOrder(newOrderData);
         updatedOrder = await getOrder(orderId);
+
+        // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
+        if (
+          !updatedOrder ||
+          !updatedOrder.items ||
+          updatedOrder.items.length === 0
+        ) {
+          console.warn("⚠️ Yeni order items boş, tekrar yükleniyor...");
+          // Biraz bekle ve tekrar yükle (Firebase'in güncellemesi için)
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          updatedOrder = await getOrder(orderId);
+
+          // Hala boşsa, finalItems'ı manuel olarak ekle
+          if (
+            !updatedOrder ||
+            !updatedOrder.items ||
+            updatedOrder.items.length === 0
+          ) {
+            console.error(
+              "❌ Yeni order items hala boş, manuel olarak ekleniyor..."
+            );
+            updatedOrder = {
+              ...updatedOrder!,
+              items: finalItems,
+              subtotal: subtotal,
+              total: total,
+            };
+          }
+        }
       }
 
       // Yeni eklenen ürünleri kaydet (cart temizlenmeden önce)
@@ -1262,10 +1337,38 @@ function TableDetailContent() {
 
       // Siparişi güncelle ve sepeti temizle
       // updatedOrder zaten tüm cart öğelerini içeriyor, bu yüzden cart'ı hemen temizleyebiliriz
+      console.log(
+        "✅ Order kaydedildi, items sayısı:",
+        updatedOrder?.items?.length || 0
+      );
+
+      // Order'ın items'ının doğru yüklendiğinden emin ol
+      if (
+        !updatedOrder ||
+        !updatedOrder.items ||
+        updatedOrder.items.length === 0
+      ) {
+        console.error("❌ Order items boş, finalItems kullanılıyor");
+        // Eğer order items boşsa, finalItems'ı kullan
+        updatedOrder = {
+          ...updatedOrder!,
+          items: finalItems,
+          subtotal: subtotal,
+          total: total,
+        };
+      }
+
+      // Order state'ini güncelle - items'ın kaybolmaması için
       setOrder(updatedOrder);
       setCart([]);
       setNotes("");
       setShowCart(false);
+
+      // Order'ın doğru yüklendiğini doğrula
+      console.log(
+        "✅ Order state güncellendi, items sayısı:",
+        updatedOrder?.items?.length || 0
+      );
 
       // Masayı dolu yap ve currentOrderId'yi güncelle
       if (updatedOrder && currentTable.id) {
@@ -2634,17 +2737,20 @@ function TableDetailContent() {
             ) {
               // Güncel order varsa ve items'ı varsa göster
               setOrder(finalOrder);
+              // Cart'ı temizleme - kullanıcı yeni ürün eklemiş olabilir
             } else {
               // Order yoksa veya items boşsa null yap
+              // AMA cart'ı temizleme - kullanıcı yeni ürün eklemiş olabilir
               setOrder(null);
-              setCart([]);
-              setNotes("");
+              // setCart([]); // Cart'ı temizleme - kullanıcı yeni ürün eklemiş olabilir
+              // setNotes(""); // Notes'u da temizleme
             }
           } catch {
             // Hata durumunda null yap
+            // AMA cart'ı temizleme - kullanıcı yeni ürün eklemiş olabilir
             setOrder(null);
-            setCart([]);
-            setNotes("");
+            // setCart([]); // Cart'ı temizleme - kullanıcı yeni ürün eklemiş olabilir
+            // setNotes(""); // Notes'u da temizleme
           } finally {
             // Loading state'ini her durumda kapat - yeni ürün eklenebilsin
             setIsRefreshingOrder(false);

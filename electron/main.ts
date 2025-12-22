@@ -14,7 +14,11 @@ try {
   // stdout'un write metodunu güvenli hale getir
   if (process.stdout && typeof process.stdout.write === "function") {
     const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = function (chunk: any, encoding?: any, cb?: any): boolean {
+    process.stdout.write = function (
+      chunk: any,
+      encoding?: any,
+      cb?: any
+    ): boolean {
       try {
         if (process.stdout.writable && !process.stdout.destroyed) {
           return originalStdoutWrite(chunk, encoding, cb);
@@ -37,7 +41,11 @@ try {
   // stderr'in write metodunu güvenli hale getir
   if (process.stderr && typeof process.stderr.write === "function") {
     const originalStderrWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = function (chunk: any, encoding?: any, cb?: any): boolean {
+    process.stderr.write = function (
+      chunk: any,
+      encoding?: any,
+      cb?: any
+    ): boolean {
       try {
         if (process.stderr.writable && !process.stderr.destroyed) {
           return originalStderrWrite(chunk, encoding, cb);
@@ -80,7 +88,11 @@ const originalConsole = {
 
 function safeLog(...args: any[]): void {
   try {
-    if (process.stdout && process.stdout.writable && !process.stdout.destroyed) {
+    if (
+      process.stdout &&
+      process.stdout.writable &&
+      !process.stdout.destroyed
+    ) {
       originalConsole.log(...args);
     }
   } catch (error) {
@@ -90,7 +102,11 @@ function safeLog(...args: any[]): void {
 
 function safeError(...args: any[]): void {
   try {
-    if (process.stderr && process.stderr.writable && !process.stderr.destroyed) {
+    if (
+      process.stderr &&
+      process.stderr.writable &&
+      !process.stderr.destroyed
+    ) {
       originalConsole.error(...args);
     }
   } catch (error) {
@@ -100,7 +116,11 @@ function safeError(...args: any[]): void {
 
 function safeWarn(...args: any[]): void {
   try {
-    if (process.stderr && process.stderr.writable && !process.stderr.destroyed) {
+    if (
+      process.stderr &&
+      process.stderr.writable &&
+      !process.stderr.destroyed
+    ) {
       originalConsole.warn(...args);
     }
   } catch (error) {
@@ -621,9 +641,11 @@ function registerIpcHandlers() {
             writeFileSync(tempFile, "\uFEFF" + data.content, "utf-8");
             safeLog(`📁 Temp file created: ${tempFile}`);
           } catch (writeError) {
-                safeError("❌ Error writing temp file:", writeError);
+            safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
-              writeError instanceof Error ? writeError.message : String(writeError);
+              writeError instanceof Error
+                ? writeError.message
+                : String(writeError);
             return {
               success: false,
               error: `Dosya yazma hatası: ${errorMessage}`,
@@ -661,7 +683,9 @@ Write-Output "SUCCESS";`;
               } catch (writeError) {
                 safeError("❌ Error writing PowerShell script:", writeError);
                 const errorMessage =
-                  writeError instanceof Error ? writeError.message : String(writeError);
+                  writeError instanceof Error
+                    ? writeError.message
+                    : String(writeError);
                 // Temp dosyayı temizle
                 try {
                   setTimeout(() => {
@@ -704,7 +728,9 @@ Write-Output "SUCCESS";`;
                   safeWarn("Could not delete files:", e);
                 }
                 const errorMessage =
-                  execError instanceof Error ? execError.message : String(execError);
+                  execError instanceof Error
+                    ? execError.message
+                    : String(execError);
                 return {
                   success: false,
                   error: `PowerShell hatası: ${errorMessage}`,
@@ -786,7 +812,9 @@ try {
               } catch (writeError) {
                 safeError("❌ Error writing PowerShell script:", writeError);
                 const errorMessage =
-                  writeError instanceof Error ? writeError.message : String(writeError);
+                  writeError instanceof Error
+                    ? writeError.message
+                    : String(writeError);
                 // Temp dosyayı temizle
                 try {
                   setTimeout(() => {
@@ -829,7 +857,9 @@ try {
                   safeWarn("Could not delete files:", e);
                 }
                 const errorMessage =
-                  execError instanceof Error ? execError.message : String(execError);
+                  execError instanceof Error
+                    ? execError.message
+                    : String(execError);
                 return {
                   success: false,
                   error: `PowerShell hatası: ${errorMessage}`,
@@ -892,9 +922,11 @@ try {
           try {
             writeFileSync(tempFile, data.content, "utf-8");
           } catch (writeError) {
-                safeError("❌ Error writing temp file:", writeError);
+            safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
-              writeError instanceof Error ? writeError.message : String(writeError);
+              writeError instanceof Error
+                ? writeError.message
+                : String(writeError);
             return {
               success: false,
               error: `Dosya yazma hatası: ${errorMessage}`,
@@ -929,9 +961,11 @@ try {
           try {
             writeFileSync(tempFile, data.content, "utf-8");
           } catch (writeError) {
-                safeError("❌ Error writing temp file:", writeError);
+            safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
-              writeError instanceof Error ? writeError.message : String(writeError);
+              writeError instanceof Error
+                ? writeError.message
+                : String(writeError);
             return {
               success: false,
               error: `Dosya yazma hatası: ${errorMessage}`,
@@ -1163,17 +1197,90 @@ const createWindow = (): void => {
     mainWindow.loadURL(`http://localhost:${port}`);
   } else {
     // Production: Load from built files
-    // Use loadURL with file:// protocol to ensure proper routing
     const indexPath = join(__dirname, "../dist/index.html");
+
+    // Dosyanın var olup olmadığını kontrol et
+    if (!existsSync(indexPath)) {
+      safeError("❌ index.html bulunamadı:", indexPath);
+      safeError("Lütfen uygulamayı yeniden build edin: npm run build");
+      // Hata mesajı göster
+      mainWindow.webContents.once("did-finish-load", () => {
+        mainWindow?.webContents.executeJavaScript(`
+          document.body.innerHTML = \`
+            <div style="padding: 40px; text-align: center; font-family: Arial; background: #f0f0f0; height: 100vh; display: flex; align-items: center; justify-content: center;">
+              <div style="background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px;">
+                <h1 style="color: #dc2626; margin-bottom: 20px;">❌ Build Hatası</h1>
+                <p style="color: #666; margin-bottom: 20px; line-height: 1.6;">
+                  index.html dosyası bulunamadı. Lütfen uygulamayı yeniden build edin.
+                </p>
+                <p style="color: #999; font-size: 14px; font-family: monospace;">
+                  ${indexPath}
+                </p>
+              </div>
+            </div>
+          \`;
+        `);
+      });
+      return;
+    }
+
+    safeLog("📄 Loading index.html from:", indexPath);
     mainWindow.loadFile(indexPath);
 
     // Ensure proper routing by handling navigation
-    mainWindow.webContents.on("did-fail-load", (_event, errorCode) => {
-      // If navigation fails, try loading index.html again
-      if (errorCode === -3 && mainWindow) {
-        mainWindow.loadFile(indexPath);
+    mainWindow.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription, validatedURL) => {
+        safeError("❌ Navigation failed:", {
+          errorCode,
+          errorDescription,
+          validatedURL,
+        });
+        // If navigation fails, try loading index.html again
+        if (errorCode === -3 && mainWindow) {
+          safeLog("🔄 Retrying to load index.html...");
+          mainWindow.loadFile(indexPath);
+        }
       }
-    });
+    );
+
+    // Sayfa yüklendiğinde kontrol et (sadece development'ta)
+    if (isDev) {
+      mainWindow.webContents.once("did-finish-load", () => {
+        safeLog("✅ Page loaded successfully");
+        // Root element'in var olup olmadığını kontrol et
+        mainWindow?.webContents
+          .executeJavaScript(
+            `
+          (function() {
+            const root = document.getElementById('root');
+            if (!root) {
+              console.error('❌ Root element (#root) bulunamadı!');
+              return false;
+            }
+            if (root.innerHTML.trim() === '') {
+              console.warn('⚠️ Root element boş - React henüz render edilmedi');
+              return false;
+            }
+            console.log('✅ Root element bulundu ve içerik var');
+            return true;
+          })();
+        `
+          )
+          .then((result) => {
+            if (!result) {
+              safeError(
+                "⚠️ Root element kontrolü başarısız - React render edilmemiş olabilir"
+              );
+              // DevTools'u aç (sadece development'ta)
+              mainWindow?.webContents.openDevTools();
+            }
+          })
+          .catch((err) => {
+            safeError("❌ Root element kontrolü hatası:", err);
+          });
+      });
+    }
   }
 
   // Show window when ready to prevent visual flash
@@ -1204,17 +1311,86 @@ const createWindow = (): void => {
     }, 500);
 
     // Open DevTools in development
+    // Production'da da hata ayıklama için DevTools açılabilir (Ctrl+Shift+I ile)
     if (isDev) {
       mainWindow?.webContents.openDevTools();
+    }
+
+    // Production'da console hatalarını yakala ve log'la
+    if (!isDev && mainWindow) {
+      // Console mesajlarını yakala
+      mainWindow.webContents.on(
+        "console-message",
+        (_event, level, message, line, sourceId) => {
+          if (level >= 2) {
+            // 0=debug, 1=log, 2=warning, 3=error
+            safeError(
+              `[Renderer Console ${level === 2 ? "WARNING" : "ERROR"}]`,
+              message
+            );
+            if (sourceId) {
+              safeError(`  Source: ${sourceId}:${line}`);
+            }
+          }
+        }
+      );
+
+      // JavaScript hatalarını yakala (sadece kritik hatalarda DevTools aç)
+      mainWindow.webContents.on(
+        "did-fail-load",
+        (_event, errorCode, errorDescription, validatedURL) => {
+          safeError("❌ Page load failed:", {
+            errorCode,
+            errorDescription,
+            validatedURL,
+          });
+          // Sadece kritik hatalarda DevTools'u aç (normal navigation hatalarını ignore et)
+          // -3 = ERR_ABORTED (normal navigation), -102 = ERR_CONNECTION_REFUSED (dev server yok)
+          // Sadece gerçek kritik hatalarda aç (ör: -105 = ERR_NAME_NOT_RESOLVED, -106 = ERR_INTERNET_DISCONNECTED)
+          if (errorCode !== -3 && errorCode !== -102) {
+            // Kritik hata - sadece log'la, production'da DevTools açma
+            safeError(
+              `⚠️ Critical load error (code: ${errorCode}) - check logs`
+            );
+            // Production'da DevTools açma - sadece log'la
+            // Kullanıcı Ctrl+Shift+I ile manuel açabilir
+          }
+        }
+      );
+
+      // Uncaught exception'ları yakala
+      mainWindow.webContents
+        .executeJavaScript(
+          `
+        window.addEventListener('error', (event) => {
+          console.error('Uncaught Error:', event.error || event.message, event.filename, event.lineno);
+        });
+        window.addEventListener('unhandledrejection', (event) => {
+          console.error('Unhandled Promise Rejection:', event.reason);
+        });
+      `
+        )
+        .catch((err) => {
+          safeError("Failed to setup error handlers:", err);
+        });
     }
   });
 
   // Kiosk modunda F11 ve ESC tuşlarını engelle (production'da)
+  // Ancak Ctrl+Shift+I ile DevTools açılabilir (hata ayıklama için)
   if (!isDev) {
     mainWindow?.webContents.on("before-input-event", (event, input) => {
       // F11 (fullscreen toggle) ve ESC (exit fullscreen) tuşlarını engelle
-      if (input.key === "F11" || input.key === "Escape") {
+      if (
+        input.key === "F11" ||
+        (input.key === "Escape" && !input.control && !input.shift)
+      ) {
         event.preventDefault();
+      }
+      // Ctrl+Shift+I ile DevTools açılabilir (hata ayıklama için)
+      if (input.key === "I" && input.control && input.shift) {
+        // DevTools açma izni ver
+        return;
       }
     });
   }
@@ -1470,18 +1646,18 @@ app.on("second-instance", () => {
 // This method will be called when Electron has finished initialization
 // app.whenReady() kullan - app.on("ready") yerine (daha güvenli, tek sefer çalışır)
 app.whenReady().then(() => {
-    // Windows için app user model ID ayarla
-    if (process.platform === "win32") {
-      app.setAppUserModelId("com.borgeto.pos");
-    }
+  // Windows için app user model ID ayarla
+  if (process.platform === "win32") {
+    app.setAppUserModelId("com.borgeto.pos");
+  }
 
-    // Register IPC handlers on app ready
-    registerIpcHandlers();
+  // Register IPC handlers on app ready
+  registerIpcHandlers();
 
-    // Setup table history cleanup cron job
-    setupTableHistoryCleanupCron();
+  // Setup table history cleanup cron job
+  setupTableHistoryCleanupCron();
 
-    createWindow();
+  createWindow();
 
   // Otomatik güncelleme kontrolü - production'da çalışır
   if (!isDev) {

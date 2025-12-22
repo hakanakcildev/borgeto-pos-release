@@ -61,8 +61,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
       } finally {
-        // Always set loading to false after initial load
-        setLoading(false);
+        // Minimum loading time ekle (çok hızlı bitmesin, UI flash'ı önlemek için)
+        // Ayrıca React'in render olması için zaman tanı
+        const minLoadingTime = 100; // 100ms minimum loading (daha hızlı)
+        setTimeout(() => {
+          console.log("✅ Auth loading tamamlandı");
+          setLoading(false);
+        }, minLoadingTime);
       }
     };
 

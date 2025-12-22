@@ -41,7 +41,7 @@ function Login() {
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
   const [showLatestVersionMessage, setShowLatestVersionMessage] =
     useState(false);
-  const [currentVersion, setCurrentVersion] = useState("2.0.4");
+  const [currentVersion, setCurrentVersion] = useState("2.0.21");
   const [showSaveCredentialsModal, setShowSaveCredentialsModal] =
     useState(false);
   const [savedCredentials, setSavedCredentials] = useState<
@@ -87,7 +87,7 @@ function Login() {
             }
           } catch {
             // Hata durumunda package.json'dan versiyonu al
-            setCurrentVersion("2.0.4");
+            setCurrentVersion("2.0.21");
           }
         } else {
           // electronAPI hazır değilse, default versiyonu göster
