@@ -467,10 +467,10 @@ function Login() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center px-4 py-8">
       {/* Güncelleme indiriliyor ekranı */}
       {downloadingUpdate && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-9999 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
               <RefreshCw className="h-16 w-16 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
@@ -496,7 +496,7 @@ function Login() {
 
       {/* Yeni versiyon mevcut modal */}
       {updateAvailable && !downloadingUpdate && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-9999 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -529,7 +529,7 @@ function Login() {
 
       {/* Güncelleme indirildi modal */}
       {updateDownloaded && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-9999 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -564,7 +564,7 @@ function Login() {
 
       {/* Son sürüm mesajı modal */}
       {showLatestVersionMessage && (
-        <div className="fixed inset-0 z-[9999] bg-black/20 dark:bg-black/30 flex items-center justify-center">
+        <div className="fixed inset-0 z-9999 bg-black/20 dark:bg-black/30 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -646,7 +646,7 @@ function Login() {
                 required
                 autoComplete="username"
                 showKeyboardButton={false}
-                className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none"
+                className="h-12 text-base bg-white! dark:bg-gray-700! text-gray-900! dark:text-white! border-2! border-gray-200! dark:border-gray-600! focus:border-blue-500! focus:outline-none"
                 style={{
                   backgroundColor:
                     resolvedTheme === "dark" ? "#374151" : "white",
@@ -705,7 +705,7 @@ function Login() {
                   required
                   autoComplete="current-password"
                   showKeyboardButton={false}
-                  className="h-12 text-base !bg-white dark:!bg-gray-700 !text-gray-900 dark:!text-white !border-2 !border-gray-200 dark:!border-gray-600 focus:!border-blue-500 focus:outline-none pr-12"
+                  className="h-12 text-base bg-white! dark:bg-gray-700! text-gray-900! dark:text-white! border-2! border-gray-200! dark:border-gray-600! focus:border-blue-500! focus:outline-none pr-12"
                   style={{
                     backgroundColor:
                       resolvedTheme === "dark" ? "#374151" : "white",
@@ -772,7 +772,7 @@ function Login() {
 
           {/* Kayıtlı Kullanıcı Modal */}
           {showSaveCredentialsModal && (
-            <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-9999 bg-black/50 flex items-center justify-center p-4">
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white text-center mb-4">
                   Kullanıcı Bilgilerini Kaydet

@@ -158,7 +158,8 @@ function TableDetailContent() {
   >(null);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, setNotes] = useState("");
   const [showCart, setShowCart] = useState(false);
 
   // Miktar girme modalı için state'ler
@@ -527,6 +528,7 @@ function TableDetailContent() {
     companyId,
     branchId,
     userData?.companyId,
+    selectedCategoryId,
     userData?.assignedBranchId,
     userData?.id,
     table?.id,
@@ -991,7 +993,7 @@ function TableDetailContent() {
         setOrder(updatedOrder);
       }
     },
-    [order, companyId, userData, branchId]
+    [order]
   );
 
   // Gönderilmemiş ürünler için miktar azaltma
@@ -1048,7 +1050,7 @@ function TableDetailContent() {
         setOrder(updatedOrder);
       }
     },
-    [order, companyId, userData, branchId]
+    [order]
   );
 
   // Gönderilmemiş ürünleri silme
@@ -1086,7 +1088,7 @@ function TableDetailContent() {
         setOrder(updatedOrder);
       }
     },
-    [order, companyId, userData, branchId]
+    [order]
   );
 
   // Index bazlı miktar artırma (gönderilmemiş ürünler için)
@@ -1398,18 +1400,14 @@ function TableDetailContent() {
     userData,
     cart,
     order,
-    notes,
     currentTable,
-    navigate,
-    isRefreshingOrder,
+    navigateToHome,
     menus,
     categories,
     printers,
     companyId,
     branchId,
     companyData,
-    tableId,
-    allTablesForCheck,
   ]);
 
   // Ödeme alma
@@ -2764,6 +2762,10 @@ function TableDetailContent() {
       navigate,
       printers,
       selectedPrinterId,
+      companyData?.name,
+      currentUser?.uid,
+      navigateToHome,
+      tableId,
     ]
   );
 
@@ -3018,13 +3020,14 @@ function TableDetailContent() {
     order,
     selectedItem,
     currentTable,
-    navigate,
     companyId,
     branchId,
     userData,
     menus,
     categories,
     printers,
+    navigateToHome,
+    companyData?.name,
   ]);
 
   // Ürün seçimi toggle (kullanılmıyor)
@@ -3777,9 +3780,11 @@ function TableDetailContent() {
       selectedItems,
       currentTable,
       userData,
-      navigate,
       pendingMoveItems,
       selectedMoveQuantities,
+      navigateToHome,
+      branchId,
+      companyId,
     ]
   );
 
@@ -4453,7 +4458,7 @@ function TableDetailContent() {
     } else {
       setSelectedArea("");
     }
-  }, [showMoveModal, userData, currentTable]);
+  }, [showMoveModal, userData, currentTable, branchId, companyId]);
 
   if (loading) {
     return (
@@ -4469,7 +4474,7 @@ function TableDetailContent() {
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col lg:flex-row overflow-hidden select-none">
       {/* Header - Mobile */}
-      <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 flex-shrink-0">
+      <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 shrink-0">
         <div className="flex items-center justify-between">
           <Button
             variant="outline"
@@ -4500,7 +4505,7 @@ function TableDetailContent() {
         className="hidden lg:flex lg:flex-none lg:w-[550px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
       >
-        <div className="p-3 flex-shrink-0">
+        <div className="p-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -5949,7 +5954,7 @@ function TableDetailContent() {
         </div>
 
         {/* Bottom Actions */}
-        <div className="p-3 flex-shrink-0 space-y-2">
+        <div className="p-3 shrink-0 space-y-2">
           {/* Seçili ürünler için butonlar - Ödeme Al butonunun üzerinde */}
           {order && order.items.length > 0 && selectedItems.size > 0 && (
             <div className="flex gap-2 mb-2">
@@ -6301,7 +6306,7 @@ function TableDetailContent() {
       {/* Main Content - Products */}
       <div className="flex-1 flex flex-col">
         {/* Categories - Mobile (Horizontal Scroll) */}
-        <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 overflow-x-auto flex-shrink-0">
+        <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 overflow-x-auto shrink-0">
           <div className="flex gap-2 min-w-max">
             {categories.map((category) => {
               const isSelected = selectedCategoryId === category.id;
@@ -6520,7 +6525,7 @@ function TableDetailContent() {
                   className="hidden lg:flex lg:flex-none lg:w-80 flex-col overflow-hidden"
                   style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
                 >
-                  <div className="p-3 flex-shrink-0 border-b border-gray-700">
+                  <div className="p-3 shrink-0 border-b border-gray-700">
                     <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4" />
                       Seçili Ürünler
@@ -6645,7 +6650,7 @@ function TableDetailContent() {
                             </div>
                           </div>
                           {/* Seçili Ürünler Toplamı - Sabit */}
-                          <div className="flex-shrink-0 p-3 border-t border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
+                          <div className="shrink-0 p-3 border-t border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                                 Seçili Ürünler Toplamı
@@ -6666,7 +6671,7 @@ function TableDetailContent() {
 
                 {/* Ana Ödeme Alanı */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="p-5 flex-shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+                  <div className="p-5 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                         Ödeme Al
@@ -6717,7 +6722,7 @@ function TableDetailContent() {
                   </div>
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {/* Üst Sabit Alan - Numerik Tuşlarla Yazılan Tutarların Tag'ları */}
-                    <div className="px-8 pt-4 pb-4 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex-shrink-0 min-h-[200px]">
+                    <div className="px-8 pt-4 pb-4 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0 min-h-[200px]">
                       {/* Uygulanan Ödemeler */}
                       {appliedPayments.length > 0 ? (
                         <div className="flex items-center gap-3 mb-0 flex-wrap">
@@ -6753,7 +6758,7 @@ function TableDetailContent() {
                     </div>
 
                     {/* Ödeme Bilgileri - Ödenen Tutar, Toplam Ödeme ve Buton */}
-                    <div className="w-full px-8 py-4 border-b-2 border-gray-200 dark:border-gray-700 bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex-shrink-0">
+                    <div className="w-full px-8 py-4 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0">
                       <div className="flex items-center justify-between gap-6 w-full">
                         <div className="text-right flex-1">
                           <div className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
@@ -6974,12 +6979,12 @@ function TableDetailContent() {
                     </div>
 
                     {/* Alt Kısım - Butonlar */}
-                    <div className="flex-1 flex items-stretch overflow-hidden px-8 pb-0 min-h-0 flex-shrink-0">
+                    <div className="flex-1 flex items-stretch overflow-hidden px-8 pb-0 min-h-0 shrink-0">
                       {/* Ödeme Yöntemi Butonları, İşlem Butonları, Numerik Ekran ve Numerik Tuşlar */}
                       <div className="flex-1 flex items-stretch overflow-hidden">
                         {/* Sol Sütun - Ödeme Yöntemleri */}
                         <div className="w-56 pl-0 pr-4 pt-0 pb-0 flex flex-col gap-1.5 h-full relative">
-                          <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider pt-4 leading-tight flex-shrink-0">
+                          <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider pt-4 leading-tight shrink-0">
                             Ödeme Yöntemi
                           </label>
                           {paymentMethods.length === 0 ? (
@@ -7024,8 +7029,8 @@ function TableDetailContent() {
                           <div className="flex flex-col flex-1 min-h-0">
                             <div className="flex flex-col px-4 pb-0 flex-1 min-h-0">
                               {/* İşlem Butonları - Numerik Ekranın Üstünde */}
-                              <div className="w-full mb-3 flex-shrink-0">
-                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider block pt-4 leading-tight flex-shrink-0">
+                              <div className="w-full mb-3 shrink-0">
+                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider block pt-4 leading-tight shrink-0">
                                   İşlemler
                                 </label>
                                 <div className="grid grid-cols-4 gap-2.5">
@@ -7177,11 +7182,11 @@ function TableDetailContent() {
                                 </div>
                               </div>
                               {/* Numerik Giriş Gösterimi - 7,8,9 tuşlarının hemen üzerinde */}
-                              <div className="w-full mb-3 flex-shrink-0">
-                                <div className="rounded-xl p-4 border-2 shadow-lg bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
+                              <div className="w-full mb-3 shrink-0">
+                                <div className="rounded-xl p-4 border-2 shadow-lg bg-linear-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
                                   <div className="flex items-center gap-3">
                                     {paymentMethod && (
-                                      <ArrowRight className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                      <ArrowRight className="h-6 w-6 text-red-600 dark:text-red-400 shrink-0" />
                                     )}
                                     <span className="text-2xl font-extrabold text-gray-900 dark:text-white">
                                       {(() => {
@@ -7537,11 +7542,11 @@ function TableDetailContent() {
             <>
               {/* Overlay */}
               <div
-                className="fixed inset-0 bg-black/70 z-[60]"
+                className="fixed inset-0 bg-black/70 z-60"
                 onClick={() => setShowDiscountModal(false)}
               />
               {/* Modal */}
-              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+              <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -8375,7 +8380,7 @@ function TableDetailContent() {
       {showQuantitySelectionModal &&
         quantitySelectionAction === "cancel" &&
         pendingCancelItems.length > 0 && (
-          <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 z-60 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">
