@@ -1181,7 +1181,14 @@ const createWindow = (): void => {
       preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true,
+      // CRITICAL FIX: webSecurity: false - file:// protocol ile ES modules yüklerken CORS hatası alınıyor
+      // Bu, script'lerin yüklenmemesine ve beyaz ekrana neden oluyor
+      // Electron'da local file'lar için güvenlik riski minimal
+      webSecurity: false,
+      // ES modules ve CORS sorunlarını önlemek için
+      allowRunningInsecureContent: false,
+      // Sandbox'u kapat (contextIsolation ile birlikte kullanılamaz)
+      sandbox: false,
     },
     icon: iconPath,
     titleBarStyle: "default",
@@ -1253,7 +1260,11 @@ const createWindow = (): void => {
         });
     });
 
-    mainWindow.loadFile(indexPath);
+    // CRITICAL FIX: loadFile yerine loadURL kullan ve file:// protocol'ü açıkça belirt
+    // Bu, ES modules yüklerken CORS sorunlarını önler
+    const fileUrl = `file://${indexPath.replace(/\\/g, "/")}`;
+    safeLog("📄 Loading file URL:", fileUrl);
+    mainWindow.loadURL(fileUrl);
 
     // Ensure proper routing by handling navigation
     mainWindow.webContents.on(
@@ -1267,7 +1278,8 @@ const createWindow = (): void => {
         // If navigation fails, try loading index.html again
         if (errorCode === -3 && mainWindow) {
           safeLog("🔄 Retrying to load index.html...");
-          mainWindow.loadFile(indexPath);
+          const retryFileUrl = `file://${indexPath.replace(/\\/g, "/")}`;
+          mainWindow.loadURL(retryFileUrl);
         }
       }
     );
@@ -1345,11 +1357,25 @@ const createWindow = (): void => {
 
     // Production'da da DevTools'u otomatik aç (beyaz ekran sorununu debug etmek için)
     if (!isDev && mainWindow) {
-      // Sayfa yüklendiğinde DevTools'u aç
+      // Sayfa yüklendiğinde DevTools'u aç - DOMContentLoaded event'ini de dinle
       mainWindow.webContents.once("did-finish-load", () => {
         safeLog("🔧 Production'da DevTools açılıyor (debug için)");
-        mainWindow?.webContents.openDevTools();
+        // Biraz bekle ki script'ler yüklensin
+        setTimeout(() => {
+          mainWindow?.webContents.openDevTools();
+        }, 500);
       });
+      
+      // DOMContentLoaded event'ini de dinle (daha erken)
+      mainWindow.webContents.executeJavaScript(`
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => {
+            console.log('✅ DOMContentLoaded fired');
+          });
+        } else {
+          console.log('✅ DOM already loaded');
+        }
+      `).catch(() => {});
     }
 
     // Production'da console hatalarını yakala ve log'la

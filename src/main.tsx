@@ -104,11 +104,24 @@ if (!rootElement) {
         PROD: import.meta.env.PROD,
         DEV: import.meta.env.DEV,
         BASE_URL: import.meta.env.BASE_URL,
+        location: window.location.href,
+        protocol: window.location.protocol,
       });
       console.log("🔍 Router state:", {
         hasRouter: !!router,
         hasState: !!router?.state,
         status: router?.state?.status,
+      });
+      
+      // CRITICAL: Script'lerin yüklenip yüklenmediğini kontrol et
+      console.log("🔍 Scripts check:", {
+        scriptsCount: document.scripts.length,
+        scripts: Array.from(document.scripts).map(s => ({
+          src: s.src || 'inline',
+          type: s.type,
+          async: s.async,
+          defer: s.defer,
+        })),
       });
 
       const root = ReactDOM.createRoot(rootElement);
