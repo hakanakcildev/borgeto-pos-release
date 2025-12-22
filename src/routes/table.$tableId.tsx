@@ -93,8 +93,8 @@ export const Route = createFileRoute("/table/$tableId")({
         throw new Error("Table not found");
       }
       return { table };
-    } catch (error) {
-      console.error("Masa yüklenirken hata:", error);
+    } catch (err) {
+      console.error("Masa yüklenirken hata:", err);
       // Eğer masa bulunamazsa, ana sayfaya yönlendir
       // Bu, ödeme işleminden sonra yönlendirme yapılırken route loader'ın çalışması durumunda olabilir
       throw new Error("Table not found");
@@ -103,7 +103,6 @@ export const Route = createFileRoute("/table/$tableId")({
 });
 
 function TableDetail() {
-  const { tableId } = Route.useParams();
   const search = Route.useSearch();
 
   return (
@@ -147,20 +146,6 @@ function TableDetailContent() {
     }
   }, [navigate, search, currentTable]);
 
-  // Zaman farkını hesapla ve "X dakika önce" formatında göster
-  const _getTimeAgo = useCallback((date: Date | undefined): string => {
-    if (!date) return "";
-    const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
-    const minutes = Math.floor(diff / 60000);
-
-    if (minutes < 1) return "Az önce";
-    if (minutes < 60) return `${minutes} dakika önce`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} saat önce`;
-    const days = Math.floor(hours / 24);
-    return `${days} gün önce`;
-  }, []);
   const [order, setOrder] = useState<Order | null>(null);
   const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
   const [menus, setMenus] = useState<Menu[]>([]);
@@ -177,14 +162,14 @@ function TableDetailContent() {
   const [showCart, setShowCart] = useState(false);
 
   // Miktar girme modalı için state'ler
-  const [_showQuantityModal, setShowQuantityModal] = useState(false);
+  const [, setShowQuantityModal] = useState(false);
   const [selectedMenuForQuantity, setSelectedMenuForQuantity] =
     useState<Menu | null>(null);
   const [quantityInput, setQuantityInput] = useState("");
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ekstra malzeme seçimi için state'ler
-  const [_showExtraModal, setShowExtraModal] = useState(false);
+  const [, setShowExtraModal] = useState(false);
   const [selectedMenuForExtra, setSelectedMenuForExtra] = useState<Menu | null>(
     null
   );
@@ -192,15 +177,13 @@ function TableDetailContent() {
 
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [_showFullScreenPayment, setShowFullScreenPayment] = useState(false);
+  const [, setShowFullScreenPayment] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [_showCancelItemModal, setShowCancelItemModal] = useState(false);
+  const [, setShowCancelItemModal] = useState(false);
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
-  const [_selectedMenuForNote, setSelectedMenuForNote] = useState<Menu | null>(
-    null
-  );
-  const [_itemNote, setItemNote] = useState("");
+  const [, setSelectedMenuForNote] = useState<Menu | null>(null);
+  const [, setItemNote] = useState("");
   const itemNoteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { openKeyboard } = useTouchKeyboard();
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -211,12 +194,13 @@ function TableDetailContent() {
   const [appliedPayments, setAppliedPayments] = useState<
     Array<{ method: string; methodName: string; amount: number; id: string }>
   >([]);
-  const [_cancelItemOptions, _setCancelItemOptions] = useState<
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setCancelItemOptions] = useState<
     Array<{ item: OrderItem; index: number }>
   >([]);
-  const [discountType, setDiscountType] = useState<
-    "percentage" | "amount"
-  >("percentage");
+  const [discountType, setDiscountType] = useState<"percentage" | "amount">(
+    "percentage"
+  );
   const [discountValue, setDiscountValue] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set()); // Seçili ürün index'leri
   const [selectedCartItems, setSelectedCartItems] = useState<Set<string>>(
@@ -227,20 +211,22 @@ function TableDetailContent() {
   const [packageCount, setPackageCount] = useState<string>("1");
   const [changeAmount, setChangeAmount] = useState<string>("0");
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [_availableTables, setAvailableTables] = useState<Table[]>([]);
-  const [_selectedArea, setSelectedArea] = useState<string>("");
+  const [, setAvailableTables] = useState<Table[]>([]);
+  const [, setSelectedArea] = useState<string>("");
   const [showQuantitySelectionModal, setShowQuantitySelectionModal] =
     useState(false);
   const [quantitySelectionAction, setQuantitySelectionAction] = useState<
     "cancel" | "move" | "payment" | null
   >(null);
-  const [_selectedItemForQuantity, _setSelectedItemForQuantity] = useState<{
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setSelectedItemForQuantity] = useState<{
     menuId: string;
     menuName: string;
     totalQuantity: number;
     indices: number[];
   } | null>(null);
-  const [_selectedQuantity, _setSelectedQuantity] = useState<number>(1);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setSelectedQuantity] = useState<number>(1);
   const [pendingPaymentQuantity, setPendingPaymentQuantity] = useState<{
     menuId: string;
     quantity: number;
@@ -255,42 +241,43 @@ function TableDetailContent() {
       indices: number[];
     }>
   >([]);
-  const [_currentPaymentItemIndex, setCurrentPaymentItemIndex] =
-    useState<number>(0);
+  const [, setCurrentPaymentItemIndex] = useState<number>(0);
   const [selectedQuantities, setSelectedQuantities] = useState<
     Map<string, number>
   >(new Map());
 
-  // Tam ekran ödeme ekranı için state'ler
-  const [_paymentScreenSelectedItems, _setPaymentScreenSelectedItems] = useState<
-    Set<number>
-  >(new Set());
-  const [_paymentScreenSelectedQuantities, _setPaymentScreenSelectedQuantities] =
-    useState<Map<number, number>>(new Map()); // key: item index, value: selected quantity
-  const [_paymentScreenAmount, _setPaymentScreenAmount] = useState<string>("");
-  const [_paymentScreenDiscountType, _setPaymentScreenDiscountType] = useState<
+  // Tam ekran ödeme ekranı için state'ler (kullanılmıyor - gelecekte kullanılabilir)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenSelectedItems] = useState<Set<number>>(new Set());
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenSelectedQuantities] = useState<Map<number, number>>(
+    new Map()
+  ); // key: item index, value: selected quantity
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenAmount] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenDiscountType] = useState<
     "percentage" | "amount" | "manual"
   >("percentage");
-  const [_paymentScreenDiscountValue, _setPaymentScreenDiscountValue] =
-    useState<string>("");
-  const [_paymentScreenManualDiscount, _setPaymentScreenManualDiscount] =
-    useState<string>("");
-  const [_showPaymentScreenDiscountModal, _setShowPaymentScreenDiscountModal] =
-    useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenDiscountValue] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenManualDiscount] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setShowPaymentScreenDiscountModal] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [, _setSelectedNumericKey] = useState<number | null>(null);
-  const [_paymentScreenQuantityInput, _setPaymentScreenQuantityInput] =
-    useState<string>("");
-  // Paket masaları için kurye atama state'leri
-  const [_paymentScreenSelectedCourierId, _setPaymentScreenSelectedCourierId] =
-    useState<string>("");
-  const [_paymentScreenChangeAmount, _setPaymentScreenChangeAmount] =
-    useState<string>("0");
-  const [_showPaymentScreenCourierModal, _setShowPaymentScreenCourierModal] =
-    useState(false);
-  const [
-    _showPaymentScreenChangeAmountModal,
-    _setShowPaymentScreenChangeAmountModal,
-  ] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenQuantityInput] = useState<string>("");
+  // Paket masaları için kurye atama state'leri (kullanılmıyor - gelecekte kullanılabilir)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenSelectedCourierId] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setPaymentScreenChangeAmount] = useState<string>("0");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setShowPaymentScreenCourierModal] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setShowPaymentScreenChangeAmountModal] = useState(false);
 
   // Cari yönetimi için state'ler
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -299,7 +286,7 @@ function TableDetailContent() {
   const [customerTables, setCustomerTables] = useState<Table[]>([]);
   const [newCustomerName, setNewCustomerName] = useState<string>("");
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
-  
+
   // Tüm masaları yükle (cari masaları kontrol etmek için)
   const [allTablesForCheck, setAllTablesForCheck] = useState<Table[]>([]);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
@@ -318,9 +305,8 @@ function TableDetailContent() {
   const [selectedCancelQuantities, setSelectedCancelQuantities] = useState<
     Map<string, number>
   >(new Map());
-  const [_selectedItemsForCancel, _setSelectedItemsForCancel] = useState<
-    Set<number>
-  >(new Set());
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setSelectedItemsForCancel] = useState<Set<number>>(new Set());
 
   // Taşıma için state'ler (ödeme gibi)
   const [pendingMoveItems, setPendingMoveItems] = useState<
@@ -331,7 +317,7 @@ function TableDetailContent() {
       indices: number[];
     }>
   >([]);
-  const [_currentMoveItemIndex, setCurrentMoveItemIndex] = useState<number>(0);
+  const [, setCurrentMoveItemIndex] = useState<number>(0);
   const [selectedMoveQuantities, setSelectedMoveQuantities] = useState<
     Map<string, number>
   >(new Map());
@@ -339,11 +325,10 @@ function TableDetailContent() {
   // Loading states
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [_processingPaymentMethodId, _setProcessingPaymentMethodId] = useState<
-    string | null
-  >(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [, _setProcessingPaymentMethodId] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState(false);
-  const [_isMovingItems, setIsMovingItems] = useState(false);
+  const [, setIsMovingItems] = useState(false);
 
   // Yazıcılar için state
   const [printers, setPrinters] = useState<
@@ -470,7 +455,9 @@ function TableDetailContent() {
               setSelectedPrinterId(selected);
             }
           }
-        } catch (error) {}
+        } catch {
+          // Ignore error
+        }
 
         // Aktif ödeme yöntemlerini filtrele ve yükle
         const activePaymentMethods = paymentMethodsData.filter(
@@ -488,7 +475,7 @@ function TableDetailContent() {
           );
           const activeCouriers = couriersData.filter((c) => c.isActive);
           setCouriers(activeCouriers);
-        } catch (error) {
+        } catch {
           // Error loading couriers
         }
 
@@ -499,7 +486,7 @@ function TableDetailContent() {
             effectiveBranchId || undefined
           );
           setAllTablesForCheck(tablesData);
-        } catch (error) {
+        } catch {
           // Error loading tables
         }
 
@@ -521,8 +508,8 @@ function TableDetailContent() {
           setSelectedCategoryId(activeCategories[0].id!);
           setSelectedCategoryName(activeCategories[0].name);
         }
-      } catch (error) {
-        console.error("Error loading data:", error);
+      } catch (err) {
+        console.error("Error loading data:", err);
         // Error loading data - still set loading to false
         setLoading(false);
       } finally {
@@ -554,32 +541,36 @@ function TableDetailContent() {
       // (indirim uygulandıktan sonra seçili ürünlerin korunması için)
       if (pendingPaymentItems.length > 0) {
         // Seçili ürünler var, sadece index'leri güncelle (order değişmiş olabilir)
-        const updatedPendingItems = pendingPaymentItems.map(pendingItem => {
-          // Yeni order'da aynı menuId'ye sahip ürünlerin index'lerini bul
-          const newIndices: number[] = [];
-          order.items.forEach((item, index) => {
-            if (item.menuId === pendingItem.menuId) {
-              newIndices.push(index);
-            }
-          });
-          
-          // Toplam miktarı hesapla
-          const totalQuantity = order.items
-            .filter(item => item.menuId === pendingItem.menuId)
-            .reduce((sum, item) => sum + item.quantity, 0);
-          
-          return {
-            ...pendingItem,
-            totalQuantity,
-            indices: newIndices,
-            menuPrice: order.items.find(item => item.menuId === pendingItem.menuId)?.menuPrice || pendingItem.menuPrice,
-          };
-        }).filter(item => item.indices.length > 0); // Sadece hala order'da olan ürünleri tut
-        
+        const updatedPendingItems = pendingPaymentItems
+          .map((pendingItem) => {
+            // Yeni order'da aynı menuId'ye sahip ürünlerin index'lerini bul
+            const newIndices: number[] = [];
+            order.items.forEach((item, index) => {
+              if (item.menuId === pendingItem.menuId) {
+                newIndices.push(index);
+              }
+            });
+
+            // Toplam miktarı hesapla
+            const totalQuantity = order.items
+              .filter((item) => item.menuId === pendingItem.menuId)
+              .reduce((sum, item) => sum + item.quantity, 0);
+
+            return {
+              ...pendingItem,
+              totalQuantity,
+              indices: newIndices,
+              menuPrice:
+                order.items.find((item) => item.menuId === pendingItem.menuId)
+                  ?.menuPrice || pendingItem.menuPrice,
+            };
+          })
+          .filter((item) => item.indices.length > 0); // Sadece hala order'da olan ürünleri tut
+
         setPendingPaymentItems(updatedPendingItems);
         return; // Seçili ürünler korunuyor, çık
       }
-      
+
       // Tüm ürünleri menuId'ye göre grupla (seçili ürün yoksa)
       const groupedItems = new Map<
         string,
@@ -656,7 +647,8 @@ function TableDetailContent() {
       })
     : menus;
 
-  // Sepete ürün ekle (not ile birlikte) - sadece modal'dan yeni ürün eklemek için
+  // Sepete ürün ekle (not ile birlikte) - kullanılmıyor
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _addToCartWithNote = useCallback(
     (menu: Menu, note?: string, extras?: SelectedExtra[]) => {
       const extrasTotal =
@@ -731,7 +723,8 @@ function TableDetailContent() {
     [isRefreshingOrder]
   );
 
-  // Ekstra malzemeleri seçip sepete ekle
+  // Ekstra malzemeleri seçip sepete ekle (kullanılmıyor - handleAddToCart kullanılıyor)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _handleAddToCartWithExtras = useCallback(() => {
     if (!selectedMenuForExtra) return;
 
@@ -812,7 +805,8 @@ function TableDetailContent() {
     }
   }, []);
 
-  // Miktar girme modalından ürün ekle
+  // Miktar girme modalından ürün ekle (kullanılmıyor)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _handleAddWithQuantity = useCallback(() => {
     if (!selectedMenuForQuantity || !quantityInput) return;
 
@@ -874,7 +868,8 @@ function TableDetailContent() {
     setShowCart(true);
   }, [selectedMenuForQuantity, quantityInput, selectedExtras]);
 
-  // Sepetteki ürün miktarını güncelle (cartItemId ile)
+  // Sepetteki ürün miktarını güncelle (cartItemId ile) - kullanılmıyor
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _updateQuantity = useCallback((cartItemId: string, delta: number) => {
     setCart((prev) => {
       const item = prev.find((i) => i.cartItemId === cartItemId);
@@ -959,14 +954,6 @@ function TableDetailContent() {
     async (menuId: string) => {
       if (!order) return;
 
-      const _effectiveCompanyId = companyId || userData?.companyId;
-      const _effectiveBranchId = branchId || userData?.assignedBranchId;
-
-      // Gönderilmemiş ürünleri bul (sentItems içinde olmayan)
-      const _unsentItems = order.items.filter(
-        (item) => !item.canceledAt && !order.sentItems?.includes(item.menuId)
-      );
-
       // İlgili ürünü bul ve miktarını artır
       const updatedItems = order.items.map((item) => {
         if (
@@ -1011,9 +998,6 @@ function TableDetailContent() {
   const decreaseUnsentItemQuantity = useCallback(
     async (menuId: string) => {
       if (!order) return;
-
-      const _effectiveCompanyId = companyId || userData?.companyId;
-      const _effectiveBranchId = branchId || userData?.assignedBranchId;
 
       // İlgili ürünü bul ve miktarını azalt
       const updatedItems = order.items
@@ -1072,9 +1056,6 @@ function TableDetailContent() {
     async (menuId: string) => {
       if (!order) return;
 
-      const _effectiveCompanyId = companyId || userData?.companyId;
-      const _effectiveBranchId = branchId || userData?.assignedBranchId;
-
       // İlgili gönderilmemiş ürünleri kaldır
       const updatedItems = order.items.filter(
         (item) =>
@@ -1108,6 +1089,45 @@ function TableDetailContent() {
     [order, companyId, userData, branchId]
   );
 
+  // Index bazlı miktar artırma (gönderilmemiş ürünler için)
+  const handleIncreaseQuantity = useCallback(
+    async (index: number) => {
+      if (!order || index < 0 || index >= order.items.length) return;
+      const item = order.items[index];
+      if (!item || item.canceledAt || order.sentItems?.includes(item.menuId)) {
+        return;
+      }
+      await increaseUnsentItemQuantity(item.menuId);
+    },
+    [order, increaseUnsentItemQuantity]
+  );
+
+  // Index bazlı miktar azaltma (gönderilmemiş ürünler için)
+  const handleDecreaseQuantity = useCallback(
+    async (index: number) => {
+      if (!order || index < 0 || index >= order.items.length) return;
+      const item = order.items[index];
+      if (!item || item.canceledAt || order.sentItems?.includes(item.menuId)) {
+        return;
+      }
+      await decreaseUnsentItemQuantity(item.menuId);
+    },
+    [order, decreaseUnsentItemQuantity]
+  );
+
+  // Index bazlı ürün silme (gönderilmemiş ürünler için)
+  const handleRemoveItem = useCallback(
+    async (index: number) => {
+      if (!order || index < 0 || index >= order.items.length) return;
+      const item = order.items[index];
+      if (!item || item.canceledAt || order.sentItems?.includes(item.menuId)) {
+        return;
+      }
+      await removeUnsentItem(item.menuId);
+    },
+    [order, removeUnsentItem]
+  );
+
   // Toplam hesapla
   const cartTotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -1126,7 +1146,7 @@ function TableDetailContent() {
         // Güncel order'ı al (ödemelerden sonra güncellenmiş olabilir)
         try {
           currentOrder = await getOrder(order.id);
-        } catch (error) {
+        } catch {
           // Hata durumunda mevcut order'ı kullan
           currentOrder = order;
         }
@@ -1199,7 +1219,7 @@ function TableDetailContent() {
       let updatedOrder: Order | null = null;
       if (currentOrder) {
         // Mevcut siparişi güncelle (eski + yeni ürünler)
-        const updateData: any = {
+        const updateData: Partial<Order> = {
           items: finalItems,
           subtotal: subtotal,
           total: total,
@@ -1213,12 +1233,20 @@ function TableDetailContent() {
         updatedOrder = await getOrder(currentOrder.id!);
       } else {
         // Yeni sipariş oluştur
-        const newOrderData: any = {
+        const newOrderData: Omit<
+          Order,
+          "id" | "createdAt" | "updatedAt" | "closedAt"
+        > = {
           companyId: effectiveCompanyId,
           branchId: effectiveBranchId || currentTable.branchId,
           tableId: currentTable.id!,
           tableNumber: currentTable.tableNumber,
+          orderNumber: "",
           items: finalItems,
+          status: "active",
+          paymentStatus: "unpaid",
+          subtotal: subtotal,
+          total: total,
           sentItems: sentItemIds, // Gönderilen ürünleri kaydet
           createdBy: userData?.id || "",
         };
@@ -1245,8 +1273,8 @@ function TableDetailContent() {
           if (tableData) {
             setCurrentTable(tableData);
           }
-        } catch (error) {
-          console.error("Masa güncellenirken hata:", error);
+        } catch (err) {
+          console.error("Masa güncellenirken hata:", err);
         }
 
         // Yeni eklenen ürünleri yazdır (kategori yazıcılarına - tek adisyon)
@@ -1302,7 +1330,7 @@ function TableDetailContent() {
               }
             }
           }
-        } catch (error) {
+        } catch {
           // Yazdırma hatası siparişi etkilemesin
         }
 
@@ -1326,7 +1354,7 @@ function TableDetailContent() {
               effectiveBranchIdForHistory || undefined
             );
           }
-        } catch (error) {
+        } catch {
           // Geçmiş kaydetme hatası işlemi durdurmamalı
         }
       }
@@ -1352,7 +1380,7 @@ function TableDetailContent() {
                 setOrder(updatedOrder);
               }
             }
-          } catch (error) {
+          } catch {
             // Hata durumunda varsayılan davranış (masalara dön)
             navigateToHome();
           }
@@ -1361,7 +1389,7 @@ function TableDetailContent() {
           navigateToHome();
         }
       }
-    } catch (error) {
+    } catch {
       customAlert("Sipariş kaydedilirken bir hata oluştu", "Hata", "error");
     } finally {
       setIsSendingOrder(false);
@@ -1437,9 +1465,9 @@ function TableDetailContent() {
               if (!order) continue;
               const item = order.items[index];
               if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
-              
+
               itemsToUse.add(index);
-              
+
               // Seçilen miktardan bu item'ın miktarını düş
               remainingQty -= item.quantity;
             }
@@ -1452,7 +1480,8 @@ function TableDetailContent() {
           pendingItemsToUse.forEach((paymentItem) => {
             paymentItem.indices.forEach((index) => {
               const item = order.items[index];
-              if (item && item.menuId === paymentItem.menuId) { // menuId kontrolü ekle
+              if (item && item.menuId === paymentItem.menuId) {
+                // menuId kontrolü ekle
                 itemsToUse.add(index);
               }
             });
@@ -1495,7 +1524,7 @@ function TableDetailContent() {
         if (itemsToUse.size > 0) {
           // Seçili ürünlerin toplamı - quantitiesToUse ile seçilen miktarı dikkate al
           let selectedSubtotal = 0;
-          
+
           // Eğer quantitiesToUse ile miktar seçildiyse, sadece seçilen miktar kadar hesapla
           if (quantitiesToUse.size > 0 && pendingItemsToUse.length > 0) {
             pendingItemsToUse.forEach((paymentItem) => {
@@ -1506,7 +1535,7 @@ function TableDetailContent() {
                   if (remainingQty <= 0) break;
                   const item = order.items[index];
                   if (!item) continue;
-                  
+
                   const qtyToUse = Math.min(item.quantity, remainingQty);
                   selectedSubtotal += qtyToUse * item.menuPrice;
                   remainingQty -= qtyToUse;
@@ -1534,11 +1563,12 @@ function TableDetailContent() {
                 });
               }
             });
-            selectedSubtotal = Array.from(
-              mergedSelectedItems.values()
-            ).reduce((sum, { subtotal }) => sum + subtotal, 0);
+            selectedSubtotal = Array.from(mergedSelectedItems.values()).reduce(
+              (sum, { subtotal }) => sum + subtotal,
+              0
+            );
           }
-          
+
           // Seçili ürünlerin toplamından orantılı indirim düş
           const discountRatio =
             orderSubtotal > 0 ? orderDiscount / orderSubtotal : 0;
@@ -1588,7 +1618,7 @@ function TableDetailContent() {
                 if (remainingQuantity <= 0) break;
                 // Sadece itemsToUse içindeki index'leri işle
                 if (!itemsToUse.has(index)) continue;
-                
+
                 const item = order.items[index];
                 if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
 
@@ -1719,7 +1749,7 @@ function TableDetailContent() {
         // İndirim hesapla
         let discountAmount = 0;
         let discountBaseAmount = 0; // İndirim hesaplanacak tutar (seçili ürünler varsa onların toplamı, yoksa tüm masanın toplamı)
-        
+
         // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlerin toplam fiyatına uygula
         // ÖNEMLİ: Sadece pendingItemsToUse (seçili ürünler listesi) kullan, order.items kullanma
         if (pendingItemsToUse.length > 0) {
@@ -1734,13 +1764,14 @@ function TableDetailContent() {
               }
             } else {
               // Miktar seçimi yoksa, tüm seçili ürünün fiyatını ekle
-              discountBaseAmount += paymentItem.totalQuantity * paymentItem.menuPrice;
+              discountBaseAmount +=
+                paymentItem.totalQuantity * paymentItem.menuPrice;
             }
           });
         } else {
           // Seçili ürün yoksa, tüm masadaki ürünlerin toplam fiyatına indirim uygula
           const orderSubtotal = (order.items || []).reduce(
-            (sum, item) => sum + (item.menuPrice * item.quantity),
+            (sum, item) => sum + item.menuPrice * item.quantity,
             0
           );
           discountBaseAmount = orderSubtotal;
@@ -1751,7 +1782,10 @@ function TableDetailContent() {
           const percentage = parseFloat(discountValue);
           discountAmount = (discountBaseAmount * percentage) / 100;
         } else if (discountType === "amount" && discountValue) {
-          discountAmount = Math.min(parseFloat(discountValue), discountBaseAmount);
+          discountAmount = Math.min(
+            parseFloat(discountValue),
+            discountBaseAmount
+          );
         }
 
         // İndirim varsa uygula
@@ -1763,24 +1797,24 @@ function TableDetailContent() {
             // discountBaseAmount zaten sadece seçili ürünlerin toplam fiyatı
             // discountAmount zaten bu toplam üzerinden hesaplanmış indirim miktarı
             // Şimdi bu indirimi seçili ürünlere orantılı olarak dağıt
-            const discountRatio = discountBaseAmount > 0 
-              ? discountAmount / discountBaseAmount 
-              : 0;
+            const discountRatio =
+              discountBaseAmount > 0 ? discountAmount / discountBaseAmount : 0;
 
             // Seçili ürünlerin subtotal değerlerini güncelle
             const updatedItems = [...order.items];
-            
+
             // ÖNEMLİ: Sadece pendingItemsToUse içindeki ürünlere indirim uygula
             if (quantitiesToUse.size > 0) {
               // Miktar seçimi yapılmışsa, sadece seçilen miktarlara indirim uygula
               pendingItemsToUse.forEach((paymentItem) => {
-                const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+                const selectedQty =
+                  quantitiesToUse.get(paymentItem.menuId) || 0;
                 if (selectedQty > 0) {
                   // Bu ürün için seçilen miktarın toplam fiyatı
                   const selectedTotal = selectedQty * paymentItem.menuPrice;
                   // Bu ürün için indirim miktarı (orantılı)
                   const itemDiscount = selectedTotal * discountRatio;
-                  
+
                   // Bu ürünün indices'lerine indirimi uygula
                   let remainingQty = selectedQty;
                   for (const index of paymentItem.indices) {
@@ -1788,12 +1822,14 @@ function TableDetailContent() {
                     if (!itemsToUse.has(index)) continue;
                     const item = updatedItems[index];
                     if (!item || item.menuId !== paymentItem.menuId) continue;
-                    
+
                     const qtyToUse = Math.min(item.quantity, remainingQty);
                     // Bu index'teki ürün için indirim miktarı (orantılı)
                     // selectedTotal bu ürün için seçilen miktarın toplam fiyatı
-                    const indexDiscount = (qtyToUse * item.menuPrice / selectedTotal) * itemDiscount;
-                    
+                    const indexDiscount =
+                      ((qtyToUse * item.menuPrice) / selectedTotal) *
+                      itemDiscount;
+
                     // Sadece seçilen miktar kadar indirim uygula
                     // Eğer ürünün tamamı seçildiyse, subtotal'ı güncelle
                     // Eğer kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
@@ -1807,14 +1843,17 @@ function TableDetailContent() {
                     } else {
                       // Kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
                       const discountPerUnit = indexDiscount / qtyToUse;
-                      const discountedPricePerUnit = item.menuPrice - discountPerUnit;
+                      const discountedPricePerUnit =
+                        item.menuPrice - discountPerUnit;
                       // Seçilen kısım indirimli, seçilmeyen kısım normal fiyat
                       updatedItems[index] = {
                         ...item,
-                        subtotal: (discountedPricePerUnit * qtyToUse) + (item.menuPrice * (item.quantity - qtyToUse)),
+                        subtotal:
+                          discountedPricePerUnit * qtyToUse +
+                          item.menuPrice * (item.quantity - qtyToUse),
                       };
                     }
-                    
+
                     remainingQty -= qtyToUse;
                   }
                 }
@@ -1827,12 +1866,12 @@ function TableDetailContent() {
                 if (!itemsToUse.has(index)) continue;
                 const item = updatedItems[index];
                 if (!item) continue;
-                
+
                 const qtyToUse = Math.min(item.quantity, remainingQty);
                 // Orijinal fiyat üzerinden indirim hesapla
                 const originalSubtotalForQty = qtyToUse * item.menuPrice;
                 const itemDiscount = originalSubtotalForQty * discountRatio;
-                
+
                 if (qtyToUse === item.quantity) {
                   // Tüm ürün seçildiyse, orijinal fiyattan indirim düş
                   const originalTotal = item.menuPrice * item.quantity;
@@ -1843,16 +1882,19 @@ function TableDetailContent() {
                 } else {
                   // Kısmi seçildiyse, sadece seçilen kısmın indirimini uygula
                   const discountPerUnit = itemDiscount / qtyToUse;
-                  const discountedPricePerUnit = item.menuPrice - discountPerUnit;
+                  const discountedPricePerUnit =
+                    item.menuPrice - discountPerUnit;
                   updatedItems[index] = {
                     ...item,
-                    subtotal: (discountedPricePerUnit * qtyToUse) + (item.menuPrice * (item.quantity - qtyToUse)),
+                    subtotal:
+                      discountedPricePerUnit * qtyToUse +
+                      item.menuPrice * (item.quantity - qtyToUse),
                   };
                 }
-                
+
                 remainingQty -= qtyToUse;
               }
-              
+
               // Diğer seçili ürünleri ekle (pendingPaymentQuantity.indices içinde olmayan)
               const pendingIndicesSet = new Set(pendingPaymentQuantity.indices);
               const selectedItemsArray = Array.from(itemsToUse);
@@ -1874,19 +1916,22 @@ function TableDetailContent() {
               // ÖNEMLİ: Sadece pendingItemsToUse içindeki ürünlere uygula
               pendingItemsToUse.forEach((paymentItem) => {
                 // Bu ürün için toplam fiyat
-                const itemTotal = paymentItem.totalQuantity * paymentItem.menuPrice;
+                const itemTotal =
+                  paymentItem.totalQuantity * paymentItem.menuPrice;
                 // Bu ürün için indirim miktarı (orantılı)
                 const itemDiscount = itemTotal * discountRatio;
-                
+
                 // Bu ürünün indices'lerine indirimi uygula
                 for (const index of paymentItem.indices) {
                   if (!itemsToUse.has(index)) continue;
                   const item = updatedItems[index];
                   if (!item || item.menuId !== paymentItem.menuId) continue;
-                  
+
                   // Bu index'teki ürün için indirim miktarı (orantılı)
-                  const indexDiscount = (item.menuPrice * item.quantity / itemTotal) * itemDiscount;
-                  
+                  const indexDiscount =
+                    ((item.menuPrice * item.quantity) / itemTotal) *
+                    itemDiscount;
+
                   const originalSubtotal = item.menuPrice * item.quantity;
                   updatedItems[index] = {
                     ...item,
@@ -1899,7 +1944,7 @@ function TableDetailContent() {
             // Sipariş toplamlarını güncelle
             // order.subtotal her zaman orijinal fiyatların toplamı olmalı
             const newSubtotal = updatedItems.reduce(
-              (sum, item) => sum + (item.menuPrice * item.quantity),
+              (sum, item) => sum + item.menuPrice * item.quantity,
               0
             );
             // order.total ise indirimli toplam olmalı
@@ -1913,34 +1958,39 @@ function TableDetailContent() {
               paidItems = paidItems.map((paidItem) => {
                 // Bu paidItem için updatedItems içindeki güncellenmiş item'ı bul
                 // Birden fazla item aynı menuId'ye sahip olabilir, hepsini topla
-                const matchingItems = updatedItems.filter((item) => item.menuId === paidItem.menuId);
+                const matchingItems = updatedItems.filter(
+                  (item) => item.menuId === paidItem.menuId
+                );
                 if (matchingItems.length > 0) {
                   // Seçilen miktar
-                  const selectedQty = quantitiesToUse.get(paidItem.menuId) || paidItem.quantity;
-                  
+                  const selectedQty =
+                    quantitiesToUse.get(paidItem.menuId) || paidItem.quantity;
+
                   // Eğer miktar seçimi yapıldıysa, seçilen miktar kadar subtotal hesapla
                   // updatedItems içindeki item'ların subtotal'larını topla ve orantılı olarak seçilen miktara göre hesapla
                   let totalOriginalSubtotal = 0;
                   let totalDiscountedSubtotal = 0;
-                  let totalQuantity = 0;
-                  
+
                   matchingItems.forEach((item) => {
                     const originalSubtotal = item.menuPrice * item.quantity;
                     totalOriginalSubtotal += originalSubtotal;
                     totalDiscountedSubtotal += item.subtotal;
-                    totalQuantity += item.quantity;
                   });
-                  
+
                   // İndirim oranını hesapla
-                  const discountRatio = totalOriginalSubtotal > 0 
-                    ? (totalOriginalSubtotal - totalDiscountedSubtotal) / totalOriginalSubtotal 
-                    : 0;
-                  
+                  const discountRatio =
+                    totalOriginalSubtotal > 0
+                      ? (totalOriginalSubtotal - totalDiscountedSubtotal) /
+                        totalOriginalSubtotal
+                      : 0;
+
                   // Seçilen miktar için orijinal subtotal
-                  const selectedOriginalSubtotal = paidItem.menuPrice * selectedQty;
+                  const selectedOriginalSubtotal =
+                    paidItem.menuPrice * selectedQty;
                   // Seçilen miktar için indirimli subtotal
-                  const selectedDiscountedSubtotal = selectedOriginalSubtotal * (1 - discountRatio);
-                  
+                  const selectedDiscountedSubtotal =
+                    selectedOriginalSubtotal * (1 - discountRatio);
+
                   return {
                     ...paidItem,
                     quantity: selectedQty,
@@ -1994,7 +2044,7 @@ function TableDetailContent() {
           // Eğer birden fazla ürün için miktar seçildiyse, her ürün için seçilen miktar kadar kaldır
           // allPendingIndices: Sadece işlenen (seçilen miktar kadar) index'leri tutar
           const allPendingIndices = new Set<number>();
-          
+
           // itemsToUse içindeki index'leri kullan - zaten sadece seçilen miktar kadar index içeriyor
           const processedIndices = new Set<number>();
 
@@ -2011,14 +2061,14 @@ function TableDetailContent() {
                 if (remainingQuantity <= 0) break;
                 // Sadece itemsToUse içindeki index'leri işle
                 if (!itemsToUse.has(index)) continue;
-                
+
                 const item = order.items[index];
                 if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
 
                 // Sadece işlenen (seçilen miktar kadar) index'leri allPendingIndices'e ekle
                 processedIndices.add(index);
                 allPendingIndices.add(index);
-                
+
                 // Eğer item'ın tamamı ödendiyse veya bir kısmı ödendiyse, index'i ekle
                 if (item.quantity <= remainingQuantity) {
                   // Tüm item'ı kaldır (tamamı ödendi)
@@ -2042,7 +2092,7 @@ function TableDetailContent() {
             itemsToUse.forEach((index) => {
               const item = order.items[index];
               if (!item) return;
-              
+
               processedIndices.add(index);
               allPendingIndices.add(index);
               indicesToRemove.add(index);
@@ -2081,10 +2131,14 @@ function TableDetailContent() {
           // itemsToUse zaten sadece seçilen miktar kadar index içeriyor
           // allPendingIndices de sadece işlenen (seçilen miktar kadar) index'leri içeriyor
           // Bu yüzden otherSelectedIndices mantığına gerek yok - sadece allPendingIndices içindeki ürünler işlendi
-          
-          // Eğer pendingItemsToUse veya pendingPaymentQuantity yoksa ve selectedItems varsa, 
+
+          // Eğer pendingItemsToUse veya pendingPaymentQuantity yoksa ve selectedItems varsa,
           // o zaman itemsToUse içindeki tüm index'leri kaldır (otherSelectedIndices mantığı)
-          if (pendingItemsToUse.length === 0 && !pendingPaymentQuantity && itemsToUse.size > 0) {
+          if (
+            pendingItemsToUse.length === 0 &&
+            !pendingPaymentQuantity &&
+            itemsToUse.size > 0
+          ) {
             // Eğer quantitiesToUse yoksa ve selectedItems varsa, tüm seçili ürünleri kaldır
             const selectedItemsArray = Array.from(itemsToUse);
             const otherSelectedIndices = selectedItemsArray
@@ -2097,7 +2151,7 @@ function TableDetailContent() {
               }
             });
           }
-          // Eğer pendingItemsToUse veya pendingPaymentQuantity varsa, 
+          // Eğer pendingItemsToUse veya pendingPaymentQuantity varsa,
           // allPendingIndices içindeki ürünler zaten işlendi, başka bir şey yapmaya gerek yok
 
           // Önce quantity güncellemelerini yap (kısmi ödeme için)
@@ -2129,34 +2183,43 @@ function TableDetailContent() {
             (sum, item) => sum + item.subtotal,
             0
           );
-          
+
           // Seçili ürünlere indirim uygulanıp uygulanmadığını kontrol et
           // Seçili ürünlerin subtotal'larının orijinal fiyatlarından düşük olup olmadığını kontrol et
           let hasSelectedItemsDiscount = false;
           if (itemsToUse.size > 0) {
-            const selectedItemsOriginalTotal = Array.from(itemsToUse).reduce((sum, index) => {
-              const item = order.items[index];
-              if (item) {
-                return sum + (item.menuPrice * item.quantity);
-              }
-              return sum;
-            }, 0);
-            
-            const selectedItemsDiscountedTotal = Array.from(itemsToUse).reduce((sum, index) => {
-              const item = order.items[index];
-              if (item) {
-                return sum + item.subtotal;
-              }
-              return sum;
-            }, 0);
-            
+            const selectedItemsOriginalTotal = Array.from(itemsToUse).reduce(
+              (sum, index) => {
+                const item = order.items[index];
+                if (item) {
+                  return sum + item.menuPrice * item.quantity;
+                }
+                return sum;
+              },
+              0
+            );
+
+            const selectedItemsDiscountedTotal = Array.from(itemsToUse).reduce(
+              (sum, index) => {
+                const item = order.items[index];
+                if (item) {
+                  return sum + item.subtotal;
+                }
+                return sum;
+              },
+              0
+            );
+
             // Eğer seçili ürünlerin indirimli toplamı orijinal toplamından düşükse, indirim uygulanmış demektir
-            hasSelectedItemsDiscount = selectedItemsDiscountedTotal < selectedItemsOriginalTotal;
+            hasSelectedItemsDiscount =
+              selectedItemsDiscountedTotal < selectedItemsOriginalTotal;
           }
-          
+
           // Seçili ürünlere indirim uygulanmışsa, order.discount'ı sıfırla
           // Çünkü indirim sadece seçili ürünlere uygulanmıştır ve ödemesi alındıktan sonra masada indirim kalmamalı
-          const discountToApply = hasSelectedItemsDiscount ? 0 : (order.discount || 0);
+          const discountToApply = hasSelectedItemsDiscount
+            ? 0
+            : order.discount || 0;
           const newTotal = Math.max(0, newSubtotal - discountToApply);
 
           // Order'ı güncelle (ürünleri kaldır)
@@ -2182,10 +2245,10 @@ function TableDetailContent() {
           );
           const currentDiscount = order.discount || 0;
           const currentTotal = order.total || currentSubtotal - currentDiscount;
-          
+
           // Yeni total'i hesapla (ödeme tutarını düş)
           const newTotal = Math.max(0, currentTotal - amount);
-          
+
           // Order'ı güncelle (sadece total'i güncelle, items değişmeyecek)
           await updateOrder(order.id!, {
             total: newTotal,
@@ -2254,7 +2317,7 @@ function TableDetailContent() {
               // Adisyon toplamlarını hesapla
               // Orijinal fiyatları kullan (indirim öncesi)
               const billSubtotal = billItems.reduce(
-                (sum, item) => sum + (item.menuPrice * item.quantity),
+                (sum, item) => sum + item.menuPrice * item.quantity,
                 0
               );
               const billDiscount = isPartialPayment ? 0 : order.discount || 0;
@@ -2277,7 +2340,7 @@ function TableDetailContent() {
                 notes: order.notes,
                 createdBy: userData?.id || currentUser?.uid || "",
               });
-            } catch (error) {
+            } catch {
               // Error saving bill
             }
           })();
@@ -2315,7 +2378,7 @@ function TableDetailContent() {
                   effectiveBranchId || undefined
                 );
               }
-            } catch (error) {
+            } catch {
               // Error saving table history
             }
           })();
@@ -2443,7 +2506,7 @@ function TableDetailContent() {
                 );
               }
             }
-          } catch (error) {
+          } catch {
             // Yazdırma hatası ödeme işlemini etkilemesin
           }
         })();
@@ -2461,16 +2524,18 @@ function TableDetailContent() {
         const updatedOrderDiscount = updatedOrder?.discount || 0;
         const orderTotalAmount =
           updatedOrder?.total || updatedOrderSubtotal - updatedOrderDiscount;
-        const _isFullyPaid =
-          totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0;
+        // Tam ödeme kontrolü (kullanılmıyor ama hesaplanıyor)
+        // const isFullyPaid = totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0;
 
         // Eğer TAM ödeme alındıysa (ve partial ödeme değilse) veya tüm ürünler kaldırıldıysa siparişi kapat
         // Not: Kısmi ödemede (seçilen ürünlerin belli adetleri) masada ürün kaldığı sürece sipariş açık kalmalı
         // Kurye atandıysa siparişi kapat
         // VEYA tüm ödemelerin toplamı order total'ine eşit veya fazlaysa VE kısmi ödeme değilse siparişi kapat
         const isFullyPaidCheck =
-          totalPaidAmount >= orderTotalAmount && orderTotalAmount > 0 && !isPartialPayment;
-        
+          totalPaidAmount >= orderTotalAmount &&
+          orderTotalAmount > 0 &&
+          !isPartialPayment;
+
         if (
           (!isPartialPayment && updatedOrder?.paymentStatus === "paid") ||
           (updatedOrder && updatedOrder.items.length === 0) ||
@@ -2485,8 +2550,8 @@ function TableDetailContent() {
             // Masa durumunu güncelle
             try {
               await updateTableStatus(currentTable.id, "available", undefined);
-            } catch (error) {
-              console.error("Masa durumu güncellenirken hata:", error);
+            } catch (err) {
+              console.error("Masa durumu güncellenirken hata:", err);
             }
             // Siparişi boş olarak güncelle (liste görünür kalır ama boş olur)
             await updateOrder(updatedOrder.id!, {
@@ -2517,8 +2582,12 @@ function TableDetailContent() {
             // Önce güncel order'ı al (updatedOrder zaten güncel)
             // Eğer updatedOrder varsa onu kullan, yoksa getOrdersByCompany ile al
             let finalOrder: Order | null = null;
-            
-            if (updatedOrder && updatedOrder.items && updatedOrder.items.length > 0) {
+
+            if (
+              updatedOrder &&
+              updatedOrder.items &&
+              updatedOrder.items.length > 0
+            ) {
               // updatedOrder güncel, onu kullan
               finalOrder = updatedOrder;
             } else {
@@ -2549,9 +2618,9 @@ function TableDetailContent() {
                 if (refreshedTable) {
                   setCurrentTable(refreshedTable);
                 }
-              } catch (error) {
+              } catch (err) {
                 // Masa bulunamazsa hata verme, sadece logla
-                console.error("Masa güncellenirken hata:", error);
+                console.error("Masa güncellenirken hata:", err);
               }
             }
 
@@ -2560,7 +2629,11 @@ function TableDetailContent() {
               setOrder(null);
               setCart([]);
               setNotes("");
-            } else if (finalOrder && finalOrder.items && finalOrder.items.length > 0) {
+            } else if (
+              finalOrder &&
+              finalOrder.items &&
+              finalOrder.items.length > 0
+            ) {
               // Güncel order varsa ve items'ı varsa göster
               setOrder(finalOrder);
             } else {
@@ -2569,7 +2642,7 @@ function TableDetailContent() {
               setCart([]);
               setNotes("");
             }
-          } catch (error) {
+          } catch {
             // Hata durumunda null yap
             setOrder(null);
             setCart([]);
@@ -2586,7 +2659,7 @@ function TableDetailContent() {
             try {
               const settings = JSON.parse(navSettings);
               shouldReturnAfterPayment = settings.returnAfterPayment === true;
-            } catch (error) {
+            } catch {
               // Hata durumunda devam et
             }
           }
@@ -2637,7 +2710,7 @@ function TableDetailContent() {
           try {
             const settings = JSON.parse(navSettings);
             shouldReturnAfterPayment = settings.returnAfterPayment === true;
-          } catch (error) {
+          } catch {
             // Hata durumunda devam et
           }
         }
@@ -2663,7 +2736,7 @@ function TableDetailContent() {
           }),
           replace: true,
         });
-      } catch (error) {
+      } catch {
         customAlert("Ödeme işlenirken bir hata oluştu", "Hata", "error");
       } finally {
         setIsProcessingPayment(false);
@@ -2694,12 +2767,14 @@ function TableDetailContent() {
     ]
   );
 
-  // Ürün iptal etme
+  // Ürün iptal etme (kullanılmıyor)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _handleCancelItem = useCallback(async () => {
     if (!order || !selectedItem) return;
 
     try {
       // Index bilgisini kullan (en basit ve güvenilir yöntem)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let itemIndex = (selectedItem as any)._index;
 
       // Index yoksa, id'den çıkar veya menuId ile ilk eşleşeni bul
@@ -2779,7 +2854,7 @@ function TableDetailContent() {
                 }
               }
             }
-          } catch (error) {
+          } catch {
             // Yazdırma hatası iptal işlemini etkilemesin
           }
 
@@ -2808,7 +2883,7 @@ function TableDetailContent() {
                 navigateToHome();
                 return;
               }
-            } catch (error) {
+            } catch {
               // Hata durumunda varsayılan davranış (masalara dön)
               navigateToHome();
               return;
@@ -2829,8 +2904,8 @@ function TableDetailContent() {
               if (updatedTable) {
                 setCurrentTable(updatedTable);
               }
-            } catch (error) {
-              console.error("Masa güncellenirken hata:", error);
+            } catch (err) {
+              console.error("Masa güncellenirken hata:", err);
             }
           }
 
@@ -2840,7 +2915,7 @@ function TableDetailContent() {
 
           // Ana sayfaya yönlendir (alert vermeden)
           navigateToHome();
-        } catch (error) {
+        } catch {
           customAlert("Sipariş kapatılırken bir hata oluştu", "Hata", "error");
         }
         return;
@@ -2889,7 +2964,7 @@ function TableDetailContent() {
             }
           }
         }
-      } catch (error) {
+      } catch {
         // Yazdırma hatası iptal işlemini etkilemesin
       }
 
@@ -2912,7 +2987,7 @@ function TableDetailContent() {
             },
             effectiveBranchId || undefined
           );
-        } catch (error) {
+        } catch {
           // Error saving table history
         }
       }
@@ -2932,11 +3007,11 @@ function TableDetailContent() {
           if (settings.returnAfterProductCancel) {
             navigateToHome();
           }
-        } catch (error) {
+        } catch {
           // Hata durumunda yönlendirme yapma
         }
       }
-    } catch (error) {
+    } catch {
       customAlert("Ürün iptal edilirken bir hata oluştu", "Hata", "error");
     }
   }, [
@@ -2952,7 +3027,8 @@ function TableDetailContent() {
     printers,
   ]);
 
-  // Ürün seçimi toggle
+  // Ürün seçimi toggle (kullanılmıyor)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _toggleItemSelection = useCallback((index: number) => {
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
@@ -2967,10 +3043,7 @@ function TableDetailContent() {
 
   // Seçili ürünleri seçilen miktarlarla iptal et
   const handleCancelSelectedItemsWithQuantities = useCallback(
-    async (
-      quantities: Map<string, number>,
-      selectedIndices: number[]
-    ) => {
+    async (quantities: Map<string, number>, selectedIndices: number[]) => {
       if (!order || quantities.size === 0) return;
 
       setIsCanceling(true);
@@ -3051,8 +3124,8 @@ function TableDetailContent() {
               if (updatedTable) {
                 setCurrentTable(updatedTable);
               }
-            } catch (error) {
-              console.error("Masa güncellenirken hata:", error);
+            } catch (err) {
+              console.error("Masa güncellenirken hata:", err);
             }
           }
           setOrder(null);
@@ -3110,7 +3183,7 @@ function TableDetailContent() {
               }
             }
           }
-        } catch (error) {
+        } catch {
           // Yazdırma hatası iptal işlemini etkilemesin
         }
 
@@ -3135,7 +3208,7 @@ function TableDetailContent() {
                 effectiveBranchId || undefined
               );
             }
-          } catch (error) {
+          } catch {
             // Error saving table history
           }
         }
@@ -3157,11 +3230,11 @@ function TableDetailContent() {
             if (settings.returnAfterProductCancel) {
               navigateToHome();
             }
-          } catch (error) {
+          } catch {
             // Hata durumunda yönlendirme yapma
           }
         }
-      } catch (error) {
+      } catch {
         customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
       } finally {
         setIsCanceling(false);
@@ -3181,7 +3254,8 @@ function TableDetailContent() {
     ]
   );
 
-  // Seçili ürünleri taşı
+  // Seçili ürünleri taşı (kullanılmıyor)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _handleMoveSelectedItems = useCallback(
     async (targetTableId: string) => {
       if (!order || selectedItems.size === 0) return;
@@ -3246,7 +3320,7 @@ function TableDetailContent() {
           itemsToMove = itemsToMoveArray;
 
           // Önce quantity güncellemelerini yap ve taşınacak index'leri çıkar
-          let updatedItems = order.items
+          const updatedItems = order.items
             .map((it, idx) => {
               if (indicesToRemove.has(idx)) {
                 return null;
@@ -3315,7 +3389,7 @@ function TableDetailContent() {
                   effectiveBranchIdForHistory || undefined
                 );
               }
-            } catch (error) {
+            } catch {
               // Error saving table history
             }
           }
@@ -3443,7 +3517,7 @@ function TableDetailContent() {
                 navigateToHome();
                 return;
               }
-            } catch (error) {
+            } catch {
               // Hata durumunda varsayılan davranış (masalara dön)
             }
           }
@@ -3509,7 +3583,9 @@ function TableDetailContent() {
                 effectiveBranchIdForHistory || undefined
               );
             }
-          } catch (error) {}
+          } catch {
+            // Ignore error
+          }
         }
 
         // Taşınan ürünleri movedItems'a ekle
@@ -3621,7 +3697,9 @@ function TableDetailContent() {
                 effectiveBranchIdForHistory || undefined
               );
             }
-          } catch (error) {}
+          } catch {
+            // Ignore error
+          }
         }
 
         // Eğer adet seçim modalından gelmediyse, mevcut siparişten seçili ürünleri çıkar
@@ -3680,7 +3758,7 @@ function TableDetailContent() {
             if (settings.returnAfterItemMove) {
               navigateToHome();
             }
-          } catch (error) {
+          } catch {
             // Hata durumunda varsayılan davranış (masalara dön)
             navigateToHome();
           }
@@ -3688,7 +3766,7 @@ function TableDetailContent() {
           // Ayar yoksa varsayılan davranış (masalara dön)
           navigateToHome();
         }
-      } catch (error) {
+      } catch {
         customAlert("Ürünler taşınırken bir hata oluştu", "Hata", "error");
       } finally {
         setIsMovingItems(false);
@@ -3713,6 +3791,7 @@ function TableDetailContent() {
         if (itemNoteTextareaRef.current) {
           itemNoteTextareaRef.current.focus();
           // Sadece gerçek touch event'lerinde klavyeyi aç
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const lastEventWasTouch = (window as any).__lastTouchEvent;
           if (lastEventWasTouch) {
             const currentValue = itemNoteTextareaRef.current.value || "";
@@ -3753,7 +3832,7 @@ function TableDetailContent() {
         );
         const cariTables = tablesData.filter((t) => t.area === "Cari");
         setCustomerTables(cariTables);
-      } catch (error) {
+      } catch {
         customAlert("Cariler yüklenirken bir hata oluştu", "Hata", "error");
       } finally {
         setIsLoadingCustomers(false);
@@ -3882,9 +3961,9 @@ function TableDetailContent() {
                 lastOrderAt: new Date(),
               });
             }
-          } catch (error) {
+          } catch (err) {
             // Müşteri güncelleme hatası kritik değil, devam et
-            console.error("Müşteri tarihi güncellenirken hata:", error);
+            console.error("Müşteri tarihi güncellenirken hata:", err);
           }
 
           // Mevcut masadan siparişi kaldır ve kapat
@@ -3922,7 +4001,8 @@ function TableDetailContent() {
             "Başarılı",
             "success"
           );
-        } catch (error: any) {
+        } catch (err) {
+          const error = err as Error;
           customAlert(
             `Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
             "Hata",
@@ -3939,7 +4019,8 @@ function TableDetailContent() {
         params: { tableId },
         search: { area: undefined, activeOnly: false, payment: undefined },
       });
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as Error;
       const errorMessage = error?.message || "Bilinmeyen bir hata oluştu";
       customAlert(
         `Cari oluşturulurken bir hata oluştu: ${errorMessage}`,
@@ -3985,8 +4066,9 @@ function TableDetailContent() {
         }
 
         // Seçili ürünler var mı kontrol et
-        const hasSelectedItems = pendingPaymentItems.length > 0 && 
-          Array.from(selectedQuantities.values()).some(qty => qty > 0);
+        const hasSelectedItems =
+          pendingPaymentItems.length > 0 &&
+          Array.from(selectedQuantities.values()).some((qty) => qty > 0);
 
         let itemsToSave: OrderItem[] = [];
 
@@ -4083,45 +4165,54 @@ function TableDetailContent() {
               lastOrderAt: new Date(),
             });
           }
-        } catch (error) {
+        } catch (err) {
           // Müşteri güncelleme hatası kritik değil, devam et
-          console.error("Müşteri tarihi güncellenirken hata:", error);
+          console.error("Müşteri tarihi güncellenirken hata:", err);
         }
 
         // Seçili ürünler kaydedildiyse, mevcut masadan kaldır
         if (hasSelectedItems) {
-          const updatedItems = order.items.map((item, index) => {
-            let remainingQty = item.quantity;
-            
-            pendingPaymentItems.forEach((paymentItem) => {
-              if (paymentItem.menuId === item.menuId && paymentItem.indices.includes(index)) {
-                const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
-                if (selectedQty > 0) {
-                  let qtyToRemove = selectedQty;
-                  for (const idx of paymentItem.indices) {
-                    if (idx === index && qtyToRemove > 0) {
-                      const qty = Math.min(item.quantity, qtyToRemove);
-                      remainingQty -= qty;
-                      qtyToRemove -= qty;
+          const updatedItems = order.items
+            .map((item, index) => {
+              let remainingQty = item.quantity;
+
+              pendingPaymentItems.forEach((paymentItem) => {
+                if (
+                  paymentItem.menuId === item.menuId &&
+                  paymentItem.indices.includes(index)
+                ) {
+                  const selectedQty =
+                    selectedQuantities.get(paymentItem.menuId) || 0;
+                  if (selectedQty > 0) {
+                    let qtyToRemove = selectedQty;
+                    for (const idx of paymentItem.indices) {
+                      if (idx === index && qtyToRemove > 0) {
+                        const qty = Math.min(item.quantity, qtyToRemove);
+                        remainingQty -= qty;
+                        qtyToRemove -= qty;
+                      }
                     }
                   }
                 }
+              });
+
+              if (remainingQty <= 0) {
+                return null; // Bu item tamamen kaldırılacak
               }
-            });
 
-            if (remainingQty <= 0) {
-              return null; // Bu item tamamen kaldırılacak
-            }
+              const pricePerUnit = item.subtotal / item.quantity;
+              return {
+                ...item,
+                quantity: remainingQty,
+                subtotal: pricePerUnit * remainingQty,
+              };
+            })
+            .filter((item): item is OrderItem => item !== null);
 
-            const pricePerUnit = item.subtotal / item.quantity;
-            return {
-              ...item,
-              quantity: remainingQty,
-              subtotal: pricePerUnit * remainingQty,
-            };
-          }).filter((item): item is OrderItem => item !== null);
-
-          const newSubtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+          const newSubtotal = updatedItems.reduce(
+            (sum, item) => sum + item.subtotal,
+            0
+          );
           const newTotal = newSubtotal - (order.discount || 0);
 
           await updateOrder(order.id!, {
@@ -4156,7 +4247,7 @@ function TableDetailContent() {
         setCustomerTables(cariTables);
 
         customAlert(
-          hasSelectedItems 
+          hasSelectedItems
             ? "Seçili ürünler cari masasına kaydedildi"
             : "Masa cari masasına kaydedildi",
           "Başarılı",
@@ -4165,7 +4256,8 @@ function TableDetailContent() {
 
         setShowCustomerModal(false);
         setShowPaymentModal(false);
-      } catch (error: any) {
+      } catch (err) {
+        const error = err as Error;
         customAlert(
           `Kaydetme işlemi sırasında bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
           "Hata",
@@ -4173,7 +4265,15 @@ function TableDetailContent() {
         );
       }
     },
-    [companyId, branchId, userData, order, currentTable, pendingPaymentItems, selectedQuantities]
+    [
+      companyId,
+      branchId,
+      userData,
+      order,
+      currentTable,
+      pendingPaymentItems,
+      selectedQuantities,
+    ]
   );
 
   // Cari seç ve masaya yönlendir
@@ -4290,9 +4390,9 @@ function TableDetailContent() {
               await updateCustomer(customerId, {
                 lastOrderAt: new Date(),
               });
-            } catch (error) {
+            } catch (err) {
               // Müşteri güncelleme hatası kritik değil, devam et
-              console.error("Müşteri tarihi güncellenirken hata:", error);
+              console.error("Müşteri tarihi güncellenirken hata:", err);
             }
 
             customAlert(
@@ -4300,7 +4400,8 @@ function TableDetailContent() {
               "Başarılı",
               "success"
             );
-          } catch (error: any) {
+          } catch (err) {
+            const error = err as Error;
             customAlert(
               `Sipariş taşınırken bir hata oluştu: ${error?.message || "Bilinmeyen hata"}`,
               "Hata",
@@ -4317,7 +4418,7 @@ function TableDetailContent() {
         });
 
         setShowCustomerModal(false);
-      } catch (error) {
+      } catch {
         customAlert("Cari seçilirken bir hata oluştu", "Hata", "error");
       }
     },
@@ -4344,7 +4445,7 @@ function TableDetailContent() {
             const firstArea = filteredTables[0].area;
             setSelectedArea(firstArea);
           }
-        } catch (error) {
+        } catch {
           // Error loading tables
         }
       };
@@ -4418,7 +4519,7 @@ function TableDetailContent() {
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {order.createdAt 
+                    {order.createdAt
                       ? new Date(order.createdAt).toLocaleDateString("tr-TR", {
                           day: "2-digit",
                           month: "2-digit",
@@ -4427,13 +4528,16 @@ function TableDetailContent() {
                           minute: "2-digit",
                         })
                       : order.updatedAt
-                        ? new Date(order.updatedAt).toLocaleDateString("tr-TR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                        ? new Date(order.updatedAt).toLocaleDateString(
+                            "tr-TR",
+                            {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
                         : ""}
                   </span>
                 </div>
@@ -4486,31 +4590,50 @@ function TableDetailContent() {
 
                 // Tüm ödemelerden ödenen ürünleri birleştir (ikramlar hariç)
                 // Ödenen ürünler order.items'dan kaldırılmış olabilir, bu yüzden paidItems'dan direkt al
-                
+
                 // İkram edilen ürünleri ayrı olarak topla
                 const giftItemsMap = new Map<
                   string,
-                  { menuName: string; quantity: number; menuPrice: number; subtotal: number; originalTotal: number }
+                  {
+                    menuName: string;
+                    quantity: number;
+                    menuPrice: number;
+                    subtotal: number;
+                    originalTotal: number;
+                  }
                 >();
-                
+
                 // Ödeme grupları - aynı ödeme işleminden gelen indirimli ürünleri grupla
                 const paymentGroups: Array<{
                   paymentId: string;
-                  items: Array<{ menuName: string; quantity: number; menuPrice: number; subtotal: number; originalTotal: number }>;
+                  items: Array<{
+                    menuName: string;
+                    quantity: number;
+                    menuPrice: number;
+                    subtotal: number;
+                    originalTotal: number;
+                  }>;
                   totalOriginal: number;
                   totalDiscounted: number;
                   hasDiscount: boolean;
                 }> = [];
-                
+
                 // İndirimsiz ürünler için ayrı map (eski mantık)
                 const paidItemsMap = new Map<
                   string,
-                  { menuName: string; quantity: number; menuPrice: number; subtotal: number; originalTotal: number }
+                  {
+                    menuName: string;
+                    quantity: number;
+                    menuPrice: number;
+                    subtotal: number;
+                    originalTotal: number;
+                  }
                 >();
-                
+
                 order.payments?.forEach((payment, paymentIndex) => {
-                  if (!payment.paidItems || payment.paidItems.length === 0) return;
-                  
+                  if (!payment.paidItems || payment.paidItems.length === 0)
+                    return;
+
                   // İkram edilen ürünleri ayrı map'e ekle
                   if (payment.isGift) {
                     payment.paidItems.forEach((paidItem) => {
@@ -4518,7 +4641,8 @@ function TableDetailContent() {
                       if (existing) {
                         existing.quantity += paidItem.quantity;
                         existing.subtotal += paidItem.subtotal;
-                        existing.originalTotal = existing.menuPrice * existing.quantity;
+                        existing.originalTotal =
+                          existing.menuPrice * existing.quantity;
                       } else {
                         const menuPrice = paidItem.menuPrice || 0;
                         const originalTotal = menuPrice * paidItem.quantity;
@@ -4533,16 +4657,22 @@ function TableDetailContent() {
                     });
                     return;
                   }
-                  
+
                   // Normal ödenen ürünler - indirimli olanları grupla
-                  const groupItems: Array<{ menuName: string; quantity: number; menuPrice: number; subtotal: number; originalTotal: number }> = [];
+                  const groupItems: Array<{
+                    menuName: string;
+                    quantity: number;
+                    menuPrice: number;
+                    subtotal: number;
+                    originalTotal: number;
+                  }> = [];
                   let groupHasDiscount = false;
-                  
+
                   payment.paidItems.forEach((paidItem) => {
                     const menuPrice = paidItem.menuPrice || 0;
                     const originalTotal = menuPrice * paidItem.quantity;
                     const hasDiscount = originalTotal > paidItem.subtotal;
-                    
+
                     if (hasDiscount) {
                       // İndirimli ürün - gruba ekle
                       groupItems.push({
@@ -4559,7 +4689,8 @@ function TableDetailContent() {
                       if (existing) {
                         existing.quantity += paidItem.quantity;
                         existing.subtotal += paidItem.subtotal;
-                        existing.originalTotal = existing.menuPrice * existing.quantity;
+                        existing.originalTotal =
+                          existing.menuPrice * existing.quantity;
                       } else {
                         paidItemsMap.set(paidItem.menuId, {
                           menuName: paidItem.menuName,
@@ -4571,12 +4702,18 @@ function TableDetailContent() {
                       }
                     }
                   });
-                  
+
                   // Eğer bu ödemede indirimli ürün varsa, gruba ekle
                   if (groupItems.length > 0) {
-                    const totalOriginal = groupItems.reduce((sum, item) => sum + item.originalTotal, 0);
-                    const totalDiscounted = groupItems.reduce((sum, item) => sum + item.subtotal, 0);
-                    
+                    const totalOriginal = groupItems.reduce(
+                      (sum, item) => sum + item.originalTotal,
+                      0
+                    );
+                    const totalDiscounted = groupItems.reduce(
+                      (sum, item) => sum + item.subtotal,
+                      0
+                    );
+
                     paymentGroups.push({
                       paymentId: `payment-${paymentIndex}-${payment.paidAt?.getTime() || Date.now()}`,
                       items: groupItems,
@@ -4586,21 +4723,29 @@ function TableDetailContent() {
                     });
                   }
                 });
-                
+
                 // Cari masaya atanan ürünleri topla
                 const customerItemsMap = new Map<
                   string,
-                  { menuName: string; quantity: number; menuPrice: number; subtotal: number; movedToTableNumber?: string }
+                  {
+                    menuName: string;
+                    quantity: number;
+                    menuPrice: number;
+                    subtotal: number;
+                    movedToTableNumber?: string;
+                  }
                 >();
-                
+
                 if (order.movedItems && order.movedItems.length > 0) {
                   order.movedItems.forEach((movedItem) => {
                     if (movedItem.movedToTableNumber) {
                       // Bu masa cari masası mı kontrol et
                       const targetTable = allTablesForCheck.find(
-                        (t) => t.tableNumber === movedItem.movedToTableNumber && t.area === "Cari"
+                        (t) =>
+                          t.tableNumber === movedItem.movedToTableNumber &&
+                          t.area === "Cari"
                       );
-                      
+
                       if (targetTable) {
                         // Cari masaya atanan ürün
                         const existing = customerItemsMap.get(movedItem.menuId);
@@ -4626,7 +4771,7 @@ function TableDetailContent() {
                   string,
                   { menuName: string; quantity: number; subtotal: number }
                 >();
-                
+
                 // order.items içindeki iptal edilen ürünleri ekle
                 (order.items || []).forEach((item) => {
                   if (item.canceledAt) {
@@ -4643,7 +4788,7 @@ function TableDetailContent() {
                     }
                   }
                 });
-                
+
                 // order.canceledItems array'indeki iptal edilen ürünleri de ekle
                 if (order.canceledItems && order.canceledItems.length > 0) {
                   order.canceledItems.forEach((item) => {
@@ -4690,7 +4835,8 @@ function TableDetailContent() {
                         </div>
                         <div className="space-y-3">
                           {Array.from(giftItemsMap.values()).map((item) => {
-                            const hasDiscount = item.originalTotal > item.subtotal;
+                            const hasDiscount =
+                              item.originalTotal > item.subtotal;
                             return (
                               <div
                                 key={item.menuName}
@@ -4708,11 +4854,17 @@ function TableDetailContent() {
                                   <div className="flex flex-col items-end ml-2">
                                     {hasDiscount && (
                                       <span className="text-sm text-gray-500 dark:text-gray-400 line-through mb-1">
-                                        ₺{item.originalTotal.toFixed(2).replace(".", ",")}
+                                        ₺
+                                        {item.originalTotal
+                                          .toFixed(2)
+                                          .replace(".", ",")}
                                       </span>
                                     )}
                                     <span className="font-bold text-base text-orange-900 dark:text-orange-200">
-                                      ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                                      ₺
+                                      {item.subtotal
+                                        .toFixed(2)
+                                        .replace(".", ",")}
                                     </span>
                                   </div>
                                 </div>
@@ -4752,7 +4904,8 @@ function TableDetailContent() {
                                 </div>
                                 <div className="flex flex-col items-end ml-2">
                                   <span className="font-bold text-base text-purple-900 dark:text-purple-200">
-                                    ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                                    ₺
+                                    {item.subtotal.toFixed(2).replace(".", ",")}
                                   </span>
                                 </div>
                               </div>
@@ -4763,7 +4916,8 @@ function TableDetailContent() {
                     )}
 
                     {/* Ödenen Ürünler - Tümü Birleştirilmiş */}
-                    {(paymentGroups.length > 0 || Array.from(paidItemsMap.values()).length > 0) && (
+                    {(paymentGroups.length > 0 ||
+                      Array.from(paidItemsMap.values()).length > 0) && (
                       <div className="mb-4">
                         <div className="text-sm font-bold text-green-500 mb-2 px-4 flex items-center gap-2">
                           <CheckCircle className="h-4 w-4" />
@@ -4789,11 +4943,14 @@ function TableDetailContent() {
                                     </div>
                                   </div>
                                   <span className="font-bold text-base text-gray-700 dark:text-gray-300 ml-2">
-                                    ₺{(item.menuPrice * item.quantity).toFixed(2).replace(".", ",")}
+                                    ₺
+                                    {(item.menuPrice * item.quantity)
+                                      .toFixed(2)
+                                      .replace(".", ",")}
                                   </span>
                                 </div>
                               ))}
-                              
+
                               {/* Grup toplamı - indirimli gruplarda göster */}
                               {group.hasDiscount && (
                                 <div className="flex items-center justify-between py-3 px-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
@@ -4802,17 +4959,23 @@ function TableDetailContent() {
                                   </p>
                                   <div className="flex flex-col items-end">
                                     <span className="text-sm text-gray-500 dark:text-gray-400 line-through mb-1">
-                                      ₺{group.totalOriginal.toFixed(2).replace(".", ",")}
+                                      ₺
+                                      {group.totalOriginal
+                                        .toFixed(2)
+                                        .replace(".", ",")}
                                     </span>
                                     <span className="text-base font-bold text-green-600 dark:text-green-300">
-                                      ₺{group.totalDiscounted.toFixed(2).replace(".", ",")}
+                                      ₺
+                                      {group.totalDiscounted
+                                        .toFixed(2)
+                                        .replace(".", ",")}
                                     </span>
                                   </div>
                                 </div>
                               )}
                             </div>
                           ))}
-                          
+
                           {/* İndirimsiz ödenen ürünler */}
                           {Array.from(paidItemsMap.values()).map((item) => (
                             <div
@@ -4871,534 +5034,670 @@ function TableDetailContent() {
                     )}
 
                     {/* Aktif Ürünler */}
-                    {order.items && order.items.filter((item) => !item.canceledAt).length >
-                      0 && (
-                      <div className="mb-4">
-                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
-                          {(() => {
-                            // Cari masalarda tarihe göre grupla, diğer masalarda normal birleştir
-                            if (currentTable.area === "Cari") {
-                              // Tarihe göre grupla
-                              const itemsByDate = new Map<
-                                string,
-                                Array<{ item: OrderItem; indices: number[] }>
-                              >();
-                              
-                              order.items.forEach((item, index) => {
-                                if (!item.canceledAt) {
-                                  // Tarih anahtarı oluştur (sadece tarih, saat değil)
-                                  const dateKey = item.addedAt
-                                    ? new Date(item.addedAt).toLocaleDateString("tr-TR", {
-                                        day: "2-digit",
-                                        month: "2-digit",
-                                        year: "numeric",
-                                      })
-                                    : "Tarih Bilinmiyor";
-                                  
-                                  if (!itemsByDate.has(dateKey)) {
-                                    itemsByDate.set(dateKey, []);
-                                  }
-                                  
-                                  // Aynı menuId'ye sahip ürünleri birleştir (aynı tarih grubu içinde)
-                                  const dateGroup = itemsByDate.get(dateKey)!;
-                                  const existingInGroup = dateGroup.find(
-                                    (g) => g.item.menuId === item.menuId
-                                  );
-                                  
-                                  if (existingInGroup) {
-                                    existingInGroup.item.quantity += item.quantity;
-                                    existingInGroup.item.subtotal += item.subtotal;
-                                    existingInGroup.indices.push(index);
-                                    // En eski eklenme tarihini koru
-                                    if (item.addedAt && existingInGroup.item.addedAt) {
-                                      existingInGroup.item.addedAt = 
-                                        item.addedAt < existingInGroup.item.addedAt 
-                                          ? item.addedAt 
-                                          : existingInGroup.item.addedAt;
-                                    } else if (item.addedAt && !existingInGroup.item.addedAt) {
-                                      existingInGroup.item.addedAt = item.addedAt;
+                    {order.items &&
+                      order.items.filter((item) => !item.canceledAt).length >
+                        0 && (
+                        <div className="mb-4">
+                          <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+                            {(() => {
+                              // Cari masalarda tarihe göre grupla, diğer masalarda normal birleştir
+                              if (currentTable.area === "Cari") {
+                                // Tarihe göre grupla
+                                const itemsByDate = new Map<
+                                  string,
+                                  Array<{ item: OrderItem; indices: number[] }>
+                                >();
+
+                                order.items.forEach((item, index) => {
+                                  if (!item.canceledAt) {
+                                    // Tarih anahtarı oluştur (sadece tarih, saat değil)
+                                    const dateKey = item.addedAt
+                                      ? new Date(
+                                          item.addedAt
+                                        ).toLocaleDateString("tr-TR", {
+                                          day: "2-digit",
+                                          month: "2-digit",
+                                          year: "numeric",
+                                        })
+                                      : "Tarih Bilinmiyor";
+
+                                    if (!itemsByDate.has(dateKey)) {
+                                      itemsByDate.set(dateKey, []);
                                     }
-                                  } else {
-                                    dateGroup.push({
-                                      item: { ...item },
-                                      indices: [index],
-                                    });
+
+                                    // Aynı menuId'ye sahip ürünleri birleştir (aynı tarih grubu içinde)
+                                    const dateGroup = itemsByDate.get(dateKey)!;
+                                    const existingInGroup = dateGroup.find(
+                                      (g) => g.item.menuId === item.menuId
+                                    );
+
+                                    if (existingInGroup) {
+                                      existingInGroup.item.quantity +=
+                                        item.quantity;
+                                      existingInGroup.item.subtotal +=
+                                        item.subtotal;
+                                      existingInGroup.indices.push(index);
+                                      // En eski eklenme tarihini koru
+                                      if (
+                                        item.addedAt &&
+                                        existingInGroup.item.addedAt
+                                      ) {
+                                        existingInGroup.item.addedAt =
+                                          item.addedAt <
+                                          existingInGroup.item.addedAt
+                                            ? item.addedAt
+                                            : existingInGroup.item.addedAt;
+                                      } else if (
+                                        item.addedAt &&
+                                        !existingInGroup.item.addedAt
+                                      ) {
+                                        existingInGroup.item.addedAt =
+                                          item.addedAt;
+                                      }
+                                    } else {
+                                      dateGroup.push({
+                                        item: { ...item },
+                                        indices: [index],
+                                      });
+                                    }
                                   }
-                                }
-                              });
-                              
-                              // Tarihleri sırala (en yeni en üstte)
-                              const sortedDates = Array.from(itemsByDate.keys()).sort((a, b) => {
-                                if (a === "Tarih Bilinmiyor") return 1;
-                                if (b === "Tarih Bilinmiyor") return -1;
-                                const dateA = new Date(a.split(".").reverse().join("-"));
-                                const dateB = new Date(b.split(".").reverse().join("-"));
-                                return dateB.getTime() - dateA.getTime();
-                              });
-                              
-                              // Her tarih grubunu göster
-                              return sortedDates.map((dateKey) => {
-                                const dateGroup = itemsByDate.get(dateKey)!;
-                                return (
-                                  <div key={dateKey} className="mb-4">
-                                    {/* Tarih Başlığı */}
-                                    <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                        {dateKey}
-                                      </p>
-                                    </div>
-                                    {/* Bu tarihe ait ürünler */}
-                                    {dateGroup.map(({ item, indices }, _idx) => {
-                                      return (
-                                        <div key={`${dateKey}-${item.menuId}-${_idx}`}>
-                                          {(() => {
-                                            const isSelected = indices.some((idx) =>
-                                              selectedItems.has(idx)
-                                            );
-                                            // Gönderilmemiş ürün mü kontrol et
-                                            const isUnsent = !order.sentItems?.includes(
-                                              item.menuId
-                                            );
+                                });
 
-                                            return (
-                                              <div
-                                                key={item.menuId}
-                                                className={`relative ${
-                                                  isSelected
-                                                    ? "bg-blue-50 dark:bg-blue-900/20"
-                                                    : ""
-                                                }`}
-                                              >
+                                // Tarihleri sırala (en yeni en üstte)
+                                const sortedDates = Array.from(
+                                  itemsByDate.keys()
+                                ).sort((a, b) => {
+                                  if (a === "Tarih Bilinmiyor") return 1;
+                                  if (b === "Tarih Bilinmiyor") return -1;
+                                  const dateA = new Date(
+                                    a.split(".").reverse().join("-")
+                                  );
+                                  const dateB = new Date(
+                                    b.split(".").reverse().join("-")
+                                  );
+                                  return dateB.getTime() - dateA.getTime();
+                                });
+
+                                // Her tarih grubunu göster
+                                return sortedDates.map((dateKey) => {
+                                  const dateGroup = itemsByDate.get(dateKey)!;
+                                  return (
+                                    <div key={dateKey} className="mb-4">
+                                      {/* Tarih Başlığı */}
+                                      <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                        <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                          {dateKey}
+                                        </p>
+                                      </div>
+                                      {/* Bu tarihe ait ürünler */}
+                                      {dateGroup.map(({ item, indices }) => {
+                                        return (
+                                          <div
+                                            key={`${dateKey}-${item.menuId}`}
+                                          >
+                                            {(() => {
+                                              const isSelected = indices.some(
+                                                (idx) => selectedItems.has(idx)
+                                              );
+                                              // Gönderilmemiş ürün mü kontrol et
+                                              const isUnsent =
+                                                !order.sentItems?.includes(
+                                                  item.menuId
+                                                );
+
+                                              return (
                                                 <div
-                                                  onClick={() => {
-                                                    // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
-                                                    if (isUnsent) return;
-
-                                                    // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
-                                                    if (showPaymentModal) {
-                                                      // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
-                                                      let existingInPending =
-                                                        pendingPaymentItems.find(
-                                                          (p) => p.menuId === item.menuId
-                                                        );
-
-                                                      // Eğer yoksa, pendingPaymentItems'a ekle
-                                                      if (!existingInPending) {
-                                                        // Aynı menuId'ye sahip tüm item'ları bul ve topla
-                                                        const allSameItems =
-                                                          order.items.filter(
-                                                            (o) => o.menuId === item.menuId
-                                                          );
-                                                        const totalQty =
-                                                          allSameItems.reduce(
-                                                            (sum, o) => sum + o.quantity,
-                                                            0
-                                                          );
-                                                        const indices = order.items
-                                                          .map((o, idx) =>
-                                                            o.menuId === item.menuId
-                                                              ? idx
-                                                              : -1
-                                                          )
-                                                          .filter((idx) => idx !== -1);
-
-                                                        const newPendingItem = {
-                                                          menuId: item.menuId,
-                                                          menuName: item.menuName,
-                                                          totalQuantity: totalQty,
-                                                          menuPrice: item.menuPrice,
-                                                          indices: indices,
-                                                        };
-
-                                                        setPendingPaymentItems((prev) => {
-                                                          const newList = [...prev];
-                                                          newList.push(newPendingItem);
-                                                          return newList;
-                                                        });
-
-                                                        existingInPending = newPendingItem;
-                                                      }
-
-                                                      // selectedQuantities'yi güncelle
-                                                      const currentQty =
-                                                        selectedQuantities.get(
-                                                          item.menuId
-                                                        ) || 0;
-                                                      const newQty = Math.min(
-                                                        existingInPending.totalQuantity,
-                                                        currentQty + 1
-                                                      );
-                                                      setSelectedQuantities((prev) => {
-                                                        const newMap = new Map(prev);
-                                                        newMap.set(item.menuId, newQty);
-                                                        return newMap;
-                                                      });
-                                                      return;
-                                                    }
-
-                                                    // Normal seçim (ödeme modalı kapalıysa)
-                                                    // Tüm indices'leri toggle et
-                                                    const newSet = new Set(selectedItems);
-                                                    indices.forEach((idx) => {
-                                                      if (newSet.has(idx)) {
-                                                        newSet.delete(idx);
-                                                      } else {
-                                                        newSet.add(idx);
-                                                      }
-                                                    });
-                                                    setSelectedItems(newSet);
-                                                  }}
-                                                  className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 ${
-                                                    isUnsent
-                                                      ? ""
-                                                      : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                                  } ${
-                                                    isSelected ||
-                                                    (showPaymentModal &&
-                                                      (selectedQuantities.get(
-                                                        item.menuId
-                                                      ) || 0) > 0)
+                                                  key={item.menuId}
+                                                  className={`relative ${
+                                                    isSelected
                                                       ? "bg-blue-50 dark:bg-blue-900/20"
                                                       : ""
                                                   }`}
                                                 >
-                                                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
-                                                      {item.quantity}x
-                                                    </span>
-                                                    <div className="flex-1 min-w-0">
-                                                      <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
-                                                        {item.menuName}
-                                                      </p>
-                                                      {item.addedAt && currentTable.area === "Cari" && (
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                          {new Date(item.addedAt).toLocaleDateString("tr-TR", {
-                                                            day: "2-digit",
-                                                            month: "2-digit",
-                                                            year: "numeric",
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                          })}
-                                                        </p>
-                                                      )}
-                                                    </div>
-                                                  </div>
+                                                  <div
+                                                    onClick={() => {
+                                                      // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
+                                                      if (isUnsent) return;
 
-                                                  {/* Gönderilmemiş ürünler için butonlar - Cari masalarda gösterilmez */}
-                                                  {isUnsent && currentTable.area !== "Cari" ? (
-                                                    <div
-                                                      className="flex items-center gap-2 shrink-0"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                      <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                          const index = indices[0];
-                                                          if (index !== undefined) {
-                                                            handleIncreaseQuantity(index);
+                                                      // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
+                                                      if (showPaymentModal) {
+                                                        // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
+                                                        let existingInPending =
+                                                          pendingPaymentItems.find(
+                                                            (p) =>
+                                                              p.menuId ===
+                                                              item.menuId
+                                                          );
+
+                                                        // Eğer yoksa, pendingPaymentItems'a ekle
+                                                        if (
+                                                          !existingInPending
+                                                        ) {
+                                                          // Aynı menuId'ye sahip tüm item'ları bul ve topla
+                                                          const allSameItems =
+                                                            order.items.filter(
+                                                              (o) =>
+                                                                o.menuId ===
+                                                                item.menuId
+                                                            );
+                                                          const totalQty =
+                                                            allSameItems.reduce(
+                                                              (sum, o) =>
+                                                                sum +
+                                                                o.quantity,
+                                                              0
+                                                            );
+                                                          const indices =
+                                                            order.items
+                                                              .map((o, idx) =>
+                                                                o.menuId ===
+                                                                item.menuId
+                                                                  ? idx
+                                                                  : -1
+                                                              )
+                                                              .filter(
+                                                                (idx) =>
+                                                                  idx !== -1
+                                                              );
+
+                                                          const newPendingItem =
+                                                            {
+                                                              menuId:
+                                                                item.menuId,
+                                                              menuName:
+                                                                item.menuName,
+                                                              totalQuantity:
+                                                                totalQty,
+                                                              menuPrice:
+                                                                item.menuPrice,
+                                                              indices: indices,
+                                                            };
+
+                                                          setPendingPaymentItems(
+                                                            (prev) => {
+                                                              const newList = [
+                                                                ...prev,
+                                                              ];
+                                                              newList.push(
+                                                                newPendingItem
+                                                              );
+                                                              return newList;
+                                                            }
+                                                          );
+
+                                                          existingInPending =
+                                                            newPendingItem;
+                                                        }
+
+                                                        // selectedQuantities'yi güncelle
+                                                        const currentQty =
+                                                          selectedQuantities.get(
+                                                            item.menuId
+                                                          ) || 0;
+                                                        const newQty = Math.min(
+                                                          existingInPending.totalQuantity,
+                                                          currentQty + 1
+                                                        );
+                                                        setSelectedQuantities(
+                                                          (prev) => {
+                                                            const newMap =
+                                                              new Map(prev);
+                                                            newMap.set(
+                                                              item.menuId,
+                                                              newQty
+                                                            );
+                                                            return newMap;
                                                           }
-                                                        }}
-                                                        className="h-8 w-8 p-0"
-                                                      >
-                                                        <Plus className="h-4 w-4" />
-                                                      </Button>
-                                                      <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                          const index = indices[0];
-                                                          if (index !== undefined) {
-                                                            handleDecreaseQuantity(index);
-                                                          }
-                                                        }}
-                                                        className="h-8 w-8 p-0"
-                                                      >
-                                                        <Minus className="h-4 w-4" />
-                                                      </Button>
-                                                      <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                          const index = indices[0];
-                                                          if (index !== undefined) {
-                                                            handleRemoveItem(index);
-                                                          }
-                                                        }}
-                                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                                                      >
-                                                        <Trash2 className="h-4 w-4" />
-                                                      </Button>
-                                                    </div>
-                                                  ) : (
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                                                        ₺{item.subtotal.toFixed(2).replace(".", ",")}
+                                                        );
+                                                        return;
+                                                      }
+
+                                                      // Normal seçim (ödeme modalı kapalıysa)
+                                                      // Tüm indices'leri toggle et
+                                                      const newSet = new Set(
+                                                        selectedItems
+                                                      );
+                                                      indices.forEach((idx) => {
+                                                        if (newSet.has(idx)) {
+                                                          newSet.delete(idx);
+                                                        } else {
+                                                          newSet.add(idx);
+                                                        }
+                                                      });
+                                                      setSelectedItems(newSet);
+                                                    }}
+                                                    className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 ${
+                                                      isUnsent
+                                                        ? ""
+                                                        : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                                    } ${
+                                                      isSelected ||
+                                                      (showPaymentModal &&
+                                                        (selectedQuantities.get(
+                                                          item.menuId
+                                                        ) || 0) > 0)
+                                                        ? "bg-blue-50 dark:bg-blue-900/20"
+                                                        : ""
+                                                    }`}
+                                                  >
+                                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                      <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                                        {item.quantity}x
                                                       </span>
+                                                      <div className="flex-1 min-w-0">
+                                                        <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                                          {item.menuName}
+                                                        </p>
+                                                        {item.addedAt &&
+                                                          currentTable.area ===
+                                                            "Cari" && (
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                              {new Date(
+                                                                item.addedAt
+                                                              ).toLocaleDateString(
+                                                                "tr-TR",
+                                                                {
+                                                                  day: "2-digit",
+                                                                  month:
+                                                                    "2-digit",
+                                                                  year: "numeric",
+                                                                  hour: "2-digit",
+                                                                  minute:
+                                                                    "2-digit",
+                                                                }
+                                                              )}
+                                                            </p>
+                                                          )}
+                                                      </div>
                                                     </div>
-                                                  )}
+
+                                                    {/* Gönderilmemiş ürünler için butonlar - Cari masalarda gösterilmez */}
+                                                    {isUnsent &&
+                                                    currentTable.area !==
+                                                      "Cari" ? (
+                                                      <div
+                                                        className="flex items-center gap-2 shrink-0"
+                                                        onClick={(e) =>
+                                                          e.stopPropagation()
+                                                        }
+                                                      >
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() => {
+                                                            const index =
+                                                              indices[0];
+                                                            if (
+                                                              index !==
+                                                              undefined
+                                                            ) {
+                                                              handleIncreaseQuantity(
+                                                                index
+                                                              );
+                                                            }
+                                                          }}
+                                                          className="h-8 w-8 p-0"
+                                                        >
+                                                          <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() => {
+                                                            const index =
+                                                              indices[0];
+                                                            if (
+                                                              index !==
+                                                              undefined
+                                                            ) {
+                                                              handleDecreaseQuantity(
+                                                                index
+                                                              );
+                                                            }
+                                                          }}
+                                                          className="h-8 w-8 p-0"
+                                                        >
+                                                          <Minus className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() => {
+                                                            const index =
+                                                              indices[0];
+                                                            if (
+                                                              index !==
+                                                              undefined
+                                                            ) {
+                                                              handleRemoveItem(
+                                                                index
+                                                              );
+                                                            }
+                                                          }}
+                                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                                        >
+                                                          <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                      </div>
+                                                    ) : (
+                                                      <div className="flex items-center gap-2 shrink-0">
+                                                        <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                                          ₺
+                                                          {item.subtotal
+                                                            .toFixed(2)
+                                                            .replace(".", ",")}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              });
-                            } else {
-                              // Normal masalarda aynı menuId'ye sahip ürünleri birleştir
-                              const mergedItems = new Map<
-                                string,
-                                { item: OrderItem; indices: number[] }
-                              >();
-                              order.items.forEach((item, index) => {
-                                if (!item.canceledAt) {
-                                  const existing = mergedItems.get(item.menuId);
-                                  if (existing) {
-                                    existing.item.quantity += item.quantity;
-                                    existing.item.subtotal += item.subtotal;
-                                    existing.indices.push(index);
-                                    // En eski eklenme tarihini koru
-                                    if (item.addedAt && existing.item.addedAt) {
-                                      existing.item.addedAt = 
-                                        item.addedAt < existing.item.addedAt 
-                                          ? item.addedAt 
-                                          : existing.item.addedAt;
-                                    } else if (item.addedAt && !existing.item.addedAt) {
-                                      existing.item.addedAt = item.addedAt;
-                                    }
-                                  } else {
-                                    mergedItems.set(item.menuId, {
-                                      item: { ...item },
-                                      indices: [index],
-                                    });
-                                  }
-                                }
-                              });
-
-                              return Array.from(mergedItems.values()).map(
-                                ({ item, indices }, _idx) => {
-                                  const isSelected = indices.some((idx) =>
-                                    selectedItems.has(idx)
-                                  );
-                                  // Gönderilmemiş ürün mü kontrol et
-                                  const isUnsent = !order.sentItems?.includes(
-                                    item.menuId
-                                  );
-
-                                  return (
-                                    <div
-                                      key={item.menuId}
-                                      className={`relative ${
-                                        isSelected
-                                          ? "bg-blue-50 dark:bg-blue-900/20"
-                                          : ""
-                                      }`}
-                                    >
-                                      <div
-                                        onClick={() => {
-                                          // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
-                                          if (isUnsent) return;
-
-                                          // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
-                                          if (showPaymentModal) {
-                                            // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
-                                            let existingInPending =
-                                              pendingPaymentItems.find(
-                                                (p) => p.menuId === item.menuId
                                               );
+                                            })()}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                });
+                              } else {
+                                // Normal masalarda aynı menuId'ye sahip ürünleri birleştir
+                                const mergedItems = new Map<
+                                  string,
+                                  { item: OrderItem; indices: number[] }
+                                >();
+                                order.items.forEach((item, index) => {
+                                  if (!item.canceledAt) {
+                                    const existing = mergedItems.get(
+                                      item.menuId
+                                    );
+                                    if (existing) {
+                                      existing.item.quantity += item.quantity;
+                                      existing.item.subtotal += item.subtotal;
+                                      existing.indices.push(index);
+                                      // En eski eklenme tarihini koru
+                                      if (
+                                        item.addedAt &&
+                                        existing.item.addedAt
+                                      ) {
+                                        existing.item.addedAt =
+                                          item.addedAt < existing.item.addedAt
+                                            ? item.addedAt
+                                            : existing.item.addedAt;
+                                      } else if (
+                                        item.addedAt &&
+                                        !existing.item.addedAt
+                                      ) {
+                                        existing.item.addedAt = item.addedAt;
+                                      }
+                                    } else {
+                                      mergedItems.set(item.menuId, {
+                                        item: { ...item },
+                                        indices: [index],
+                                      });
+                                    }
+                                  }
+                                });
 
-                                            // Eğer yoksa, pendingPaymentItems'a ekle
-                                            if (!existingInPending) {
+                                return Array.from(mergedItems.values()).map(
+                                  ({ item, indices }) => {
+                                    const isSelected = indices.some((idx) =>
+                                      selectedItems.has(idx)
+                                    );
+                                    // Gönderilmemiş ürün mü kontrol et
+                                    const isUnsent = !order.sentItems?.includes(
+                                      item.menuId
+                                    );
+
+                                    return (
+                                      <div
+                                        key={item.menuId}
+                                        className={`relative ${
+                                          isSelected
+                                            ? "bg-blue-50 dark:bg-blue-900/20"
+                                            : ""
+                                        }`}
+                                      >
+                                        <div
+                                          onClick={() => {
+                                            // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
+                                            if (isUnsent) return;
+
+                                            // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
+                                            if (showPaymentModal) {
+                                              // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
+                                              let existingInPending =
+                                                pendingPaymentItems.find(
+                                                  (p) =>
+                                                    p.menuId === item.menuId
+                                                );
+
+                                              // Eğer yoksa, pendingPaymentItems'a ekle
+                                              if (!existingInPending) {
+                                                // Aynı menuId'ye sahip tüm item'ları bul ve topla
+                                                const allSameItems =
+                                                  order.items.filter(
+                                                    (o) =>
+                                                      o.menuId === item.menuId
+                                                  );
+                                                const totalQty =
+                                                  allSameItems.reduce(
+                                                    (sum, o) =>
+                                                      sum + o.quantity,
+                                                    0
+                                                  );
+                                                const indices = order.items
+                                                  .map((o, idx) =>
+                                                    o.menuId === item.menuId
+                                                      ? idx
+                                                      : -1
+                                                  )
+                                                  .filter((idx) => idx !== -1);
+
+                                                const newPendingItem = {
+                                                  menuId: item.menuId,
+                                                  menuName: item.menuName,
+                                                  totalQuantity: totalQty,
+                                                  menuPrice: item.menuPrice,
+                                                  indices: indices,
+                                                };
+
+                                                setPendingPaymentItems(
+                                                  (prev) => {
+                                                    const newList = [...prev];
+                                                    newList.push(
+                                                      newPendingItem
+                                                    );
+                                                    return newList;
+                                                  }
+                                                );
+
+                                                existingInPending =
+                                                  newPendingItem;
+                                              }
+
+                                              // selectedQuantities'yi güncelle
+                                              const currentQty =
+                                                selectedQuantities.get(
+                                                  item.menuId
+                                                ) || 0;
+                                              const newQty = Math.min(
+                                                existingInPending.totalQuantity,
+                                                currentQty + 1
+                                              );
+                                              setSelectedQuantities((prev) => {
+                                                const newMap = new Map(prev);
+                                                newMap.set(item.menuId, newQty);
+                                                return newMap;
+                                              });
+                                              return;
+                                            }
+
+                                            // Normal seçim (ödeme modalı kapalıysa)
+                                            // Eğer ürün iptal edilebilir durumdaysa (gönderilmemiş), iptal modalını aç
+                                            if (isUnsent && !item.canceledAt) {
                                               // Aynı menuId'ye sahip tüm item'ları bul ve topla
                                               const allSameItems =
                                                 order.items.filter(
-                                                  (o) => o.menuId === item.menuId
+                                                  (o) =>
+                                                    o.menuId === item.menuId &&
+                                                    !o.canceledAt &&
+                                                    !order.sentItems?.includes(
+                                                      o.menuId
+                                                    )
                                                 );
                                               const totalQty =
                                                 allSameItems.reduce(
                                                   (sum, o) => sum + o.quantity,
                                                   0
                                                 );
-                                              const indices = order.items
+                                              const itemIndices = order.items
                                                 .map((o, idx) =>
-                                                  o.menuId === item.menuId
+                                                  o.menuId === item.menuId &&
+                                                  !o.canceledAt &&
+                                                  !order.sentItems?.includes(
+                                                    o.menuId
+                                                  )
                                                     ? idx
                                                     : -1
                                                 )
                                                 .filter((idx) => idx !== -1);
 
-                                              const newPendingItem = {
+                                              const newPendingCancelItem = {
                                                 menuId: item.menuId,
                                                 menuName: item.menuName,
                                                 totalQuantity: totalQty,
-                                                menuPrice: item.menuPrice,
-                                                indices: indices,
+                                                indices: itemIndices,
                                               };
 
-                                              setPendingPaymentItems((prev) => {
-                                                const newList = [...prev];
-                                                newList.push(newPendingItem);
-                                                return newList;
-                                              });
-
-                                              existingInPending = newPendingItem;
+                                              setPendingCancelItems([
+                                                newPendingCancelItem,
+                                              ]);
+                                              setSelectedCancelQuantities(
+                                                new Map()
+                                              );
+                                              setCurrentCancelItemIndex(0);
+                                              setQuantitySelectionAction(
+                                                "cancel"
+                                              );
+                                              setShowQuantitySelectionModal(
+                                                true
+                                              );
+                                              return;
                                             }
 
-                                            // selectedQuantities'yi güncelle
-                                            const currentQty =
-                                              selectedQuantities.get(
-                                                item.menuId
-                                              ) || 0;
-                                            const newQty = Math.min(
-                                              existingInPending.totalQuantity,
-                                              currentQty + 1
+                                            // Normal seçim - Tüm indices'leri toggle et
+                                            const newSet = new Set(
+                                              selectedItems
                                             );
-                                            setSelectedQuantities((prev) => {
-                                              const newMap = new Map(prev);
-                                              newMap.set(item.menuId, newQty);
-                                              return newMap;
+                                            indices.forEach((idx) => {
+                                              if (newSet.has(idx)) {
+                                                newSet.delete(idx);
+                                              } else {
+                                                newSet.add(idx);
+                                              }
                                             });
-                                            return;
-                                          }
-
-                                          // Normal seçim (ödeme modalı kapalıysa)
-                                          // Eğer ürün iptal edilebilir durumdaysa (gönderilmemiş), iptal modalını aç
-                                          if (isUnsent && !item.canceledAt) {
-                                            // Aynı menuId'ye sahip tüm item'ları bul ve topla
-                                            const allSameItems = order.items.filter(
-                                              (o) => o.menuId === item.menuId && !o.canceledAt && !order.sentItems?.includes(o.menuId)
-                                            );
-                                            const totalQty = allSameItems.reduce(
-                                              (sum, o) => sum + o.quantity,
-                                              0
-                                            );
-                                            const itemIndices = order.items
-                                              .map((o, idx) =>
-                                                o.menuId === item.menuId && !o.canceledAt && !order.sentItems?.includes(o.menuId)
-                                                  ? idx
-                                                  : -1
-                                              )
-                                              .filter((idx) => idx !== -1);
-
-                                            const newPendingCancelItem = {
-                                              menuId: item.menuId,
-                                              menuName: item.menuName,
-                                              totalQuantity: totalQty,
-                                              indices: itemIndices,
-                                            };
-
-                                            setPendingCancelItems([newPendingCancelItem]);
-                                            setSelectedCancelQuantities(new Map());
-                                            setCurrentCancelItemIndex(0);
-                                            setQuantitySelectionAction("cancel");
-                                            setShowQuantitySelectionModal(true);
-                                            return;
-                                          }
-
-                                          // Normal seçim - Tüm indices'leri toggle et
-                                          const newSet = new Set(selectedItems);
-                                          indices.forEach((idx) => {
-                                            if (newSet.has(idx)) {
-                                              newSet.delete(idx);
-                                            } else {
-                                              newSet.add(idx);
-                                            }
-                                          });
-                                          setSelectedItems(newSet);
-                                        }}
-                                        className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 ${
-                                          isUnsent
-                                            ? ""
-                                            : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                        } ${
-                                          isSelected ||
-                                          (showPaymentModal &&
-                                            (selectedQuantities.get(
-                                              item.menuId
-                                            ) || 0) > 0)
-                                            ? "bg-blue-50 dark:bg-blue-900/20"
-                                            : ""
-                                        }`}
-                                      >
-                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                          <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
-                                            {item.quantity}x
-                                          </span>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
-                                              {item.menuName}
-                                            </p>
-                                            {item.addedAt && currentTable.area === "Cari" && (
-                                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                {new Date(item.addedAt).toLocaleDateString("tr-TR", {
-                                                  day: "2-digit",
-                                                  month: "2-digit",
-                                                  year: "numeric",
-                                                  hour: "2-digit",
-                                                  minute: "2-digit",
-                                                })}
+                                            setSelectedItems(newSet);
+                                          }}
+                                          className={`flex items-center justify-between py-5 px-4 border-b border-gray-200 dark:border-gray-700 ${
+                                            isUnsent
+                                              ? ""
+                                              : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                          } ${
+                                            isSelected ||
+                                            (showPaymentModal &&
+                                              (selectedQuantities.get(
+                                                item.menuId
+                                              ) || 0) > 0)
+                                              ? "bg-blue-50 dark:bg-blue-900/20"
+                                              : ""
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <span className="text-lg font-bold text-pink-600 dark:text-pink-400 shrink-0">
+                                              {item.quantity}x
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                                                {item.menuName}
                                               </p>
-                                            )}
+                                              {item.addedAt &&
+                                                currentTable.area ===
+                                                  "Cari" && (
+                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    {new Date(
+                                                      item.addedAt
+                                                    ).toLocaleDateString(
+                                                      "tr-TR",
+                                                      {
+                                                        day: "2-digit",
+                                                        month: "2-digit",
+                                                        year: "numeric",
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      }
+                                                    )}
+                                                  </p>
+                                                )}
+                                            </div>
                                           </div>
-                                        </div>
 
-                                        {/* Gönderilmemiş ürünler için butonlar - Cari masalarda gösterilmez */}
-                                        {isUnsent && currentTable.area !== "Cari" ? (
-                                          <div
-                                            className="flex items-center gap-3 ml-2"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <button
-                                              onClick={() =>
-                                                decreaseUnsentItemQuantity(
-                                                  item.menuId
-                                                )
+                                          {/* Gönderilmemiş ürünler için butonlar - Cari masalarda gösterilmez */}
+                                          {isUnsent &&
+                                          currentTable.area !== "Cari" ? (
+                                            <div
+                                              className="flex items-center gap-3 ml-2"
+                                              onClick={(e) =>
+                                                e.stopPropagation()
                                               }
-                                              className="p-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                              disabled={item.quantity <= 1}
                                             >
-                                              <Minus className="h-5 w-5" />
-                                            </button>
-                                            <button
-                                              onClick={() =>
-                                                increaseUnsentItemQuantity(
-                                                  item.menuId
-                                                )
-                                              }
-                                              className="p-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                            >
-                                              <Plus className="h-5 w-5" />
-                                            </button>
-                                            <button
-                                              onClick={() =>
-                                                removeUnsentItem(item.menuId)
-                                              }
-                                              className="p-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                            >
-                                              <Trash2 className="h-5 w-5" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <span className="text-base font-semibold text-gray-900 dark:text-white ml-2 shrink-0">
-                                            ₺
-                                            {(item.menuPrice * item.quantity)
-                                              .toFixed(2)
-                                              .replace(".", ",")}
-                                          </span>
-                                        )}
+                                              <button
+                                                onClick={() =>
+                                                  decreaseUnsentItemQuantity(
+                                                    item.menuId
+                                                  )
+                                                }
+                                                className="p-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                                disabled={item.quantity <= 1}
+                                              >
+                                                <Minus className="h-5 w-5" />
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  increaseUnsentItemQuantity(
+                                                    item.menuId
+                                                  )
+                                                }
+                                                className="p-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                              >
+                                                <Plus className="h-5 w-5" />
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  removeUnsentItem(item.menuId)
+                                                }
+                                                className="p-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                              >
+                                                <Trash2 className="h-5 w-5" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <span className="text-base font-semibold text-gray-900 dark:text-white ml-2 shrink-0">
+                                              ₺
+                                              {(item.menuPrice * item.quantity)
+                                                .toFixed(2)
+                                                .replace(".", ",")}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  );
-                                }
-                              );
-                            }
-                          })()}
+                                    );
+                                  }
+                                );
+                              }
+                            })()}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {/* Cart içindeki yeni eklenen ürünler */}
                     {cart.length > 0 && (
@@ -5434,7 +5733,7 @@ function TableDetailContent() {
                             });
 
                             return Array.from(mergedItems.values()).map(
-                              ({ item, cartItemIds }, _idx) => {
+                              ({ item, cartItemIds }) => {
                                 const isSelected = cartItemIds.some((id) =>
                                   selectedCartItems.has(id)
                                 );
@@ -5476,17 +5775,20 @@ function TableDetailContent() {
                                           <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                                             {item.menuName}
                                           </p>
-                                          {item.addedAt && currentTable.area === "Cari" && (
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                              {new Date(item.addedAt).toLocaleDateString("tr-TR", {
-                                                day: "2-digit",
-                                                month: "2-digit",
-                                                year: "numeric",
-                                                hour: "2-digit",
-                                                minute: "2-digit",
-                                              })}
-                                            </p>
-                                          )}
+                                          {item.addedAt &&
+                                            currentTable.area === "Cari" && (
+                                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                {new Date(
+                                                  item.addedAt
+                                                ).toLocaleDateString("tr-TR", {
+                                                  day: "2-digit",
+                                                  month: "2-digit",
+                                                  year: "numeric",
+                                                  hour: "2-digit",
+                                                  minute: "2-digit",
+                                                })}
+                                              </p>
+                                            )}
                                         </div>
                                       </div>
 
@@ -5564,7 +5866,7 @@ function TableDetailContent() {
                 });
 
                 return Array.from(mergedItems.values()).map(
-                  ({ item, cartItemIds }, _idx) => {
+                  ({ item, cartItemIds }) => {
                     const isSelected = cartItemIds.some((id) =>
                       selectedCartItems.has(id)
                     );
@@ -5667,7 +5969,7 @@ function TableDetailContent() {
               <Button
                 onClick={async () => {
                   if (!order || selectedItems.size === 0) return;
-                  
+
                   // Direkt iptal et - seçili ürünlerin tamamını iptal et
                   setIsCanceling(true);
                   try {
@@ -5703,14 +6005,18 @@ function TableDetailContent() {
 
                       if (currentTable.id) {
                         try {
-                          await updateTableStatus(currentTable.id, "available", undefined);
+                          await updateTableStatus(
+                            currentTable.id,
+                            "available",
+                            undefined
+                          );
                           await updateOrderStatus(order.id!, "closed");
                           const updatedTable = await getTable(currentTable.id);
                           if (updatedTable) {
                             setCurrentTable(updatedTable);
                           }
-                        } catch (error) {
-                          console.error("Masa güncellenirken hata:", error);
+                        } catch (err) {
+                          console.error("Masa güncellenirken hata:", err);
                         }
                       }
                       setOrder(null);
@@ -5737,7 +6043,9 @@ function TableDetailContent() {
                     try {
                       if (itemsToCancel.length > 0) {
                         for (const canceledItem of itemsToCancel) {
-                          const menuItem = menus.find((m) => m.id === canceledItem.menuId);
+                          const menuItem = menus.find(
+                            (m) => m.id === canceledItem.menuId
+                          );
                           if (menuItem && menuItem.category) {
                             const category = categories.find(
                               (c) => c.name === menuItem.category
@@ -5760,19 +6068,24 @@ function TableDetailContent() {
                                     paperWidth: printer.paperWidth || 48,
                                   }
                                 );
-                                await printToPrinter(printer.name, printContent, "cancel");
+                                await printToPrinter(
+                                  printer.name,
+                                  printContent,
+                                  "cancel"
+                                );
                               }
                             }
                           }
                         }
                       }
-                    } catch (error) {
+                    } catch {
                       // Yazdırma hatası iptal işlemini etkilemesin
                     }
 
                     // Masa geçmişine kaydet
                     const effectiveCompanyId = companyId || userData?.companyId;
-                    const effectiveBranchId = branchId || userData?.assignedBranchId;
+                    const effectiveBranchId =
+                      branchId || userData?.assignedBranchId;
                     if (effectiveCompanyId) {
                       try {
                         for (const canceledItem of itemsToCancel) {
@@ -5791,7 +6104,7 @@ function TableDetailContent() {
                             effectiveBranchId || undefined
                           );
                         }
-                      } catch (error) {
+                      } catch {
                         // Error saving table history
                       }
                     }
@@ -5800,8 +6113,12 @@ function TableDetailContent() {
                     const updatedOrder = await getOrder(order.id!);
                     setOrder(updatedOrder);
                     setSelectedItems(new Set());
-                  } catch (error) {
-                    customAlert("Ürünler iptal edilirken bir hata oluştu", "Hata", "error");
+                  } catch {
+                    customAlert(
+                      "Ürünler iptal edilirken bir hata oluştu",
+                      "Hata",
+                      "error"
+                    );
                   } finally {
                     setIsCanceling(false);
                   }
@@ -5877,8 +6194,10 @@ function TableDetailContent() {
             order.status !== "closed" &&
             (() => {
               // İptal edilmemiş ürünleri filtrele
-              const activeItems = order.items.filter((item) => !item.canceledAt);
-              
+              const activeItems = order.items.filter(
+                (item) => !item.canceledAt
+              );
+
               // Eğer aktif ürün yoksa buton gösterilmesin
               if (activeItems.length === 0) {
                 return null;
@@ -5890,28 +6209,34 @@ function TableDetailContent() {
               // Direkt olarak order.items içindeki aktif ürünlerin toplamını hesaplamalıyız
               let unpaidSubtotal = 0;
               let unpaidOriginalAmount = 0;
-              
+
               activeItems.forEach((item) => {
                 // order.items içindeki tüm aktif ürünler zaten ödenmemiş ürünlerdir
                 // Çünkü ödeme yapıldığında ödenen ürünler kaldırılıyor veya miktarları azaltılıyor
                 unpaidOriginalAmount += item.menuPrice * item.quantity;
                 unpaidSubtotal += item.subtotal;
               });
-              
+
               // Order'da genel bir indirim varsa (order.discount), bunu da dikkate al
               // Ancak bu indirim tüm sipariş için olabilir, kalan ürünler için orantılı olarak uygulanmalı
               // Basit yaklaşım: order.total kullan (zaten güncel olmalı)
               // Ama order.total güncel olmayabilir, o yüzden manuel hesaplayalım
               const orderDiscount = order.discount || 0;
-              const orderSubtotal = (order.items || []).reduce((sum, item) => sum + item.subtotal, 0);
-              
+              const orderSubtotal = (order.items || []).reduce(
+                (sum, item) => sum + item.subtotal,
+                0
+              );
+
               // Eğer order'da indirim varsa ve orderSubtotal > 0 ise, indirimi orantılı olarak uygula
               let unpaidTotalAmount = unpaidSubtotal;
               if (orderDiscount > 0 && orderSubtotal > 0) {
                 // İndirim oranını hesapla
                 const discountRatio = orderDiscount / orderSubtotal;
                 // Kalan ürünlere orantılı indirim uygula
-                unpaidTotalAmount = Math.max(0, unpaidSubtotal - (unpaidSubtotal * discountRatio));
+                unpaidTotalAmount = Math.max(
+                  0,
+                  unpaidSubtotal - unpaidSubtotal * discountRatio
+                );
               }
 
               // Eğer ödenmemiş tutar yoksa, buton ve toplam gösterilmesin
@@ -5930,24 +6255,15 @@ function TableDetailContent() {
                       {unpaidOriginalAmount > unpaidTotalAmount ? (
                         <>
                           <span className="text-sm font-medium text-gray-500 dark:text-gray-400 line-through">
-                            ₺
-                            {unpaidOriginalAmount
-                              .toFixed(2)
-                              .replace(".", ",")}
+                            ₺{unpaidOriginalAmount.toFixed(2).replace(".", ",")}
                           </span>
                           <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
-                            ₺
-                            {unpaidTotalAmount
-                              .toFixed(2)
-                              .replace(".", ",")}
+                            ₺{unpaidTotalAmount.toFixed(2).replace(".", ",")}
                           </span>
                         </>
                       ) : (
                         <span className="text-xl font-bold text-purple-700 dark:text-purple-400">
-                          ₺
-                          {unpaidTotalAmount
-                            .toFixed(2)
-                            .replace(".", ",")}
+                          ₺{unpaidTotalAmount.toFixed(2).replace(".", ",")}
                         </span>
                       )}
                     </div>
@@ -6077,57 +6393,76 @@ function TableDetailContent() {
           // Sipariş listesindeki toplam tutar ile aynı olmalı
           let remaining: number;
           let originalTotal: number; // İndirim öncesi toplam (üstü çizili fiyat için)
-          
+
           // Sipariş listesindeki toplam tutarı hesapla (order.items içindeki tüm item'ların toplamı)
           // Bu, sipariş listesinde gösterilen TOPLAM ile aynı olmalı
           // Orijinal fiyat için menuPrice * quantity kullanıyoruz
           const orderListTotal = (order.items || []).reduce(
-            (sum, item) => sum + (item.menuPrice * item.quantity),
+            (sum, item) => sum + item.menuPrice * item.quantity,
             0
           );
           const orderDiscount = order.discount || 0;
-          const orderListTotalWithDiscount = order.total || orderListTotal - orderDiscount;
+          const orderListTotalWithDiscount =
+            order.total || orderListTotal - orderDiscount;
 
           // BASIT: Seçili ürünler varsa, sadece seçili ürünlerin toplamını al, indirim uygula, göster
           // Seçili ürün kontrolü: selectedQuantities içinde seçili miktar olmalı
-          const hasSelectedItems = pendingPaymentItems.length > 0 && 
-            Array.from(selectedQuantities.values()).some(qty => qty > 0);
-          
+          const hasSelectedItems =
+            pendingPaymentItems.length > 0 &&
+            Array.from(selectedQuantities.values()).some((qty) => qty > 0);
+
           let discount = 0;
           if (hasSelectedItems) {
             // Seçili ürünlerin toplam fiyatını hesapla (orijinal fiyat)
             originalTotal = pendingPaymentItems.reduce((sum, paymentItem) => {
-              const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+              const selectedQty =
+                selectedQuantities.get(paymentItem.menuId) || 0;
               if (selectedQty > 0) {
-                return sum + (selectedQty * paymentItem.menuPrice);
+                return sum + selectedQty * paymentItem.menuPrice;
               }
               return sum;
             }, 0);
-            
+
             // İndirim hesapla
-            if (discountType === "percentage" && discountValue && discountValue.trim() !== "") {
+            if (
+              discountType === "percentage" &&
+              discountValue &&
+              discountValue.trim() !== ""
+            ) {
               const percentage = parseFloat(discountValue);
               if (!isNaN(percentage) && percentage > 0) {
                 discount = (originalTotal * percentage) / 100;
               }
-            } else if (discountType === "amount" && discountValue && discountValue.trim() !== "") {
+            } else if (
+              discountType === "amount" &&
+              discountValue &&
+              discountValue.trim() !== ""
+            ) {
               const amount = parseFloat(discountValue);
               if (!isNaN(amount) && amount > 0) {
                 discount = Math.min(amount, originalTotal);
               }
             }
-            
+
             // Kalan tutar = Seçili ürünlerin toplamı - İndirim
             remaining = Math.max(0, originalTotal - discount);
           } else {
             // Seçili ürün yoksa, tüm masanın toplamını kullan
             originalTotal = orderListTotal;
-            if (discountType === "percentage" && discountValue && discountValue.trim() !== "") {
+            if (
+              discountType === "percentage" &&
+              discountValue &&
+              discountValue.trim() !== ""
+            ) {
               const percentage = parseFloat(discountValue);
               if (!isNaN(percentage) && percentage > 0) {
                 discount = (originalTotal * percentage) / 100;
               }
-            } else if (discountType === "amount" && discountValue && discountValue.trim() !== "") {
+            } else if (
+              discountType === "amount" &&
+              discountValue &&
+              discountValue.trim() !== ""
+            ) {
               const amount = parseFloat(discountValue);
               if (!isNaN(amount) && amount > 0) {
                 discount = Math.min(amount, originalTotal);
@@ -6170,8 +6505,8 @@ function TableDetailContent() {
                       if (refreshedOrder) {
                         setOrder(refreshedOrder);
                       }
-                    } catch (error) {
-                      console.error("Order refresh error:", error);
+                    } catch (err) {
+                      console.error("Order refresh error:", err);
                     } finally {
                       setIsRefreshingOrder(false);
                     }
@@ -6198,10 +6533,14 @@ function TableDetailContent() {
                       );
 
                       // Seçili ürünlerin toplam fiyatını hesapla
-                      const selectedItemsTotal = selectedItemsList.reduce((sum, paymentItem) => {
-                        const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
-                        return sum + (selectedQty * paymentItem.menuPrice);
-                      }, 0);
+                      const selectedItemsTotal = selectedItemsList.reduce(
+                        (sum, paymentItem) => {
+                          const selectedQty =
+                            selectedQuantities.get(paymentItem.menuId) || 0;
+                          return sum + selectedQty * paymentItem.menuPrice;
+                        },
+                        0
+                      );
 
                       if (selectedItemsList.length === 0) {
                         return (
@@ -6221,7 +6560,8 @@ function TableDetailContent() {
                             <div className="space-y-2 p-3">
                               {selectedItemsList.map((paymentItem) => {
                                 const selectedQty =
-                                  selectedQuantities.get(paymentItem.menuId) || 0;
+                                  selectedQuantities.get(paymentItem.menuId) ||
+                                  0;
                                 const itemTotal =
                                   selectedQty * paymentItem.menuPrice;
                                 return (
@@ -6239,7 +6579,10 @@ function TableDetailContent() {
                                           {paymentItem.totalQuantity} adet
                                         </span>
                                         <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                          ₺{itemTotal.toFixed(2).replace(".", ",")}
+                                          ₺
+                                          {itemTotal
+                                            .toFixed(2)
+                                            .replace(".", ",")}
                                         </span>
                                       </div>
                                     </div>
@@ -6280,13 +6623,17 @@ function TableDetailContent() {
                                           );
                                           setSelectedQuantities((prev) => {
                                             const newMap = new Map(prev);
-                                            newMap.set(paymentItem.menuId, newQty);
+                                            newMap.set(
+                                              paymentItem.menuId,
+                                              newQty
+                                            );
                                             return newMap;
                                           });
                                         }}
                                         className="w-9 h-9 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-base flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                         disabled={
-                                          selectedQty >= paymentItem.totalQuantity
+                                          selectedQty >=
+                                          paymentItem.totalQuantity
                                         }
                                       >
                                         +
@@ -6304,7 +6651,10 @@ function TableDetailContent() {
                                 Seçili Ürünler Toplamı
                               </span>
                               <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                                ₺{selectedItemsTotal.toFixed(2).replace(".", ",")}
+                                ₺
+                                {selectedItemsTotal
+                                  .toFixed(2)
+                                  .replace(".", ",")}
                               </span>
                             </div>
                           </div>
@@ -6336,7 +6686,9 @@ function TableDetailContent() {
                             to: "/table/$tableId",
                             params: { tableId: tableId },
                             search: (prev) => ({
-                              area: (prev?.area ?? undefined) as string | undefined,
+                              area: (prev?.area ?? undefined) as
+                                | string
+                                | undefined,
                               activeOnly: prev?.activeOnly ?? false,
                               payment: undefined,
                             }),
@@ -6350,8 +6702,8 @@ function TableDetailContent() {
                               if (refreshedOrder) {
                                 setOrder(refreshedOrder);
                               }
-                            } catch (error) {
-                              console.error("Order refresh error:", error);
+                            } catch (err) {
+                              console.error("Order refresh error:", err);
                             } finally {
                               setIsRefreshingOrder(false);
                             }
@@ -6452,10 +6804,8 @@ function TableDetailContent() {
                               <>
                                 <span className="text-lg font-medium text-gray-500 dark:text-gray-400 line-through">
                                   ₺
-                                  {(
+                                  {originalTotal
                                     // İndirim öncesi toplam (orijinal fiyat)
-                                    originalTotal
-                                  )
                                     .toFixed(2)
                                     .replace(".", ",")}
                                 </span>
@@ -6543,8 +6893,9 @@ function TableDetailContent() {
 
                                 // Eğer seçili ürün varsa (selectedQuantities veya pendingPaymentItems), sadece seçili ürünlerin ödemesini al
                                 // Eğer seçili ürün yoksa, tüm masanın ödemesini al
-                                const hasSelectedItems = 
-                                  (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) ||
+                                const hasSelectedItems =
+                                  (selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0) ||
                                   pendingPaymentItems.length > 0;
 
                                 // Kalan tutarı seçilen ödeme yöntemi ile al
@@ -6553,10 +6904,12 @@ function TableDetailContent() {
                                 await handlePayment(
                                   remainingAmount.toString(),
                                   undefined, // itemsToUse handlePayment içinde selectedQuantities'den oluşturulacak
-                                  hasSelectedItems && pendingPaymentItems.length > 0
+                                  hasSelectedItems &&
+                                    pendingPaymentItems.length > 0
                                     ? pendingPaymentItems
                                     : undefined,
-                                  hasSelectedItems && selectedQuantities.size > 0
+                                  hasSelectedItems &&
+                                    selectedQuantities.size > 0
                                     ? selectedQuantities
                                     : undefined,
                                   paymentMethod
@@ -6572,13 +6925,15 @@ function TableDetailContent() {
                                   to: "/table/$tableId",
                                   params: { tableId: tableId },
                                   search: (prev) => ({
-                                    area: (prev?.area ?? undefined) as string | undefined,
+                                    area: (prev?.area ?? undefined) as
+                                      | string
+                                      | undefined,
                                     activeOnly: prev?.activeOnly ?? false,
                                     payment: undefined,
                                   }),
                                   replace: true,
                                 });
-                              } catch (error) {
+                              } catch {
                                 customAlert(
                                   "Ödeme işlenirken bir hata oluştu",
                                   "Hata",
@@ -6695,7 +7050,11 @@ function TableDetailContent() {
                                   <Button
                                     type="button"
                                     onClick={async () => {
-                                      if (!order || !order.items || order.items.length === 0) {
+                                      if (
+                                        !order ||
+                                        !order.items ||
+                                        order.items.length === 0
+                                      ) {
                                         customAlert(
                                           "Sipariş bulunamadı",
                                           "Uyarı",
@@ -6705,49 +7064,78 @@ function TableDetailContent() {
                                       }
 
                                       // Seçili ürünler var mı kontrol et
-                                      const hasSelectedItems = 
-                                        (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) ||
+                                      const hasSelectedItems =
+                                        (selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0) ||
                                         selectedItems.size > 0;
 
                                       // Seçili ürünler varsa sadece onları, yoksa tüm masayı ikram olarak işaretle
                                       if (hasSelectedItems) {
                                         // Seçili ürünlerin toplam tutarını hesapla
                                         let giftAmount = 0;
-                                        
-                                        if (selectedQuantities.size > 0 && pendingPaymentItems.length > 0) {
+
+                                        if (
+                                          selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0
+                                        ) {
                                           // Miktar seçimi yapılmışsa
-                                          pendingPaymentItems.forEach((paymentItem) => {
-                                            const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
-                                            if (selectedQty > 0) {
-                                              giftAmount += selectedQty * paymentItem.menuPrice;
+                                          pendingPaymentItems.forEach(
+                                            (paymentItem) => {
+                                              const selectedQty =
+                                                selectedQuantities.get(
+                                                  paymentItem.menuId
+                                                ) || 0;
+                                              if (selectedQty > 0) {
+                                                giftAmount +=
+                                                  selectedQty *
+                                                  paymentItem.menuPrice;
+                                              }
                                             }
-                                          });
+                                          );
                                         } else if (selectedItems.size > 0) {
                                           // Ürün seçimi yapılmışsa
-                                          const selectedItemsArray = Array.from(selectedItems);
-                                          selectedItemsArray.forEach((index) => {
-                                            const item = order.items[index];
-                                            if (item) {
-                                              giftAmount += item.subtotal;
+                                          const selectedItemsArray =
+                                            Array.from(selectedItems);
+                                          selectedItemsArray.forEach(
+                                            (index) => {
+                                              const item = order.items[index];
+                                              if (item) {
+                                                giftAmount += item.subtotal;
+                                              }
                                             }
-                                          });
+                                          );
                                         }
 
                                         // İndirim oranını hesapla
-                                        const orderSubtotal = order.items.reduce(
-                                          (sum, item) => sum + item.subtotal,
-                                          0
+                                        const orderSubtotal =
+                                          order.items.reduce(
+                                            (sum, item) => sum + item.subtotal,
+                                            0
+                                          );
+                                        const orderDiscount =
+                                          order.discount || 0;
+                                        const discountRatio =
+                                          orderSubtotal > 0
+                                            ? orderDiscount / orderSubtotal
+                                            : 0;
+                                        const finalGiftAmount = Math.max(
+                                          0,
+                                          giftAmount -
+                                            giftAmount * discountRatio
                                         );
-                                        const orderDiscount = order.discount || 0;
-                                        const discountRatio = orderSubtotal > 0 ? orderDiscount / orderSubtotal : 0;
-                                        const finalGiftAmount = Math.max(0, giftAmount - (giftAmount * discountRatio));
 
                                         // İkram ödemesi yap
                                         await handlePayment(
                                           finalGiftAmount.toString(),
-                                          selectedItems.size > 0 ? selectedItems : undefined,
-                                          pendingPaymentItems.length > 0 ? pendingPaymentItems : undefined,
-                                          selectedQuantities.size > 0 ? selectedQuantities : undefined,
+                                          selectedItems.size > 0
+                                            ? selectedItems
+                                            : undefined,
+                                          pendingPaymentItems.length > 0
+                                            ? pendingPaymentItems
+                                            : undefined,
+                                          selectedQuantities.size > 0
+                                            ? selectedQuantities
+                                            : undefined,
                                           "cash", // İkram için ödeme yöntemi
                                           undefined,
                                           undefined,
@@ -6757,7 +7145,7 @@ function TableDetailContent() {
                                       } else {
                                         // Tüm masayı ikram olarak işaretle
                                         const totalAmount = order.total || 0;
-                                        
+
                                         await handlePayment(
                                           totalAmount.toString(),
                                           undefined,
@@ -7084,30 +7472,35 @@ function TableDetailContent() {
           // İndirim hesaplaması için seçili ürünler varsa onların toplamını, yoksa tüm siparişin toplamını kullan
           let orderSubtotal: number;
           let selectedItemsIndices: Set<number> = new Set();
-          
+
           if (pendingPaymentItems.length > 0) {
             // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
             orderSubtotal = pendingPaymentItems.reduce((sum, paymentItem) => {
-              const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+              const selectedQty =
+                selectedQuantities.get(paymentItem.menuId) || 0;
               if (selectedQty > 0) {
                 // Seçili ürünlerin index'lerini topla
-                paymentItem.indices.forEach(idx => selectedItemsIndices.add(idx));
+                paymentItem.indices.forEach((idx) =>
+                  selectedItemsIndices.add(idx)
+                );
                 return sum + selectedQty * paymentItem.menuPrice;
               }
               return sum;
             }, 0);
-            
+
             // Eğer hiç seçili ürün yoksa, tüm ürünlerin toplamını kullan
             if (orderSubtotal === 0) {
               orderSubtotal = (order.items || []).reduce(
-                (sum, item) => sum + (item.menuPrice * item.quantity),
+                (sum, item) => sum + item.menuPrice * item.quantity,
                 0
               );
               selectedItemsIndices = new Set(order.items.map((_, idx) => idx));
             } else {
               // Seçili ürünlerin index'lerini topla
-              pendingPaymentItems.forEach(paymentItem => {
-                paymentItem.indices.forEach(idx => selectedItemsIndices.add(idx));
+              pendingPaymentItems.forEach((paymentItem) => {
+                paymentItem.indices.forEach((idx) =>
+                  selectedItemsIndices.add(idx)
+                );
               });
             }
           } else if (selectedItems.size > 0) {
@@ -7116,14 +7509,14 @@ function TableDetailContent() {
               const item = order.items[index];
               if (item) {
                 selectedItemsIndices.add(index);
-                return sum + (item.menuPrice * item.quantity);
+                return sum + item.menuPrice * item.quantity;
               }
               return sum;
             }, 0);
           } else {
             // Seçili ürün yoksa, tüm ürünlerin toplamını kullan (orijinal fiyatlardan)
             orderSubtotal = (order.items || []).reduce(
-              (sum, item) => sum + (item.menuPrice * item.quantity),
+              (sum, item) => sum + item.menuPrice * item.quantity,
               0
             );
             selectedItemsIndices = new Set(order.items.map((_, idx) => idx));
@@ -7202,11 +7595,16 @@ function TableDetailContent() {
                           const value = e.target.value.replace(/[^0-9.,]/g, "");
                           setDiscountValue(value);
                           if (value) {
-                            const numValue = parseFloat(value.replace(",", ".")) || 0;
+                            const numValue =
+                              parseFloat(value.replace(",", ".")) || 0;
                             if (discountType === "percentage") {
-                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              const discountAmount =
+                                (orderSubtotal * numValue) / 100;
                               setPaymentAmount(
-                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                Math.max(
+                                  0,
+                                  orderSubtotal - discountAmount
+                                ).toFixed(2)
                               );
                             } else {
                               setPaymentAmount(
@@ -7228,44 +7626,46 @@ function TableDetailContent() {
 
                     {/* Hazır Oran/Fiyat Seçenekleri */}
                     <div className="grid grid-cols-4 gap-2 mb-2">
-                      {discountType === "percentage" ? (
-                        // Hazır yüzde seçenekleri
-                        [5, 10, 15, 20].map((percent) => (
-                          <Button
-                            key={percent}
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setDiscountValue(percent.toString());
-                              const discountAmount = (orderSubtotal * percent) / 100;
-                              setPaymentAmount(
-                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
-                              );
-                            }}
-                            className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
-                          >
-                            %{percent}
-                          </Button>
-                        ))
-                      ) : (
-                        // Hazır fiyat seçenekleri
-                        [5, 10, 25, 50].map((amount) => (
-                          <Button
-                            key={amount}
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setDiscountValue(amount.toString());
-                              setPaymentAmount(
-                                Math.max(0, orderSubtotal - amount).toFixed(2)
-                              );
-                            }}
-                            className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
-                          >
-                            ₺{amount}
-                          </Button>
-                        ))
-                      )}
+                      {discountType === "percentage"
+                        ? // Hazır yüzde seçenekleri
+                          [5, 10, 15, 20].map((percent) => (
+                            <Button
+                              key={percent}
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setDiscountValue(percent.toString());
+                                const discountAmount =
+                                  (orderSubtotal * percent) / 100;
+                                setPaymentAmount(
+                                  Math.max(
+                                    0,
+                                    orderSubtotal - discountAmount
+                                  ).toFixed(2)
+                                );
+                              }}
+                              className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
+                            >
+                              %{percent}
+                            </Button>
+                          ))
+                        : // Hazır fiyat seçenekleri
+                          [5, 10, 25, 50].map((amount) => (
+                            <Button
+                              key={amount}
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setDiscountValue(amount.toString());
+                                setPaymentAmount(
+                                  Math.max(0, orderSubtotal - amount).toFixed(2)
+                                );
+                              }}
+                              className="h-12 text-sm font-semibold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
+                            >
+                              ₺{amount}
+                            </Button>
+                          ))}
                     </div>
 
                     {/* Numerik Keypad */}
@@ -7280,15 +7680,22 @@ function TableDetailContent() {
                             const newValue = current + num.toString();
                             setDiscountValue(newValue);
                             if (newValue) {
-                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              const numValue =
+                                parseFloat(newValue.replace(",", ".")) || 0;
                               if (discountType === "percentage") {
-                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                const discountAmount =
+                                  (orderSubtotal * numValue) / 100;
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                  Math.max(
+                                    0,
+                                    orderSubtotal - discountAmount
+                                  ).toFixed(2)
                                 );
                               } else {
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                  Math.max(0, orderSubtotal - numValue).toFixed(
+                                    2
+                                  )
                                 );
                               }
                             } else {
@@ -7309,15 +7716,22 @@ function TableDetailContent() {
                             const newValue = current.slice(0, -1);
                             setDiscountValue(newValue);
                             if (newValue) {
-                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              const numValue =
+                                parseFloat(newValue.replace(",", ".")) || 0;
                               if (discountType === "percentage") {
-                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                const discountAmount =
+                                  (orderSubtotal * numValue) / 100;
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                  Math.max(
+                                    0,
+                                    orderSubtotal - discountAmount
+                                  ).toFixed(2)
                                 );
                               } else {
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                  Math.max(0, orderSubtotal - numValue).toFixed(
+                                    2
+                                  )
                                 );
                               }
                             } else {
@@ -7339,15 +7753,22 @@ function TableDetailContent() {
                             const newValue = current + num.toString();
                             setDiscountValue(newValue);
                             if (newValue) {
-                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              const numValue =
+                                parseFloat(newValue.replace(",", ".")) || 0;
                               if (discountType === "percentage") {
-                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                const discountAmount =
+                                  (orderSubtotal * numValue) / 100;
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                  Math.max(
+                                    0,
+                                    orderSubtotal - discountAmount
+                                  ).toFixed(2)
                                 );
                               } else {
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                  Math.max(0, orderSubtotal - numValue).toFixed(
+                                    2
+                                  )
                                 );
                               }
                             } else {
@@ -7380,15 +7801,22 @@ function TableDetailContent() {
                             const newValue = current + num.toString();
                             setDiscountValue(newValue);
                             if (newValue) {
-                              const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                              const numValue =
+                                parseFloat(newValue.replace(",", ".")) || 0;
                               if (discountType === "percentage") {
-                                const discountAmount = (orderSubtotal * numValue) / 100;
+                                const discountAmount =
+                                  (orderSubtotal * numValue) / 100;
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                  Math.max(
+                                    0,
+                                    orderSubtotal - discountAmount
+                                  ).toFixed(2)
                                 );
                               } else {
                                 setPaymentAmount(
-                                  Math.max(0, orderSubtotal - numValue).toFixed(2)
+                                  Math.max(0, orderSubtotal - numValue).toFixed(
+                                    2
+                                  )
                                 );
                               }
                             } else {
@@ -7405,8 +7833,12 @@ function TableDetailContent() {
                         type="button"
                         onClick={() => {
                           const current = discountValue || "";
-                          if (!current.includes(".") && !current.includes(",")) {
-                            const newValue = current + (discountType === "amount" ? "," : "");
+                          if (
+                            !current.includes(".") &&
+                            !current.includes(",")
+                          ) {
+                            const newValue =
+                              current + (discountType === "amount" ? "," : "");
                             setDiscountValue(newValue);
                           }
                         }}
@@ -7422,11 +7854,16 @@ function TableDetailContent() {
                           const newValue = current + "0";
                           setDiscountValue(newValue);
                           if (newValue) {
-                            const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                            const numValue =
+                              parseFloat(newValue.replace(",", ".")) || 0;
                             if (discountType === "percentage") {
-                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              const discountAmount =
+                                (orderSubtotal * numValue) / 100;
                               setPaymentAmount(
-                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                Math.max(
+                                  0,
+                                  orderSubtotal - discountAmount
+                                ).toFixed(2)
                               );
                             } else {
                               setPaymentAmount(
@@ -7449,11 +7886,16 @@ function TableDetailContent() {
                           const newValue = current + "00";
                           setDiscountValue(newValue);
                           if (newValue) {
-                            const numValue = parseFloat(newValue.replace(",", ".")) || 0;
+                            const numValue =
+                              parseFloat(newValue.replace(",", ".")) || 0;
                             if (discountType === "percentage") {
-                              const discountAmount = (orderSubtotal * numValue) / 100;
+                              const discountAmount =
+                                (orderSubtotal * numValue) / 100;
                               setPaymentAmount(
-                                Math.max(0, orderSubtotal - discountAmount).toFixed(2)
+                                Math.max(
+                                  0,
+                                  orderSubtotal - discountAmount
+                                ).toFixed(2)
                               );
                             } else {
                               setPaymentAmount(
@@ -7499,7 +7941,8 @@ function TableDetailContent() {
                             // Tüm indirimleri kaldır
                             const updatedItems = order.items.map((item) => {
                               // Orijinal subtotal'ı geri yükle
-                              const originalSubtotal = item.menuPrice * item.quantity;
+                              const originalSubtotal =
+                                item.menuPrice * item.quantity;
                               return {
                                 ...item,
                                 subtotal: originalSubtotal,
@@ -7508,7 +7951,8 @@ function TableDetailContent() {
 
                             // Yeni toplamları hesapla
                             const newSubtotal = updatedItems.reduce(
-                              (sum, item) => sum + (item.menuPrice * item.quantity),
+                              (sum, item) =>
+                                sum + item.menuPrice * item.quantity,
                               0
                             );
                             const newTotal = newSubtotal; // İndirim yok
@@ -7555,22 +7999,32 @@ function TableDetailContent() {
                             let selectedIndices: Set<number> = new Set();
                             let selectedItemsOriginalSubtotal = 0;
                             let hasSelectedItems = false; // Seçili ürün var mı kontrolü için
-                            
+
                             if (pendingPaymentItems.length > 0) {
                               // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
-                              pendingPaymentItems.forEach(paymentItem => {
-                                const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+                              pendingPaymentItems.forEach((paymentItem) => {
+                                const selectedQty =
+                                  selectedQuantities.get(paymentItem.menuId) ||
+                                  0;
                                 if (selectedQty > 0) {
-                                  paymentItem.indices.forEach(idx => selectedIndices.add(idx));
-                                  selectedItemsOriginalSubtotal += selectedQty * paymentItem.menuPrice;
+                                  paymentItem.indices.forEach((idx) =>
+                                    selectedIndices.add(idx)
+                                  );
+                                  selectedItemsOriginalSubtotal +=
+                                    selectedQty * paymentItem.menuPrice;
                                 }
                               });
-                              
+
                               // Eğer hiç seçili ürün yoksa, tüm ürünleri seç
                               if (selectedIndices.size === 0) {
-                                selectedIndices = new Set(order.items.map((_, idx) => idx));
-                                selectedItemsOriginalSubtotal = (order.items || []).reduce(
-                                  (sum, item) => sum + (item.menuPrice * item.quantity),
+                                selectedIndices = new Set(
+                                  order.items.map((_, idx) => idx)
+                                );
+                                selectedItemsOriginalSubtotal = (
+                                  order.items || []
+                                ).reduce(
+                                  (sum, item) =>
+                                    sum + item.menuPrice * item.quantity,
                                   0
                                 );
                                 hasSelectedItems = false;
@@ -7580,19 +8034,26 @@ function TableDetailContent() {
                             } else if (selectedItems.size > 0) {
                               // selectedItems varsa, seçili ürünlerin toplamını hesapla
                               selectedIndices = new Set(selectedItems);
-                              selectedItemsOriginalSubtotal = Array.from(selectedItems).reduce((sum, index) => {
+                              selectedItemsOriginalSubtotal = Array.from(
+                                selectedItems
+                              ).reduce((sum, index) => {
                                 const item = order.items[index];
                                 if (item) {
-                                  return sum + (item.menuPrice * item.quantity);
+                                  return sum + item.menuPrice * item.quantity;
                                 }
                                 return sum;
                               }, 0);
                               hasSelectedItems = true;
                             } else {
                               // Seçili ürün yoksa, tüm ürünleri seç
-                              selectedIndices = new Set(order.items.map((_, idx) => idx));
-                              selectedItemsOriginalSubtotal = (order.items || []).reduce(
-                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                              selectedIndices = new Set(
+                                order.items.map((_, idx) => idx)
+                              );
+                              selectedItemsOriginalSubtotal = (
+                                order.items || []
+                              ).reduce(
+                                (sum, item) =>
+                                  sum + item.menuPrice * item.quantity,
                                 0
                               );
                               hasSelectedItems = false;
@@ -7602,35 +8063,48 @@ function TableDetailContent() {
                             const originalSubtotal =
                               order.subtotal ||
                               (order.items || []).reduce(
-                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                                (sum, item) =>
+                                  sum + item.menuPrice * item.quantity,
                                 0
                               );
 
                             // Eğer seçili ürünler varsa, indirimi sadece seçili ürünlere uygula
-                            if (selectedIndices.size > 0 && selectedIndices.size < order.items.length) {
+                            if (
+                              selectedIndices.size > 0 &&
+                              selectedIndices.size < order.items.length
+                            ) {
                               // Seçili ürünlere indirim uygula
-                              const discountRatio = selectedItemsOriginalSubtotal > 0
-                                ? discount / selectedItemsOriginalSubtotal
-                                : 0;
+                              const discountRatio =
+                                selectedItemsOriginalSubtotal > 0
+                                  ? discount / selectedItemsOriginalSubtotal
+                                  : 0;
 
-                              const updatedItems = order.items.map((item, index) => {
-                                if (selectedIndices.has(index)) {
-                                  // Seçili ürün: indirim uygula
-                                  const originalItemSubtotal = item.menuPrice * item.quantity;
-                                  const itemDiscount = originalItemSubtotal * discountRatio;
-                                  return {
-                                    ...item,
-                                    subtotal: Math.max(0, originalItemSubtotal - itemDiscount),
-                                  };
-                                } else {
-                                  // Seçili olmayan ürün: değiştirme
-                                  return item;
+                              const updatedItems = order.items.map(
+                                (item, index) => {
+                                  if (selectedIndices.has(index)) {
+                                    // Seçili ürün: indirim uygula
+                                    const originalItemSubtotal =
+                                      item.menuPrice * item.quantity;
+                                    const itemDiscount =
+                                      originalItemSubtotal * discountRatio;
+                                    return {
+                                      ...item,
+                                      subtotal: Math.max(
+                                        0,
+                                        originalItemSubtotal - itemDiscount
+                                      ),
+                                    };
+                                  } else {
+                                    // Seçili olmayan ürün: değiştirme
+                                    return item;
+                                  }
                                 }
-                              });
+                              );
 
                               // Yeni toplamları hesapla
                               const newSubtotal = updatedItems.reduce(
-                                (sum, item) => sum + (item.menuPrice * item.quantity),
+                                (sum, item) =>
+                                  sum + item.menuPrice * item.quantity,
                                 0
                               );
                               const newTotal = updatedItems.reduce(
@@ -7665,7 +8139,8 @@ function TableDetailContent() {
                               // Ürünlerin subtotal değerlerini orantılı olarak güncelle
                               const updatedItems = order.items.map((item) => {
                                 // Orijinal item subtotal'ı hesapla
-                                let originalItemSubtotal = item.menuPrice * item.quantity;
+                                let originalItemSubtotal =
+                                  item.menuPrice * item.quantity;
                                 if (
                                   order.subtotal &&
                                   order.discount &&
@@ -7682,7 +8157,8 @@ function TableDetailContent() {
                                 // Yeni indirimli subtotal (toplam indirim oranı ile)
                                 const newItemSubtotal = Math.max(
                                   0,
-                                  originalItemSubtotal * (1 - totalDiscountRatio)
+                                  originalItemSubtotal *
+                                    (1 - totalDiscountRatio)
                                 );
                                 return {
                                   ...item,
@@ -7710,27 +8186,36 @@ function TableDetailContent() {
                                 setOrder(updatedOrder);
                                 // Seçili ürünlerin state'ini koru (indirim uygulandıktan sonra kaldırma)
                                 // selectedItems, pendingPaymentItems ve selectedQuantities state'leri korunuyor
-                                
+
                                 // Eğer seçili ürünler varsa, pendingPaymentItems'ı güncelle (yeni order'a göre)
-                                if (hasSelectedItems && selectedIndices.size > 0 && selectedIndices.size < updatedOrder.items.length) {
+                                if (
+                                  hasSelectedItems &&
+                                  selectedIndices.size > 0 &&
+                                  selectedIndices.size <
+                                    updatedOrder.items.length
+                                ) {
                                   // Seçili ürünlerin menuId'lerini topla
                                   const selectedMenuIds = new Set<string>();
-                                  selectedIndices.forEach(index => {
+                                  selectedIndices.forEach((index) => {
                                     const item = updatedOrder.items[index];
                                     if (item) {
                                       selectedMenuIds.add(item.menuId);
                                     }
                                   });
-                                  
+
                                   // pendingPaymentItems'ı güncelle (yeni order'a göre)
                                   if (selectedMenuIds.size > 0) {
                                     const newPendingItems = updatedOrder.items
                                       .map((item, index) => {
-                                        if (selectedMenuIds.has(item.menuId) && selectedIndices.has(index)) {
+                                        if (
+                                          selectedMenuIds.has(item.menuId) &&
+                                          selectedIndices.has(index)
+                                        ) {
                                           // Aynı menuId'ye sahip tüm item'ları bul
-                                          const allSameItems = updatedOrder.items.filter(
-                                            (o) => o.menuId === item.menuId
-                                          );
+                                          const allSameItems =
+                                            updatedOrder.items.filter(
+                                              (o) => o.menuId === item.menuId
+                                            );
                                           const totalQty = allSameItems.reduce(
                                             (sum, o) => sum + o.quantity,
                                             0
@@ -7742,7 +8227,7 @@ function TableDetailContent() {
                                                 : -1
                                             )
                                             .filter((idx) => idx !== -1);
-                                          
+
                                           return {
                                             menuId: item.menuId,
                                             menuName: item.menuName,
@@ -7753,22 +8238,42 @@ function TableDetailContent() {
                                         }
                                         return null;
                                       })
-                                      .filter((item): item is NonNullable<typeof item> => item !== null);
-                                    
+                                      .filter(
+                                        (
+                                          item
+                                        ): item is NonNullable<typeof item> =>
+                                          item !== null
+                                      );
+
                                     // Aynı menuId'ye sahip item'ları birleştir
-                                    const mergedPendingItems = new Map<string, typeof newPendingItems[0]>();
-                                    newPendingItems.forEach(item => {
-                                      const existing = mergedPendingItems.get(item.menuId);
+                                    const mergedPendingItems = new Map<
+                                      string,
+                                      (typeof newPendingItems)[0]
+                                    >();
+                                    newPendingItems.forEach((item) => {
+                                      const existing = mergedPendingItems.get(
+                                        item.menuId
+                                      );
                                       if (existing) {
-                                        existing.totalQuantity += item.totalQuantity;
-                                        existing.indices = [...new Set([...existing.indices, ...item.indices])];
+                                        existing.totalQuantity +=
+                                          item.totalQuantity;
+                                        existing.indices = [
+                                          ...new Set([
+                                            ...existing.indices,
+                                            ...item.indices,
+                                          ]),
+                                        ];
                                       } else {
-                                        mergedPendingItems.set(item.menuId, { ...item });
+                                        mergedPendingItems.set(item.menuId, {
+                                          ...item,
+                                        });
                                       }
                                     });
-                                    
-                                    setPendingPaymentItems(Array.from(mergedPendingItems.values()));
-                                    
+
+                                    setPendingPaymentItems(
+                                      Array.from(mergedPendingItems.values())
+                                    );
+
                                     // selectedQuantities'yi koru (zaten doğru değerler var)
                                   }
                                 }
@@ -7895,7 +8400,9 @@ function TableDetailContent() {
                   {pendingCancelItems[currentCancelItemIndex]?.menuName}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500">
-                  Toplam: {pendingCancelItems[currentCancelItemIndex]?.totalQuantity} adet
+                  Toplam:{" "}
+                  {pendingCancelItems[currentCancelItemIndex]?.totalQuantity}{" "}
+                  adet
                 </p>
               </div>
 
@@ -7940,7 +8447,8 @@ function TableDetailContent() {
                         pendingCancelItems[currentCancelItemIndex]?.menuId
                       ) || 0;
                     const maxQty =
-                      pendingCancelItems[currentCancelItemIndex]?.totalQuantity || 0;
+                      pendingCancelItems[currentCancelItemIndex]
+                        ?.totalQuantity || 0;
                     if (currentQty < maxQty) {
                       setSelectedCancelQuantities((prev) => {
                         const newMap = new Map(prev);
@@ -7957,7 +8465,8 @@ function TableDetailContent() {
                     (selectedCancelQuantities.get(
                       pendingCancelItems[currentCancelItemIndex]?.menuId
                     ) || 0) >=
-                    (pendingCancelItems[currentCancelItemIndex]?.totalQuantity || 0)
+                    (pendingCancelItems[currentCancelItemIndex]
+                      ?.totalQuantity || 0)
                   }
                 >
                   +
@@ -8094,7 +8603,9 @@ function TableDetailContent() {
                           />
                           <Button
                             onClick={handleCreateCustomerAndTable}
-                            disabled={!newCustomerName.trim() || isCreatingCustomer}
+                            disabled={
+                              !newCustomerName.trim() || isCreatingCustomer
+                            }
                             className="bg-green-600 hover:bg-green-700 text-white"
                           >
                             {isCreatingCustomer ? (
@@ -8126,7 +8637,9 @@ function TableDetailContent() {
                     {customerTables.length === 0 ? (
                       <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                         <CreditCard className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                        <p className="text-lg font-medium">Henüz cari masa yok</p>
+                        <p className="text-lg font-medium">
+                          Henüz cari masa yok
+                        </p>
                         <p className="text-sm mt-1">Yeni cari masa oluşturun</p>
                       </div>
                     ) : (
@@ -8146,7 +8659,10 @@ function TableDetailContent() {
                                 </h3>
                                 {customer && (
                                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                    Bakiye: ₺{customer.balance.toFixed(2).replace(".", ",")}
+                                    Bakiye: ₺
+                                    {customer.balance
+                                      .toFixed(2)
+                                      .replace(".", ",")}
                                   </p>
                                 )}
                               </div>
@@ -8160,7 +8676,11 @@ function TableDetailContent() {
                                       navigate({
                                         to: "/table/$tableId",
                                         params: { tableId: table.id! },
-                                        search: { area: undefined, activeOnly: false, payment: undefined },
+                                        search: {
+                                          area: undefined,
+                                          activeOnly: false,
+                                          payment: undefined,
+                                        },
                                       });
                                       setShowCustomerModal(false);
                                     }
@@ -8170,13 +8690,17 @@ function TableDetailContent() {
                                 >
                                   Masaya Git
                                 </Button>
-                                {(order && order.items.length > 0) && (
+                                {order && order.items.length > 0 && (
                                   <Button
-                                    onClick={() => handleSaveToCustomerTable(table.id!)}
+                                    onClick={() =>
+                                      handleSaveToCustomerTable(table.id!)
+                                    }
                                     className="bg-green-600 hover:bg-green-700 text-white text-sm"
                                   >
-                                    {pendingPaymentItems.length > 0 && 
-                                     Array.from(selectedQuantities.values()).some(qty => qty > 0)
+                                    {pendingPaymentItems.length > 0 &&
+                                    Array.from(
+                                      selectedQuantities.values()
+                                    ).some((qty) => qty > 0)
                                       ? "Seçili Ürünleri Kaydet"
                                       : "Masayı Kaydet"}
                                   </Button>
