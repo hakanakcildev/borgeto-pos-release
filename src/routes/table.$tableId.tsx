@@ -4608,7 +4608,7 @@ function TableDetailContent() {
       </div>
       {/* Left Sidebar - Order (Desktop) */}
       <div
-        className="hidden lg:flex lg:flex-none lg:w-[400px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
+        className="hidden lg:flex lg:flex-none lg:w-[480px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
       >
         <div className="p-3 shrink-0">
@@ -6612,7 +6612,7 @@ function TableDetailContent() {
             <>
               {/* Overlay */}
               <div
-                className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[400px] lg:right-0"
+                className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[480px] lg:right-0"
                 onClick={async () => {
                   setShowPaymentModal(false);
                   setPaymentAmount("");
@@ -6651,10 +6651,10 @@ function TableDetailContent() {
                 }}
               />
               {/* Ödeme Paneli */}
-              <div className="fixed top-[80px] bottom-0 left-0 right-0 lg:left-[400px] lg:right-0 bg-white dark:bg-gray-800 z-50 flex transform transition-transform duration-300 ease-in-out">
+              <div className="fixed top-[80px] bottom-0 left-0 right-0 lg:left-[480px] lg:right-0 bg-white dark:bg-gray-800 z-50 flex transform transition-transform duration-300 ease-in-out">
                 {/* Sol Sidebar - Seçili Ürünler */}
                 <div
-                  className="hidden lg:flex lg:flex-none lg:w-80 flex-col overflow-hidden"
+                  className="hidden lg:flex lg:flex-none lg:w-96 flex-col overflow-hidden"
                   style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
                 >
                   <div className="p-3 shrink-0 border-b border-gray-700">
@@ -7587,9 +7587,9 @@ function TableDetailContent() {
                 selectedQuantities.get(paymentItem.menuId) || 0;
               if (selectedQty > 0) {
                 // Seçili ürünlerin index'lerini topla
-                paymentItem.indices.forEach((idx) =>
-                  selectedItemsIndices.add(idx)
-                );
+                paymentItem.indices.forEach((idx) => {
+                  selectedItemsIndices.add(idx);
+                });
                 return sum + selectedQty * paymentItem.menuPrice;
               }
               return sum;
@@ -7605,9 +7605,9 @@ function TableDetailContent() {
             } else {
               // Seçili ürünlerin index'lerini topla
               pendingPaymentItems.forEach((paymentItem) => {
-                paymentItem.indices.forEach((idx) =>
-                  selectedItemsIndices.add(idx)
-                );
+                paymentItem.indices.forEach((idx) => {
+                  selectedItemsIndices.add(idx);
+                });
               });
             }
           } else if (selectedItems.size > 0) {
