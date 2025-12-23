@@ -205,8 +205,9 @@ function StatisticsContent() {
       }> = [];
 
       const paymentsWithItems =
-        order.payments?.filter((p) => p.paidItems && p.paidItems.length > 0 && !p.isGift) ??
-        [];
+        order.payments?.filter(
+          (p) => p.paidItems && p.paidItems.length > 0 && !p.isGift
+        ) ?? [];
 
       if (paymentsWithItems.length > 0) {
         // Kısmi veya item bazlı ödemelerde, paidItems'ları ekle (ikramlar hariç)
@@ -227,11 +228,12 @@ function StatisticsContent() {
       // Ancak eğer son ödeme ikram ise, bu ürünleri ekleme
       if (order.status === "closed" && order.items && order.items.length > 0) {
         // Son ödemenin ikram olup olmadığını kontrol et
-        const lastPayment = order.payments && order.payments.length > 0 
-          ? order.payments[order.payments.length - 1] 
-          : null;
+        const lastPayment =
+          order.payments && order.payments.length > 0
+            ? order.payments[order.payments.length - 1]
+            : null;
         const isLastPaymentGift = lastPayment?.isGift || false;
-        
+
         if (!isLastPaymentGift) {
           order.items.forEach((item) => {
             paidItems.push({
@@ -391,7 +393,7 @@ function StatisticsContent() {
         order.payments.forEach((payment: Payment) => {
           // İkram ödemelerini ödeme yöntemi istatistiklerine dahil etme
           if (payment.isGift) return;
-          
+
           const existing = paymentMethodMap.get(payment.method);
           if (existing) {
             existing.total += payment.amount;
@@ -420,6 +422,12 @@ function StatisticsContent() {
 
     const paymentMethodStats = Array.from(paymentMethodMap.values()).sort(
       (a, b) => b.total - a.total
+    );
+
+    // Tüm ödeme yöntemlerinin toplamını hesapla (yüzde hesaplaması için)
+    const totalPaymentAmount = paymentMethodStats.reduce(
+      (sum, method) => sum + method.total,
+      0
     );
 
     // Toplam indirim: Ödemesi alınan siparişlerdeki indirimlerin toplamı
@@ -506,6 +514,7 @@ function StatisticsContent() {
       totalCourierPackages,
       totalCourierPackageAmount,
       waiterStats,
+      totalPaymentAmount,
     };
   }, [orders, paymentMethods, courierAssignments, users]);
 
@@ -783,7 +792,7 @@ function StatisticsContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
@@ -904,9 +913,12 @@ function StatisticsContent() {
                 <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
                   ₺{method.total.toFixed(2)}
                 </p>
-                {stats.totalRevenue > 0 && (
+                {stats.totalPaymentAmount > 0 && (
                   <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
-                    %{((method.total / stats.totalRevenue) * 100).toFixed(1)}
+                    %
+                    {((method.total / stats.totalPaymentAmount) * 100).toFixed(
+                      1
+                    )}
                   </p>
                 )}
               </div>

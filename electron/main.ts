@@ -647,7 +647,7 @@ function registerIpcHandlers() {
             writeFileSync(tempFile, "\uFEFF" + data.content, "utf-8");
             safeLog(`📁 Temp file created: ${tempFile}`);
           } catch (writeError) {
-            safeError("❌ Error writing temp file:", writeError);
+                safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
               writeError instanceof Error
                 ? writeError.message
@@ -928,7 +928,7 @@ try {
           try {
             writeFileSync(tempFile, data.content, "utf-8");
           } catch (writeError) {
-            safeError("❌ Error writing temp file:", writeError);
+                safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
               writeError instanceof Error
                 ? writeError.message
@@ -967,7 +967,7 @@ try {
           try {
             writeFileSync(tempFile, data.content, "utf-8");
           } catch (writeError) {
-            safeError("❌ Error writing temp file:", writeError);
+                safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
               writeError instanceof Error
                 ? writeError.message
@@ -1069,7 +1069,7 @@ try {
   });
 
   console.log(
-    "IPC handlers registered: quit-app, check-for-updates, quit-and-install, clear-table-history, get-system-printers, print, get-local-ip at",
+    "IPC handlers registered: quit-app, check-for-updates, quit-and-install, clear-table-history, get-system-printers, print, get-local-ip, open-dev-tools at",
     new Date().toISOString()
   );
 }
@@ -1289,8 +1289,8 @@ const createWindow = (): void => {
           errorDescription,
           validatedURL,
         });
-        // If navigation fails, try loading index.html again
-        if (errorCode === -3 && mainWindow) {
+      // If navigation fails, try loading index.html again
+      if (errorCode === -3 && mainWindow) {
           safeLog("🔄 Retrying to load index.html...");
           const retryFileUrl = `file://${indexPath.replace(/\\/g, "/")}`;
           mainWindow.loadURL(retryFileUrl);
@@ -1754,18 +1754,18 @@ app.on("second-instance", () => {
 // This method will be called when Electron has finished initialization
 // app.whenReady() kullan - app.on("ready") yerine (daha güvenli, tek sefer çalışır)
 app.whenReady().then(() => {
-  // Windows için app user model ID ayarla
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.borgeto.pos");
-  }
+    // Windows için app user model ID ayarla
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.borgeto.pos");
+    }
 
-  // Register IPC handlers on app ready
-  registerIpcHandlers();
+    // Register IPC handlers on app ready
+    registerIpcHandlers();
 
-  // Setup table history cleanup cron job
-  setupTableHistoryCleanupCron();
+    // Setup table history cleanup cron job
+    setupTableHistoryCleanupCron();
 
-  createWindow();
+    createWindow();
 
   // Otomatik güncelleme kontrolü - production'da çalışır
   if (!isDev) {

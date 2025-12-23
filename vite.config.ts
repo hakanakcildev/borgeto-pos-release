@@ -102,17 +102,33 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     commonjsOptions: {
-      include: [/bcryptjs/, /react/, /react-dom/, /use-sync-external-store/],
+      // CRITICAL FIX: Tüm CommonJS modüllerini transform et
+      // "module is not defined" hatasını önlemek için
+      // node_modules içindeki tüm CommonJS modüllerini transform et
+      include: [/node_modules/],
       transformMixedEsModules: true,
+      // CommonJS require'ları ES module import'a çevir
+      requireReturnsDefault: "auto",
+      // Dynamic require'ları da transform et
+      dynamicRequireTargets: [],
+      // Strict mode'u kapat (bazı modüller için gerekli)
+      strictRequires: false,
     },
     rollupOptions: {
       output: {
         format: "es",
         preserveModules: false,
+        // Global değişkenler tanımla (CommonJS için)
+        globals: {},
       },
       // Tüm bağımlılıkları bundle'a dahil et
       // @tanstack/react-router'ın jsx import sorununu çözmek için
       external: [],
     },
   },
+  // Define global değişkenler (CommonJS için)
+  // NOT: Bu güvenli değil, bu yüzden commonjsOptions ile çözüyoruz
+  // define: {
+  //   "module": "undefined",
+  // },
 });

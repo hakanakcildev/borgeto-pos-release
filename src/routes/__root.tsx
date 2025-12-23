@@ -113,8 +113,34 @@ function RootComponent() {
       isAuthenticated,
       routerReady: !!router?.state,
       matchesCount: router?.state?.matches?.length || 0,
+      routerStatus: router?.state?.status,
     });
-  }, [location.pathname, authLoading, isAuthenticated, router]);
+
+    // CRITICAL FIX: Eğer route bulunamadıysa ve auth loading bittiyse, login'e veya ana sayfaya yönlendir
+    if (!authLoading && router?.state) {
+      const matchesCount = router.state.matches.length;
+      const currentPath = location.pathname;
+
+      // Eğer hiç match yoksa ve pathname geçerli değilse
+      if (matchesCount === 0 && currentPath !== "/auth/login") {
+        console.warn("⚠️ Route bulunamadı, yönlendirme yapılıyor...", {
+          pathname: currentPath,
+          isAuthenticated,
+        });
+
+        // Auth durumuna göre yönlendir
+        if (isAuthenticated) {
+          navigate({
+            to: "/",
+            replace: true,
+            search: { area: undefined, activeOnly: false },
+          });
+        } else {
+          navigate({ to: "/auth/login", replace: true });
+        }
+      }
+    }
+  }, [location.pathname, authLoading, isAuthenticated, router, navigate]);
 
   // ÖNEMLİ: Eğer auth loading çok uzun sürerse, router'ın çalışmasını engelleme
   // Router'ın kendi mekanizmasına güven - auth loading bitmeden de çalışabilir

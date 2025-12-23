@@ -119,7 +119,9 @@ function ShiftManagementContent() {
 
   const loadData = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId =
+      branchId || userData?.assignedBranchId || userData?.id;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
       setLoading(false);
@@ -149,7 +151,9 @@ function ShiftManagementContent() {
 
   const handleSaveStoreHours = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId =
+      branchId || userData?.assignedBranchId || userData?.id;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
       await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
@@ -203,7 +207,9 @@ function ShiftManagementContent() {
     }
 
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId =
+      branchId || userData?.assignedBranchId || userData?.id;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
       await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
@@ -283,7 +289,9 @@ function ShiftManagementContent() {
 
   const handleSaveEmployeeShifts = async (employeeId: string) => {
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId =
+      branchId || userData?.assignedBranchId || userData?.id;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
       await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
@@ -384,7 +392,8 @@ function ShiftManagementContent() {
   /*
   const handleCopyMondayToAllWeek = async (employeeId: string) => {
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId = branchId || userData?.assignedBranchId || userData?.id;
 
     if (!effectiveCompanyId || !effectiveBranchId) {
       await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
@@ -481,10 +490,25 @@ function ShiftManagementContent() {
     }
 
     const effectiveCompanyId = companyId || userData?.companyId;
-    const effectiveBranchId = branchId || userData?.assignedBranchId;
+    // Manager hesapları için branchId = manager'ın kendi ID'si
+    const effectiveBranchId =
+      branchId || userData?.assignedBranchId || userData?.id;
 
-    if (!effectiveCompanyId || !effectiveBranchId) {
-      await customAlert("Şirket veya şube bilgisi bulunamadı", "Hata", "error");
+    if (!effectiveCompanyId) {
+      await customAlert(
+        "Şirket bilgisi bulunamadı. Lütfen giriş yaptığınızdan emin olun.",
+        "Hata",
+        "error"
+      );
+      return;
+    }
+
+    if (!effectiveBranchId) {
+      await customAlert(
+        "Şube bilgisi bulunamadı. Lütfen giriş yaptığınızdan emin olun.",
+        "Hata",
+        "error"
+      );
       return;
     }
 

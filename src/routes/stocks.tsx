@@ -8,8 +8,15 @@ import {
   addStockMovement,
   getAllStockMovementsByCompany,
 } from "@/lib/firebase/stocks";
-import { getAllCategoriesByCompany, getAllMenusByCompany } from "@/lib/firebase/menus";
-import type { Stock, StockMovement, StockMovementType } from "@/lib/firebase/types";
+import {
+  getAllCategoriesByCompany,
+  getAllMenusByCompany,
+} from "@/lib/firebase/menus";
+import type {
+  Stock,
+  StockMovement,
+  StockMovementType,
+} from "@/lib/firebase/types";
 import type { Category, Menu } from "@/lib/firebase/types";
 import {
   Plus,
@@ -65,7 +72,8 @@ function StockManagementContent() {
 
   // Movement form states
   const [showMovementForm, setShowMovementForm] = useState(false);
-  const [selectedStockForMovement, setSelectedStockForMovement] = useState<Stock | null>(null);
+  const [selectedStockForMovement, setSelectedStockForMovement] =
+    useState<Stock | null>(null);
   const [movementForm, setMovementForm] = useState({
     type: "in" as StockMovementType,
     quantity: "",
@@ -81,7 +89,7 @@ function StockManagementContent() {
     const loadData = async () => {
       const effectiveCompanyId = companyId || userData?.companyId;
       const effectiveBranchId = branchId || userData?.assignedBranchId;
-      
+
       if (!effectiveCompanyId) {
         setLoading(false);
         return;
@@ -89,12 +97,28 @@ function StockManagementContent() {
 
       try {
         setLoading(true);
-        const [stocksData, categoriesData, menusData, movementsData] = await Promise.all([
-          getAllStocksByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-          getAllCategoriesByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-          getAllMenusByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-          getAllStockMovementsByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        ]);
+        const managerUserId = userData?.id || undefined;
+        const [stocksData, categoriesData, menusData, movementsData] =
+          await Promise.all([
+            getAllStocksByCompany(
+              effectiveCompanyId,
+              effectiveBranchId || undefined
+            ),
+            getAllCategoriesByCompany(
+              effectiveCompanyId,
+              effectiveBranchId || undefined,
+              managerUserId
+            ),
+            getAllMenusByCompany(
+              effectiveCompanyId,
+              effectiveBranchId || undefined,
+              managerUserId
+            ),
+            getAllStockMovementsByCompany(
+              effectiveCompanyId,
+              effectiveBranchId || undefined
+            ),
+          ]);
 
         setStocks(stocksData);
         setCategories(categoriesData);
@@ -143,31 +167,36 @@ function StockManagementContent() {
   };
 
   // Filter menus for search
-  const filteredMenus = menus.filter((menu) =>
-    menu.name.toLowerCase().includes(menuSearchTerm.toLowerCase()) ||
-    menu.category?.toLowerCase().includes(menuSearchTerm.toLowerCase())
+  const filteredMenus = menus.filter(
+    (menu) =>
+      menu.name.toLowerCase().includes(menuSearchTerm.toLowerCase()) ||
+      menu.category?.toLowerCase().includes(menuSearchTerm.toLowerCase())
   );
 
   const handleSaveStock = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Yeni ürün eklerken menuId zorunlu
     if (!stockForm.menuId) {
       customAlert("Lütfen menü ürününü seçin", "Uyarı", "warning");
       return;
     }
-    
+
     if (!effectiveCompanyId || !stockForm.name) {
       customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
       return;
     }
 
     if (!stockForm.itemsPerPackage || stockForm.itemsPerPackage.trim() === "") {
-      customAlert("1 kolide/pakette kaç adet olduğunu girin", "Uyarı", "warning");
+      customAlert(
+        "1 kolide/pakette kaç adet olduğunu girin",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     if (!stockForm.currentQuantity || stockForm.currentQuantity.trim() === "") {
       customAlert("Mevcut stok adedini girin", "Uyarı", "warning");
       return;
@@ -175,14 +204,22 @@ function StockManagementContent() {
 
     const itemsPerPackage = parseInt(stockForm.itemsPerPackage);
     const currentQuantity = parseFloat(stockForm.currentQuantity);
-    
+
     if (isNaN(itemsPerPackage) || itemsPerPackage < 1) {
-      customAlert("1 kolide/pakette en az 1 adet olmalıdır", "Uyarı", "warning");
+      customAlert(
+        "1 kolide/pakette en az 1 adet olmalıdır",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
 
     if (isNaN(currentQuantity) || currentQuantity < 0) {
-      customAlert("Mevcut stok adedi geçerli bir sayı olmalıdır", "Uyarı", "warning");
+      customAlert(
+        "Mevcut stok adedi geçerli bir sayı olmalıdır",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
 
@@ -210,8 +247,14 @@ function StockManagementContent() {
 
       // Reload data
       const [stocksData, movementsData] = await Promise.all([
-        getAllStocksByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        getAllStockMovementsByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+        getAllStocksByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ),
+        getAllStockMovementsByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ),
       ]);
 
       setStocks(stocksData);
@@ -227,20 +270,28 @@ function StockManagementContent() {
 
   const handleDeleteStock = async (stock: Stock) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
+
     // Sadece aynı şubeye ait stokları silebilir
-    if (effectiveBranchId && stock.branchId && stock.branchId !== effectiveBranchId) {
-      customAlert("Bu stok başka bir şubeye ait.\nSadece kendi şubenizin stoklarını silebilirsiniz.", "Uyarı", "warning");
+    if (
+      effectiveBranchId &&
+      stock.branchId &&
+      stock.branchId !== effectiveBranchId
+    ) {
+      customAlert(
+        "Bu stok başka bir şubeye ait.\nSadece kendi şubenizin stoklarını silebilirsiniz.",
+        "Uyarı",
+        "warning"
+      );
       return;
     }
-    
+
     if (!confirm(`${stock.name} stokunu silmek istediğinize emin misiniz?`)) {
       return;
     }
 
     try {
       const effectiveCompanyId = companyId || userData?.companyId;
-      
+
       await deleteStock(stock.id!);
       const stocksData = await getAllStocksByCompany(
         effectiveCompanyId!,
@@ -253,12 +304,15 @@ function StockManagementContent() {
     }
   };
 
-
   const handleSaveMovement = async () => {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
-    
-    if (!effectiveCompanyId || !selectedStockForMovement || !movementForm.quantity) {
+
+    if (
+      !effectiveCompanyId ||
+      !selectedStockForMovement ||
+      !movementForm.quantity
+    ) {
       customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
       return;
     }
@@ -272,7 +326,7 @@ function StockManagementContent() {
     // Calculate actual quantity based on unitType
     let actualQuantity = quantity;
     let finalUnitType = movementForm.unitType;
-    
+
     if (movementForm.unitType === "package") {
       // Koli/paket cinsinden: quantity * itemsPerPackage
       actualQuantity = quantity * selectedStockForMovement.itemsPerPackage;
@@ -282,7 +336,8 @@ function StockManagementContent() {
 
     // Check if out movement would result in negative quantity
     if (movementForm.type === "out") {
-      const newQuantity = selectedStockForMovement.currentQuantity - actualQuantity;
+      const newQuantity =
+        selectedStockForMovement.currentQuantity - actualQuantity;
       if (newQuantity < 0) {
         customAlert(
           `Yeterli stok yok. Mevcut stok: ${selectedStockForMovement.currentQuantity} adet`,
@@ -310,8 +365,14 @@ function StockManagementContent() {
 
       // Reload data
       const [stocksData, movementsData] = await Promise.all([
-        getAllStocksByCompany(effectiveCompanyId, effectiveBranchId || undefined),
-        getAllStockMovementsByCompany(effectiveCompanyId, effectiveBranchId || undefined),
+        getAllStocksByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ),
+        getAllStockMovementsByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ),
       ]);
 
       setStocks(stocksData);
@@ -323,7 +384,6 @@ function StockManagementContent() {
       customAlert("Stok hareketi eklenirken bir hata oluştu", "Hata", "error");
     }
   };
-
 
   if (loading) {
     return (
@@ -404,9 +464,7 @@ function StockManagementContent() {
             </div>
             <select
               value={selectedCategory || ""}
-              onChange={(e) =>
-                setSelectedCategory(e.target.value || null)
-              }
+              onChange={(e) => setSelectedCategory(e.target.value || null)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             >
               <option value="">Tüm Kategoriler</option>
@@ -416,7 +474,10 @@ function StockManagementContent() {
                 </option>
               ))}
             </select>
-            <Button onClick={handleAddStock} className="flex items-center gap-2">
+            <Button
+              onClick={handleAddStock}
+              className="flex items-center gap-2"
+            >
               <Plus className="h-4 w-4" />
               Stok Ekle
             </Button>
@@ -425,7 +486,8 @@ function StockManagementContent() {
           {/* Stocks List */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {filteredStocks.map((stock) => {
-              const isLowStock = stock.isActive && stock.currentQuantity <= stock.minQuantity;
+              const isLowStock =
+                stock.isActive && stock.currentQuantity <= stock.minQuantity;
               return (
                 <div
                   key={stock.id}
@@ -456,7 +518,7 @@ function StockManagementContent() {
                       {stock.isActive ? "Aktif" : "Pasif"}
                     </span>
                   </div>
-                  
+
                   {stock.description && (
                     <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
                       {stock.description}
@@ -465,12 +527,16 @@ function StockManagementContent() {
 
                   <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Mevcut:</span>
-                      <span className={`text-sm font-bold ${
-                        isLowStock
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-blue-600 dark:text-blue-400"
-                      }`}>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        Mevcut:
+                      </span>
+                      <span
+                        className={`text-sm font-bold ${
+                          isLowStock
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-blue-600 dark:text-blue-400"
+                        }`}
+                      >
                         {stock.currentQuantity} adet
                       </span>
                     </div>
@@ -479,19 +545,26 @@ function StockManagementContent() {
                         {stock.packageType === "koli" ? "Koli" : "Paket"}:
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {Math.floor(stock.currentQuantity / stock.itemsPerPackage)} {stock.packageType}
-                        ({stock.itemsPerPackage} adet/{stock.packageType})
+                        {Math.floor(
+                          stock.currentQuantity / stock.itemsPerPackage
+                        )}{" "}
+                        {stock.packageType}({stock.itemsPerPackage} adet/
+                        {stock.packageType})
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Min:</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        Min:
+                      </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {stock.minQuantity} adet
                       </span>
                     </div>
                     {stock.maxQuantity && (
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Max:</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                          Max:
+                        </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           {stock.maxQuantity} adet
                         </span>
@@ -610,7 +683,10 @@ function StockManagementContent() {
                   {movements.map((movement) => {
                     const stock = stocks.find((s) => s.id === movement.stockId);
                     return (
-                      <tr key={movement.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr
+                        key={movement.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                           {new Date(movement.createdAt).toLocaleString("tr-TR")}
                         </td>
@@ -618,13 +694,15 @@ function StockManagementContent() {
                           {stock?.name || "Bilinmeyen"}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 w-fit ${
-                            movement.type === "in"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                              : movement.type === "out"
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                          }`}>
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 w-fit ${
+                              movement.type === "in"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                : movement.type === "out"
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                            }`}
+                          >
                             {movement.type === "in" ? (
                               <>
                                 <ArrowUp className="h-3 w-3" />
@@ -647,7 +725,8 @@ function StockManagementContent() {
                           {movement.quantity} adet
                           {movement.unitType === "package" && stock && (
                             <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                              ({movement.quantity / stock.itemsPerPackage} {stock.packageType})
+                              ({movement.quantity / stock.itemsPerPackage}{" "}
+                              {stock.packageType})
                             </span>
                           )}
                         </td>
@@ -718,7 +797,10 @@ function StockManagementContent() {
                   <select
                     value={stockForm.packageType}
                     onChange={(e) =>
-                      setStockForm({ ...stockForm, packageType: e.target.value as "koli" | "paket" })
+                      setStockForm({
+                        ...stockForm,
+                        packageType: e.target.value as "koli" | "paket",
+                      })
                     }
                     className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
@@ -730,7 +812,10 @@ function StockManagementContent() {
                     min="1"
                     value={stockForm.itemsPerPackage}
                     onChange={(e) =>
-                      setStockForm({ ...stockForm, itemsPerPackage: e.target.value })
+                      setStockForm({
+                        ...stockForm,
+                        itemsPerPackage: e.target.value,
+                      })
                     }
                     className="bg-white dark:bg-gray-700"
                     placeholder="12"
@@ -765,7 +850,9 @@ function StockManagementContent() {
                           setMenuSearchTerm(menu.name);
                         }}
                         className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                          stockForm.menuId === menu.id ? "bg-blue-100 dark:bg-blue-900/30" : ""
+                          stockForm.menuId === menu.id
+                            ? "bg-blue-100 dark:bg-blue-900/30"
+                            : ""
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -791,7 +878,8 @@ function StockManagementContent() {
                 </div>
                 {stockForm.menuId && (
                   <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    ✓ {menus.find((m) => m.id === stockForm.menuId)?.name} seçildi
+                    ✓ {menus.find((m) => m.id === stockForm.menuId)?.name}{" "}
+                    seçildi
                   </p>
                 )}
               </div>
@@ -806,7 +894,10 @@ function StockManagementContent() {
                   min="0"
                   value={stockForm.currentQuantity}
                   onChange={(e) =>
-                    setStockForm({ ...stockForm, currentQuantity: e.target.value })
+                    setStockForm({
+                      ...stockForm,
+                      currentQuantity: e.target.value,
+                    })
                   }
                   className="bg-white dark:bg-gray-700"
                   placeholder="0"
@@ -824,7 +915,10 @@ function StockManagementContent() {
                 >
                   İptal
                 </Button>
-                <Button onClick={handleSaveStock} className="flex items-center gap-2">
+                <Button
+                  onClick={handleSaveStock}
+                  className="flex items-center gap-2"
+                >
                   <Save className="h-4 w-4" />
                   Stok Ürünü Oluştur
                 </Button>
@@ -858,11 +952,23 @@ function StockManagementContent() {
                 <strong>Stok:</strong> {selectedStockForMovement.name}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                <strong>Mevcut Miktar:</strong> {selectedStockForMovement.currentQuantity} adet
+                <strong>Mevcut Miktar:</strong>{" "}
+                {selectedStockForMovement.currentQuantity} adet
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                <strong>{selectedStockForMovement.packageType === "koli" ? "Koli" : "Paket"}:</strong> {Math.floor(selectedStockForMovement.currentQuantity / selectedStockForMovement.itemsPerPackage)} {selectedStockForMovement.packageType}
-                ({selectedStockForMovement.itemsPerPackage} adet/{selectedStockForMovement.packageType})
+                <strong>
+                  {selectedStockForMovement.packageType === "koli"
+                    ? "Koli"
+                    : "Paket"}
+                  :
+                </strong>{" "}
+                {Math.floor(
+                  selectedStockForMovement.currentQuantity /
+                    selectedStockForMovement.itemsPerPackage
+                )}{" "}
+                {selectedStockForMovement.packageType}(
+                {selectedStockForMovement.itemsPerPackage} adet/
+                {selectedStockForMovement.packageType})
               </p>
             </div>
 
@@ -935,12 +1041,17 @@ function StockManagementContent() {
                       value="package"
                       checked={movementForm.unitType === "package"}
                       onChange={() =>
-                        setMovementForm({ ...movementForm, unitType: "package" })
+                        setMovementForm({
+                          ...movementForm,
+                          unitType: "package",
+                        })
                       }
                       className="mr-2"
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {selectedStockForMovement.packageType === "koli" ? "Koli" : "Paket"}
+                      {selectedStockForMovement.packageType === "koli"
+                        ? "Koli"
+                        : "Paket"}
                     </span>
                   </label>
                   <label className="flex items-center">
@@ -963,9 +1074,13 @@ function StockManagementContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Miktar ({movementForm.unitType === "package" 
-                    ? selectedStockForMovement.packageType === "koli" ? "Koli" : "Paket"
-                    : "Adet"}) *
+                  Miktar (
+                  {movementForm.unitType === "package"
+                    ? selectedStockForMovement.packageType === "koli"
+                      ? "Koli"
+                      : "Paket"
+                    : "Adet"}
+                  ) *
                 </label>
                 <Input
                   type="number"
@@ -973,20 +1088,24 @@ function StockManagementContent() {
                   min="1"
                   value={movementForm.quantity}
                   onChange={(e) =>
-                    setMovementForm({ ...movementForm, quantity: e.target.value })
+                    setMovementForm({
+                      ...movementForm,
+                      quantity: e.target.value,
+                    })
                   }
                   className="bg-white dark:bg-gray-700"
                 />
                 {movementForm.unitType === "package" && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {movementForm.quantity ? 
-                      `${parseFloat(movementForm.quantity) * selectedStockForMovement.itemsPerPackage} adet eklenecek/çıkarılacak` 
+                    {movementForm.quantity
+                      ? `${parseFloat(movementForm.quantity) * selectedStockForMovement.itemsPerPackage} adet eklenecek/çıkarılacak`
                       : ""}
                   </p>
                 )}
                 {movementForm.type === "adjustment" && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Düzeltme tipinde miktar, yeni toplam miktarı temsil eder (adet cinsinden)
+                    Düzeltme tipinde miktar, yeni toplam miktarı temsil eder
+                    (adet cinsinden)
                   </p>
                 )}
               </div>
@@ -1028,7 +1147,10 @@ function StockManagementContent() {
                 >
                   İptal
                 </Button>
-                <Button onClick={handleSaveMovement} className="flex items-center gap-2">
+                <Button
+                  onClick={handleSaveMovement}
+                  className="flex items-center gap-2"
+                >
                   <Save className="h-4 w-4" />
                   Kaydet
                 </Button>
@@ -1040,4 +1162,3 @@ function StockManagementContent() {
     </div>
   );
 }
-

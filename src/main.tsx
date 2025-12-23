@@ -50,11 +50,32 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+// CRITICAL FIX: file:// protocol ile çalışırken window.location.pathname file system path döndürüyor
+// Bu yüzden router'ın initial location'ını manuel olarak ayarlamalıyız
+const getInitialLocation = () => {
+  // Electron file:// protocol'ünde window.location.pathname tam dosya yolunu döndürür
+  // Bu yüzden hash-based routing kullanmalıyız veya initial location'ı manuel ayarlamalıyız
+  if (window.location.protocol === "file:") {
+    // file:// protocol'ünde hash'ten route'u al
+    const hash = window.location.hash;
+    if (hash && hash.startsWith("#")) {
+      return hash.substring(1) || "/";
+    }
+    // Hash yoksa, localStorage'dan son route'u al veya "/" kullan
+    const lastRoute = localStorage.getItem("lastRoute");
+    return lastRoute || "/";
+  }
+  // Normal web ortamında window.location.pathname kullan
+  return window.location.pathname || "/";
+};
+
 // Create a new router instance
 const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   notFoundMode: "root",
+  // CRITICAL FIX: file:// protocol ile çalışırken base path root olmalı
+  basepath: "/",
   // Router'ın her durumda çalışmasını sağla
   defaultErrorComponent: () => (
     <div style={{ padding: "20px", textAlign: "center" }}>
@@ -112,12 +133,12 @@ if (!rootElement) {
         hasState: !!router?.state,
         status: router?.state?.status,
       });
-      
+
       // CRITICAL: Script'lerin yüklenip yüklenmediğini kontrol et
       console.log("🔍 Scripts check:", {
         scriptsCount: document.scripts.length,
-        scripts: Array.from(document.scripts).map(s => ({
-          src: s.src || 'inline',
+        scripts: Array.from(document.scripts).map((s) => ({
+          src: s.src || "inline",
           type: s.type,
           async: s.async,
           defer: s.defer,
@@ -143,18 +164,114 @@ if (!rootElement) {
       );
       console.log("✅ React uygulaması render edildi");
 
-      // Router'ın initialize olduğunu kontrol et
+      // CRITICAL FIX: Router'ın initial location'ını manuel olarak ayarla
+      // file:// protocol'ünde window.location.pathname file system path döndürüyor
+      const initialPath = getInitialLocation();
+      console.log("🔍 Initial path:", initialPath);
+      console.log("🔍 Window location:", {
+        href: window.location.href,
+        pathname: window.location.pathname,
+        protocol: window.location.protocol,
+        hash: window.location.hash,
+      });
+
+      // Router'ın initialize olduğunu kontrol et ve initial route'u ayarla
       setTimeout(() => {
         if (router && router.state) {
+          const currentPathname = router.state.location.pathname;
           console.log("✅ Router initialized:", {
             status: router.state.status,
             location: router.state.location,
             matches: router.state.matches.length,
+            pathname: currentPathname,
           });
+
+          // CRITICAL FIX: Eğer pathname file system path gibi görünüyorsa veya route bulunamadıysa
+          const isFileSystemPath =
+            currentPathname.includes(":\\") ||
+            currentPathname.includes("/Users/") ||
+            currentPathname.includes("index.html");
+
+          if (isFileSystemPath || router.state.matches.length === 0) {
+            console.warn(
+              "⚠️ Router pathname file system path veya route bulunamadı, initial navigation yapılıyor...",
+              {
+                currentPathname,
+                isFileSystemPath,
+                matchesCount: router.state.matches.length,
+              }
+            );
+
+            // Auth durumuna göre route belirle
+            const targetRoute = "/";
+
+            // Router'ın navigate metodunu kullan - search parametreleri gerekli
+            router
+              .navigate({
+                to: targetRoute,
+                search: { area: undefined, activeOnly: false },
+                replace: true,
+              })
+              .then(() => {
+                console.log("✅ Initial navigation başarılı:", targetRoute);
+                // Son route'u kaydet
+                localStorage.setItem("lastRoute", targetRoute);
+              })
+              .catch((err) => {
+                console.error("❌ Initial navigation hatası:", err);
+              });
+          } else {
+            // Route bulundu, son route'u kaydet
+            localStorage.setItem("lastRoute", currentPathname);
+          }
         } else {
           console.error("❌ Router initialize olmadı!");
         }
       }, 100);
+
+      // Ekstra güvenlik: DOMContentLoaded'da da kontrol et
+      const checkAndFixRoute = () => {
+        if (router && router.state) {
+          const currentPath = router.state.location.pathname;
+          const isFileSystemPath =
+            currentPath.includes(":\\") ||
+            currentPath.includes("/Users/") ||
+            currentPath.includes("index.html");
+
+          console.log("🔍 Route check:", {
+            currentPath,
+            isFileSystemPath,
+            matchesCount: router.state.matches.length,
+          });
+
+          // Eğer pathname file system path gibi görünüyorsa veya route bulunamadıysa
+          if (isFileSystemPath || router.state.matches.length === 0) {
+            console.log("🔄 Initial route'a yönlendiriliyor...");
+            router
+              .navigate({
+                to: "/",
+                replace: true,
+                search: { area: undefined, activeOnly: false },
+              })
+              .then(() => {
+                console.log("✅ Route düzeltildi");
+                localStorage.setItem("lastRoute", "/");
+              })
+              .catch((err) => {
+                console.error("❌ Navigation hatası:", err);
+              });
+          }
+        }
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => {
+          setTimeout(checkAndFixRoute, 200);
+        });
+      } else {
+        // DOM zaten yüklü
+        setTimeout(checkAndFixRoute, 200);
+      }
 
       // Production'da render kontrolü - 3 saniye sonra içerik yoksa hata göster
       // Electron'da process.env.NODE_ENV her zaman "production" olabilir, bu yüzden import.meta.env kullan
