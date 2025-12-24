@@ -39,12 +39,13 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
 
-  // Kullanıcı giriş yaptığında otomatik güncelleme kontrolünü etkinleştir
-  useEffect(() => {
-    if (userData && window.electronAPI?.enableAutoDownload) {
-      window.electronAPI.enableAutoDownload().catch(() => {});
-    }
-  }, [userData]);
+  // Kullanıcı giriş yaptığında otomatik indirme etkinleştirilmeyecek
+  // Sadece kullanıcı "İndir ve Kur" butonuna bastığında indirme başlayacak
+  // useEffect(() => {
+  //   if (userData && window.electronAPI?.enableAutoDownload) {
+  //     window.electronAPI.enableAutoDownload().catch(() => {});
+  //   }
+  // }, [userData]);
 
   // Sunucu durumunu kontrol et
   useEffect(() => {

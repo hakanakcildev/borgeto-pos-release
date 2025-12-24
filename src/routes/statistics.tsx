@@ -274,11 +274,18 @@ function StatisticsContent() {
       }
     });
 
-    // Toplam satışlar: Ödemesi alınan tüm ürünler
-    const totalRevenue = allPaidItems.reduce(
-      (sum, item) => sum + item.subtotal,
-      0
-    );
+    // Toplam satışlar: Ödemesi alınan tüm ödemelerin toplamı (ikramlar hariç)
+    let totalRevenue = 0;
+    orders.forEach((order) => {
+      if (order.payments && order.payments.length > 0) {
+        order.payments.forEach((payment: Payment) => {
+          // İkram ödemelerini toplam ciraya dahil etme
+          if (!payment.isGift) {
+            totalRevenue += payment.amount;
+          }
+        });
+      }
+    });
 
     // Toplam ürün sayısı: Ödemesi alınan tüm ürünler
     const totalOrders = allPaidItems.reduce(
@@ -816,7 +823,7 @@ function StatisticsContent() {
                 Toplam Ürün
               </p>
               <p className="text-base font-bold text-green-600 dark:text-green-400">
-                {Math.round(stats.totalOrders)}
+                {stats.totalOrders}
               </p>
             </div>
             <Package className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
@@ -956,10 +963,15 @@ function StatisticsContent() {
                     <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
                       {product.menuName}
                     </p>
-                    <p className="text-[10px] text-gray-600 dark:text-gray-400">
-                      {Math.round(product.quantity)}x • ₺
-                      {product.revenue.toFixed(2)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300">
+                        {product.quantity} adet
+                      </p>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400">•</span>
+                      <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                        ₺{product.revenue.toFixed(2)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

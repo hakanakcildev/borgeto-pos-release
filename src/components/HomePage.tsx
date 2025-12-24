@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import {
   Home,
   Bike,
@@ -9,8 +8,6 @@ import {
   User,
   BarChart3,
   Settings,
-  Wifi,
-  Server,
   Phone,
   Calendar,
   History,
@@ -26,12 +23,8 @@ interface ExchangeRates {
 
 export function HomePage() {
   const { userData, companyData, branchData } = useAuth();
-  const { isOnline } = useNetworkStatus();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [serverStatus, setServerStatus] = useState<
-    "connected" | "disconnected"
-  >("connected");
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({
     USD: 0,
     EUR: 0,
@@ -48,11 +41,6 @@ export function HomePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Sunucu durumunu kontrol et (basit bir kontrol)
-  useEffect(() => {
-    // Firebase bağlantısı varsa sunucu bağlı sayılır
-    setServerStatus("connected");
-  }, []);
 
   // Döviz kurlarını yükle
   useEffect(() => {
@@ -277,28 +265,6 @@ export function HomePage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            {/* Internet Status - CRITICAL FIX: Daha kompakt */}
-            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-              <Wifi
-                className={`h-3 w-3 sm:h-4 sm:w-4 ${isOnline ? "text-green-400" : "text-red-400"}`}
-              />
-              <span className="text-xs sm:text-sm text-white font-medium hidden sm:inline">
-                {isOnline ? "Internet BAĞLI" : "Internet BAĞLI DEĞİL"}
-              </span>
-            </div>
-
-            {/* Server Status - CRITICAL FIX: Daha kompakt */}
-            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-              <Server
-                className={`h-3 w-3 sm:h-4 sm:w-4 ${serverStatus === "connected" ? "text-green-400" : "text-red-400"}`}
-              />
-              <span className="text-xs sm:text-sm text-white font-medium hidden sm:inline">
-                {serverStatus === "connected"
-                  ? "Server BAĞLI"
-                  : "Server BAĞLI DEĞİL"}
-              </span>
-            </div>
-
             {/* Branch Info - CRITICAL FIX: Daha kompakt */}
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
@@ -421,11 +387,6 @@ export function HomePage() {
             <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="text-xs sm:text-sm">Müşteri Hizmetleri</span>
           </button>
-          <div className="flex items-center gap-4">
-            <span className="text-white/70 text-xs sm:text-sm">
-              Borgeto Pos 1.1.102
-            </span>
-          </div>
         </footer>
       </div>
     </div>

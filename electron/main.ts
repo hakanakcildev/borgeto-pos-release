@@ -287,11 +287,13 @@ function registerIpcHandlers() {
     }
   });
 
-  // Register enable-auto-download handler - login sayfasından çıkıldığında autoDownload'u tekrar true yapmak için
+  // Register enable-auto-download handler - ARTIK KULLANILMIYOR
+  // Kullanıcı sadece "İndir ve Kur" butonuna bastığında indirme başlayacak
   ipcMain.handle("enable-auto-download", async () => {
-    console.log("✅ Enabling auto download");
+    console.log("⚠️ enable-auto-download called but auto-download is disabled - user must click download button");
     if (!isDev) {
-      autoUpdater.autoDownload = true;
+      // autoDownload'u false tut - kullanıcı butona basana kadar indirme yapılmayacak
+      autoUpdater.autoDownload = false;
 
       // Eğer bekleyen bir güncelleme varsa, renderer'a bildir
       if (pendingUpdateInfo && mainWindow) {
@@ -335,13 +337,9 @@ function registerIpcHandlers() {
         // pendingUpdateInfo'yu temizleme - kullanıcı indirmeyi başlatana kadar sakla
       }
 
-      // Her zaman güncelleme kontrolü yap (bekleyen güncelleme olsa bile, yeni güncellemeler olabilir)
-      console.log("🔍 Checking for updates...");
-      try {
-        await autoUpdater.checkForUpdates();
-      } catch (error) {
-        console.error("❌ Error checking for updates:", error);
-      }
+      // Güncelleme kontrolü yapma - kullanıcı butona basana kadar bekle
+      // Güncelleme kontrolü zaten periyodik olarak yapılıyor
+      console.log("⏸️ Auto download disabled - waiting for user to click download button");
 
       return { success: true };
     }
