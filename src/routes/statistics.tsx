@@ -230,10 +230,10 @@ function StatisticsContent() {
         // Son ödemenin ikram olup olmadığını kontrol et
         const lastPayment =
           order.payments && order.payments.length > 0
-            ? order.payments[order.payments.length - 1]
-            : null;
+          ? order.payments[order.payments.length - 1] 
+          : null;
         const isLastPaymentGift = lastPayment?.isGift || false;
-
+        
         if (!isLastPaymentGift) {
           order.items.forEach((item) => {
             paidItems.push({
@@ -395,7 +395,7 @@ function StatisticsContent() {
         order.payments.forEach((payment: Payment) => {
           // İkram ödemelerini ödeme yöntemi istatistiklerine dahil etme
           if (payment.isGift) return;
-
+          
           const existing = paymentMethodMap.get(payment.method);
           if (existing) {
             existing.total += payment.amount;

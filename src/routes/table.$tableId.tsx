@@ -3152,18 +3152,23 @@ function TableDetailContent() {
 
   // Seçili ürünleri seçilen miktarlarla iptal et
   const handleCancelSelectedItemsWithQuantities = useCallback(
-    async (quantities: Map<string, number>, selectedIndices: number[]) => {
-      if (!order || quantities.size === 0) return;
+    async (
+      quantities: Map<string, number>,
+      selectedIndices: number[],
+      currentOrder?: typeof order
+    ) => {
+      const orderToUse = currentOrder || order;
+      if (!orderToUse || quantities.size === 0) return;
 
       setIsCanceling(true);
       try {
-        const canceledItems = order.canceledItems || [];
+        const canceledItems = orderToUse.canceledItems || [];
         const updatedItems: OrderItem[] = [];
         const itemsToCancel: OrderItem[] = [];
 
         // Her index için işlem yap
         selectedIndices.forEach((index) => {
-          const item = order.items[index];
+          const item = orderToUse.items[index];
           if (!item || item.canceledAt) {
             // Zaten iptal edilmiş veya geçersiz, olduğu gibi ekle
             updatedItems.push(item);
@@ -3208,7 +3213,7 @@ function TableDetailContent() {
         });
 
         // Diğer ürünleri ekle (seçili olmayanlar)
-        order.items.forEach((item, index) => {
+        orderToUse.items.forEach((item, index) => {
           if (!selectedIndices.includes(index) && !item.canceledAt) {
             updatedItems.push(item);
           }
@@ -3218,7 +3223,7 @@ function TableDetailContent() {
         if (updatedItems.length === 0) {
           const subtotal = 0;
           const total = 0;
-          await updateOrder(order.id!, {
+          await updateOrder(orderToUse.id!, {
             items: updatedItems,
             canceledItems: canceledItems,
             subtotal: subtotal,
@@ -3228,7 +3233,7 @@ function TableDetailContent() {
           if (currentTable.id) {
             try {
               await updateTableStatus(currentTable.id, "available", undefined);
-              await updateOrderStatus(order.id!, "closed");
+              await updateOrderStatus(orderToUse.id!, "closed");
               const updatedTable = await getTable(currentTable.id);
               if (updatedTable) {
                 setCurrentTable(updatedTable);
@@ -3250,9 +3255,9 @@ function TableDetailContent() {
           (sum, item) => sum + item.subtotal,
           0
         );
-        const total = subtotal - (order.discount || 0);
+        const total = subtotal - (orderToUse.discount || 0);
 
-        await updateOrder(order.id!, {
+        await updateOrder(orderToUse.id!, {
           items: updatedItems,
           canceledItems: canceledItems,
           subtotal: subtotal,
@@ -3280,7 +3285,7 @@ function TableDetailContent() {
                       "cancel",
                       [canceledItem],
                       currentTable.tableNumber,
-                      order.orderNumber,
+                      orderToUse.orderNumber,
                       {
                         companyName: companyData?.name || "",
                         paperWidth: printer.paperWidth || 48,
@@ -3323,7 +3328,7 @@ function TableDetailContent() {
         }
 
         // Siparişi yeniden yükle
-        const updatedOrder = await getOrder(order.id!);
+        const updatedOrder = await getOrder(orderToUse.id!);
         setOrder(updatedOrder);
         setSelectedItems(new Set());
         setPendingCancelItems([]);
@@ -4654,6 +4659,74 @@ function TableDetailContent() {
                 </div>
               )}
             </div>
+            {order && order.items && order.items.length > 0 && (
+              <div className="flex items-center gap-2 ml-2">
+                <Button
+                  onClick={async () => {
+                    if (!order || order.items.length === 0) return;
+
+                    // Tüm iptal edilmemiş ürünleri iptal et
+                    const allIndices: number[] = [];
+                    const quantities = new Map<string, number>();
+
+                    order.items.forEach((item, index) => {
+                      if (!item.canceledAt) {
+                        allIndices.push(index);
+                        const existingQty = quantities.get(item.menuId) || 0;
+                        quantities.set(
+                          item.menuId,
+                          existingQty + item.quantity
+                        );
+                      }
+                    });
+
+                    if (allIndices.length > 0 && quantities.size > 0) {
+                      await handleCancelSelectedItemsWithQuantities(
+                        quantities,
+                        allIndices,
+                        order
+                      );
+                    }
+                  }}
+                  className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1"
+                  disabled={isCanceling}
+                >
+                  <X className="h-3 w-3" />
+                  İptal
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!order || order.items.length === 0) return;
+                    // Tüm iptal edilmemiş ürünleri ve index'lerini localStorage'a kaydet
+                    const itemsToMove: OrderItem[] = [];
+                    const indicesToMove: number[] = [];
+                    order.items.forEach((item, index) => {
+                      if (!item.canceledAt) {
+                        itemsToMove.push(item);
+                        indicesToMove.push(index);
+                      }
+                    });
+                    if (itemsToMove.length > 0) {
+                      localStorage.setItem(
+                        "pendingMoveItems",
+                        JSON.stringify({
+                          sourceTableId: currentTable.id,
+                          sourceOrderId: order.id,
+                          items: itemsToMove,
+                          indices: indicesToMove,
+                        })
+                      );
+                      // Masalar sayfasına yönlendir
+                      navigateToHome();
+                    }
+                  }}
+                  className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1"
+                >
+                  <ArrowRight className="h-3 w-3" />
+                  Taşı
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -5729,18 +5802,19 @@ function TableDetailContent() {
                                               return;
                                             }
 
+                                            // Normal seçim devre dışı - ürüne tıklandığında taşı ve iptal butonları çıkmasın
                                             // Normal seçim - Tüm indices'leri toggle et
-                                            const newSet = new Set(
-                                              selectedItems
-                                            );
-                                            indices.forEach((idx) => {
-                                              if (newSet.has(idx)) {
-                                                newSet.delete(idx);
-                                              } else {
-                                                newSet.add(idx);
-                                              }
-                                            });
-                                            setSelectedItems(newSet);
+                                            // const newSet = new Set(
+                                            //   selectedItems
+                                            // );
+                                            // indices.forEach((idx) => {
+                                            //   if (newSet.has(idx)) {
+                                            //     newSet.delete(idx);
+                                            //   } else {
+                                            //     newSet.add(idx);
+                                            //   }
+                                            // });
+                                            // setSelectedItems(newSet);
                                           }}
                                           className={`flex items-center justify-between py-2 px-4 border-b border-gray-200 dark:border-gray-700 ${
                                             isUnsent
@@ -6952,10 +7026,301 @@ function TableDetailContent() {
                           ))}
                         </div>
                       ) : (
-                        <div className="h-full flex items-center">
-                          <span className="text-sm text-gray-400 dark:text-gray-500">
-                            Numerik tuşlarla tutar girin
-                          </span>
+                        <div className="h-full flex flex-col items-center justify-center gap-2">
+                          <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            İşlemler
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-2.5 w-full">
+                            <Button
+                              type="button"
+                              onClick={() => setShowDiscountModal(true)}
+                              className="h-10 sm:h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                            >
+                              <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <span className="hidden sm:inline">İndirim</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setShowCustomerModal(true);
+                              }}
+                              className="h-10 sm:h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                            >
+                              <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <span className="hidden sm:inline">Cari</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={async () => {
+                                if (!order || order.items.length === 0) {
+                                  customAlert(
+                                    "Sipariş bulunamadı",
+                                    "Uyarı",
+                                    "warning"
+                                  );
+                                  return;
+                                }
+
+                                // Seçili ürün kontrolü - seçili ürün yoksa hiçbir şey yapma
+                                const hasSelectedItems =
+                                  (selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0) ||
+                                  selectedItems.size > 0;
+
+                                if (!hasSelectedItems) {
+                                  return;
+                                }
+
+                                // İptal modalını aç veya direkt iptal et
+                                // Şimdilik direkt iptal edelim
+                                try {
+                                  if (
+                                    selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0
+                                  ) {
+                                    // Miktar seçimi yapılmışsa
+                                    const allIndices: number[] = [];
+                                    pendingPaymentItems.forEach(
+                                      (paymentItem) => {
+                                        allIndices.push(...paymentItem.indices);
+                                      }
+                                    );
+                                    await handleCancelSelectedItemsWithQuantities(
+                                      selectedQuantities,
+                                      allIndices,
+                                      order
+                                    );
+                                  } else if (selectedItems.size > 0) {
+                                    // Ürün seçimi yapılmışsa
+                                    const selectedIndices =
+                                      Array.from(selectedItems);
+                                    const quantities = new Map<
+                                      string,
+                                      number
+                                    >();
+                                    selectedIndices.forEach((index) => {
+                                      const item = order.items[index];
+                                      if (item) {
+                                        quantities.set(
+                                          item.menuId,
+                                          item.quantity
+                                        );
+                                      }
+                                    });
+                                    await handleCancelSelectedItemsWithQuantities(
+                                      quantities,
+                                      selectedIndices,
+                                      order
+                                    );
+                                  }
+                                  setSelectedItems(new Set());
+                                  setSelectedQuantities(new Map());
+                                } catch {
+                                  customAlert(
+                                    "Ürün iptal edilirken bir hata oluştu",
+                                    "Hata",
+                                    "error"
+                                  );
+                                }
+                              }}
+                              className="h-10 sm:h-12 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                            >
+                              <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <span className="hidden sm:inline">İptal</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                if (!order || order.items.length === 0) {
+                                  customAlert(
+                                    "Sipariş bulunamadı",
+                                    "Uyarı",
+                                    "warning"
+                                  );
+                                  return;
+                                }
+
+                                const hasSelectedItems =
+                                  (selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0) ||
+                                  selectedItems.size > 0;
+
+                                if (!hasSelectedItems) {
+                                  customAlert(
+                                    "Lütfen taşımak için ürün seçin",
+                                    "Uyarı",
+                                    "warning"
+                                  );
+                                  return;
+                                }
+
+                                // Seçili ürünleri localStorage'a kaydet ve masalar sayfasına yönlendir
+                                const itemsToMove: OrderItem[] = [];
+                                const indicesToMove: number[] = [];
+
+                                if (
+                                  selectedQuantities.size > 0 &&
+                                  pendingPaymentItems.length > 0
+                                ) {
+                                  // Miktar seçimi yapılmışsa - seçili ürünlerin index'lerini kullan
+                                  pendingPaymentItems.forEach((paymentItem) => {
+                                    const selectedQty =
+                                      selectedQuantities.get(
+                                        paymentItem.menuId
+                                      ) || 0;
+                                    if (selectedQty > 0) {
+                                      // Seçili miktar varsa, tüm index'leri ekle
+                                      paymentItem.indices.forEach((index) => {
+                                        const item = order.items[index];
+                                        if (item && !item.canceledAt) {
+                                          itemsToMove.push(item);
+                                          indicesToMove.push(index);
+                                        }
+                                      });
+                                    }
+                                  });
+                                } else if (selectedItems.size > 0) {
+                                  // Ürün seçimi yapılmışsa
+                                  selectedItems.forEach((index) => {
+                                    const item = order.items[index];
+                                    if (item && !item.canceledAt) {
+                                      itemsToMove.push(item);
+                                      indicesToMove.push(index);
+                                    }
+                                  });
+                                }
+
+                                if (itemsToMove.length > 0) {
+                                  localStorage.setItem(
+                                    "pendingMoveItems",
+                                    JSON.stringify({
+                                      sourceTableId: currentTable.id,
+                                      sourceOrderId: order.id,
+                                      items: itemsToMove,
+                                      indices: indicesToMove,
+                                    })
+                                  );
+                                  // Masalar sayfasına yönlendir
+                                  navigateToHome();
+                                }
+                              }}
+                              className="h-10 sm:h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                            >
+                              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <span className="hidden sm:inline">Taşı</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={async () => {
+                                if (
+                                  !order ||
+                                  !order.items ||
+                                  order.items.length === 0
+                                ) {
+                                  customAlert(
+                                    "Sipariş bulunamadı",
+                                    "Uyarı",
+                                    "warning"
+                                  );
+                                  return;
+                                }
+
+                                // Seçili ürünler var mı kontrol et
+                                const hasSelectedItems =
+                                  (selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0) ||
+                                  selectedItems.size > 0;
+
+                                // Seçili ürünler varsa sadece onları, yoksa tüm masayı ikram olarak işaretle
+                                if (hasSelectedItems) {
+                                  // Seçili ürünlerin toplam tutarını hesapla
+                                  let giftAmount = 0;
+
+                                  if (
+                                    selectedQuantities.size > 0 &&
+                                    pendingPaymentItems.length > 0
+                                  ) {
+                                    // Miktar seçimi yapılmışsa
+                                    pendingPaymentItems.forEach(
+                                      (paymentItem) => {
+                                        const selectedQty =
+                                          selectedQuantities.get(
+                                            paymentItem.menuId
+                                          ) || 0;
+                                        if (selectedQty > 0) {
+                                          giftAmount +=
+                                            selectedQty * paymentItem.menuPrice;
+                                        }
+                                      }
+                                    );
+                                  } else if (selectedItems.size > 0) {
+                                    // Ürün seçimi yapılmışsa
+                                    const selectedItemsArray =
+                                      Array.from(selectedItems);
+                                    selectedItemsArray.forEach((index) => {
+                                      const item = order.items[index];
+                                      if (item) {
+                                        giftAmount += item.subtotal;
+                                      }
+                                    });
+                                  }
+
+                                  // İndirim oranını hesapla
+                                  const orderSubtotal = order.items.reduce(
+                                    (sum, item) => sum + item.subtotal,
+                                    0
+                                  );
+                                  const orderDiscount = order.discount || 0;
+                                  const discountRatio =
+                                    orderSubtotal > 0
+                                      ? orderDiscount / orderSubtotal
+                                      : 0;
+                                  const finalGiftAmount = Math.max(
+                                    0,
+                                    giftAmount - giftAmount * discountRatio
+                                  );
+
+                                  // İkram ödemesi yap
+                                  await handlePayment(
+                                    finalGiftAmount.toString(),
+                                    selectedItems.size > 0
+                                      ? selectedItems
+                                      : undefined,
+                                    pendingPaymentItems.length > 0
+                                      ? pendingPaymentItems
+                                      : undefined,
+                                    selectedQuantities.size > 0
+                                      ? selectedQuantities
+                                      : undefined,
+                                    "cash", // İkram için ödeme yöntemi
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    true // isGift = true
+                                  );
+                                } else {
+                                  // Tüm masayı ikram olarak işaretle
+                                  const totalAmount = order.total || 0;
+
+                                  await handlePayment(
+                                    totalAmount.toString(),
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    "cash", // İkram için ödeme yöntemi
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    true // isGift = true
+                                  );
+                                }
+                              }}
+                              className="h-10 sm:h-12 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                            >
+                              <Utensils className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <span className="hidden sm:inline">İkram</span>
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -7166,16 +7531,16 @@ function TableDetailContent() {
                       {/* Ödeme Yöntemi Butonları, İşlem Butonları, Numerik Ekran ve Numerik Tuşlar */}
                       <div className="flex-1 flex items-stretch overflow-hidden">
                         {/* Sol Sütun - Ödeme Yöntemleri */}
-                        <div className="w-48 pl-0 pr-2 pt-0 pb-0 flex flex-col gap-1.5 h-full relative">
-                          <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider pt-4 leading-tight shrink-0">
+                        <div className="w-28 sm:w-36 md:w-40 lg:w-48 pl-0 pr-1 sm:pr-2 pt-0 pb-0 flex flex-col gap-1 sm:gap-1.5 h-full relative shrink-0">
+                          <label className="text-[10px] sm:text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 sm:mb-2 uppercase tracking-wider pt-2 sm:pt-4 leading-tight shrink-0">
                             Ödeme Yöntemi
                           </label>
                           {paymentMethods.length === 0 ? (
-                            <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                            <div className="text-center py-2 sm:py-4 text-gray-500 dark:text-gray-400 text-[10px] sm:text-sm">
                               Bulunamadı
                             </div>
                           ) : (
-                            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+                            <div className="flex flex-col gap-1 sm:gap-1.5 flex-1 min-h-0 overflow-y-auto">
                               {paymentMethods.map((pm) => (
                                 <Button
                                   key={pm.id}
@@ -7183,7 +7548,7 @@ function TableDetailContent() {
                                   onClick={() => {
                                     setPaymentMethod(pm.code);
                                   }}
-                                  className={`w-full h-10 text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 ${
+                                  className={`w-full h-8 sm:h-9 md:h-10 text-[10px] sm:text-xs md:text-sm font-bold rounded-lg sm:rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 ${
                                     paymentMethod === pm.code
                                       ? "text-white"
                                       : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600"
@@ -7211,281 +7576,14 @@ function TableDetailContent() {
                           {/* Numerik Keypad - Kalan Alana Sığdırılmış */}
                           <div className="flex flex-col flex-1 min-h-0">
                             <div className="flex flex-col px-0 pb-0 flex-1 min-h-0">
-                              {/* İşlem Butonları - Numerik Ekranın Üstünde */}
-                              <div className="w-full mb-3 shrink-0">
-                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider block pt-4 leading-tight shrink-0">
-                                  İşlemler
-                                </label>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-2.5">
-                                  <Button
-                                    type="button"
-                                    onClick={() => setShowDiscountModal(true)}
-                                    className="h-10 sm:h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
-                                  >
-                                    <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <span className="hidden sm:inline">
-                                      İndirim
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowCustomerModal(true);
-                                    }}
-                                    className="h-10 sm:h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
-                                  >
-                                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <span className="hidden sm:inline">
-                                      Cari
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (!order || order.items.length === 0) {
-                                        customAlert(
-                                          "Sipariş bulunamadı",
-                                          "Uyarı",
-                                          "warning"
-                                        );
-                                        return;
-                                      }
-
-                                      const hasSelectedItems =
-                                        (selectedQuantities.size > 0 &&
-                                          pendingPaymentItems.length > 0) ||
-                                        selectedItems.size > 0;
-
-                                      if (!hasSelectedItems) {
-                                        customAlert(
-                                          "Lütfen iptal etmek için ürün seçin",
-                                          "Uyarı",
-                                          "warning"
-                                        );
-                                        return;
-                                      }
-
-                                      // İptal modalını aç veya direkt iptal et
-                                      // Şimdilik direkt iptal edelim
-                                      try {
-                                        if (
-                                          selectedQuantities.size > 0 &&
-                                          pendingPaymentItems.length > 0
-                                        ) {
-                                          // Miktar seçimi yapılmışsa
-                                          const allIndices: number[] = [];
-                                          pendingPaymentItems.forEach(
-                                            (paymentItem) => {
-                                              allIndices.push(
-                                                ...paymentItem.indices
-                                              );
-                                            }
-                                          );
-                                          await handleCancelSelectedItemsWithQuantities(
-                                            selectedQuantities,
-                                            allIndices
-                                          );
-                                        } else if (selectedItems.size > 0) {
-                                          // Ürün seçimi yapılmışsa
-                                          const selectedIndices =
-                                            Array.from(selectedItems);
-                                          const quantities = new Map<
-                                            string,
-                                            number
-                                          >();
-                                          selectedIndices.forEach((index) => {
-                                            const item = order.items[index];
-                                            if (item) {
-                                              quantities.set(
-                                                item.menuId,
-                                                item.quantity
-                                              );
-                                            }
-                                          });
-                                          await handleCancelSelectedItemsWithQuantities(
-                                            quantities,
-                                            selectedIndices
-                                          );
-                                        }
-                                        setSelectedItems(new Set());
-                                        setSelectedQuantities(new Map());
-                                      } catch (error) {
-                                        customAlert(
-                                          "Ürün iptal edilirken bir hata oluştu",
-                                          "Hata",
-                                          "error"
-                                        );
-                                      }
-                                    }}
-                                    className="h-10 sm:h-12 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
-                                  >
-                                    <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <span className="hidden sm:inline">
-                                      İptal
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => {
-                                      if (!order || order.items.length === 0) {
-                                        customAlert(
-                                          "Sipariş bulunamadı",
-                                          "Uyarı",
-                                          "warning"
-                                        );
-                                        return;
-                                      }
-
-                                      const hasSelectedItems =
-                                        (selectedQuantities.size > 0 &&
-                                          pendingPaymentItems.length > 0) ||
-                                        selectedItems.size > 0;
-
-                                      if (!hasSelectedItems) {
-                                        customAlert(
-                                          "Lütfen taşımak için ürün seçin",
-                                          "Uyarı",
-                                          "warning"
-                                        );
-                                        return;
-                                      }
-
-                                      setShowMoveModal(true);
-                                    }}
-                                    className="h-10 sm:h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
-                                  >
-                                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <span className="hidden sm:inline">
-                                      Taşı
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (
-                                        !order ||
-                                        !order.items ||
-                                        order.items.length === 0
-                                      ) {
-                                        customAlert(
-                                          "Sipariş bulunamadı",
-                                          "Uyarı",
-                                          "warning"
-                                        );
-                                        return;
-                                      }
-
-                                      // Seçili ürünler var mı kontrol et
-                                      const hasSelectedItems =
-                                        (selectedQuantities.size > 0 &&
-                                          pendingPaymentItems.length > 0) ||
-                                        selectedItems.size > 0;
-
-                                      // Seçili ürünler varsa sadece onları, yoksa tüm masayı ikram olarak işaretle
-                                      if (hasSelectedItems) {
-                                        // Seçili ürünlerin toplam tutarını hesapla
-                                        let giftAmount = 0;
-
-                                        if (
-                                          selectedQuantities.size > 0 &&
-                                          pendingPaymentItems.length > 0
-                                        ) {
-                                          // Miktar seçimi yapılmışsa
-                                          pendingPaymentItems.forEach(
-                                            (paymentItem) => {
-                                              const selectedQty =
-                                                selectedQuantities.get(
-                                                  paymentItem.menuId
-                                                ) || 0;
-                                              if (selectedQty > 0) {
-                                                giftAmount +=
-                                                  selectedQty *
-                                                  paymentItem.menuPrice;
-                                              }
-                                            }
-                                          );
-                                        } else if (selectedItems.size > 0) {
-                                          // Ürün seçimi yapılmışsa
-                                          const selectedItemsArray =
-                                            Array.from(selectedItems);
-                                          selectedItemsArray.forEach(
-                                            (index) => {
-                                              const item = order.items[index];
-                                              if (item) {
-                                                giftAmount += item.subtotal;
-                                              }
-                                            }
-                                          );
-                                        }
-
-                                        // İndirim oranını hesapla
-                                        const orderSubtotal =
-                                          order.items.reduce(
-                                            (sum, item) => sum + item.subtotal,
-                                            0
-                                          );
-                                        const orderDiscount =
-                                          order.discount || 0;
-                                        const discountRatio =
-                                          orderSubtotal > 0
-                                            ? orderDiscount / orderSubtotal
-                                            : 0;
-                                        const finalGiftAmount = Math.max(
-                                          0,
-                                          giftAmount -
-                                            giftAmount * discountRatio
-                                        );
-
-                                        // İkram ödemesi yap
-                                        await handlePayment(
-                                          finalGiftAmount.toString(),
-                                          selectedItems.size > 0
-                                            ? selectedItems
-                                            : undefined,
-                                          pendingPaymentItems.length > 0
-                                            ? pendingPaymentItems
-                                            : undefined,
-                                          selectedQuantities.size > 0
-                                            ? selectedQuantities
-                                            : undefined,
-                                          "cash", // İkram için ödeme yöntemi
-                                          undefined,
-                                          undefined,
-                                          undefined,
-                                          true // isGift = true
-                                        );
-                                      } else {
-                                        // Tüm masayı ikram olarak işaretle
-                                        const totalAmount = order.total || 0;
-
-                                        await handlePayment(
-                                          totalAmount.toString(),
-                                          undefined,
-                                          undefined,
-                                          undefined,
-                                          "cash", // İkram için ödeme yöntemi
-                                          undefined,
-                                          undefined,
-                                          undefined,
-                                          true // isGift = true
-                                        );
-                                      }
-                                    }}
-                                    className="h-10 sm:h-12 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                                  >
-                                    <Utensils className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    İkram
-                                  </Button>
-                                </div>
-                              </div>
                               {/* Numerik Giriş Gösterimi - 7,8,9 tuşlarının hemen üzerinde */}
-                              <div className="w-full mb-3 shrink-0">
-                                <div className="rounded-xl p-2 sm:p-3 md:p-4 border-2 shadow-lg bg-linear-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
-                                  <div className="flex items-center gap-3">
+                              <div className="w-full mb-2 sm:mb-3 pt-2 sm:pt-3 md:pt-4 shrink-0">
+                                <div className="rounded-lg sm:rounded-xl p-1.5 sm:p-2 md:p-3 lg:p-4 border-2 shadow-lg bg-linear-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center gap-2 sm:gap-3">
                                     {paymentMethod && (
-                                      <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-red-600 dark:text-red-400 shrink-0" />
+                                      <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 text-red-600 dark:text-red-400 shrink-0" />
                                     )}
-                                    <span className="text-lg sm:text-xl md:text-2xl font-extrabold text-gray-900 dark:text-white">
+                                    <span className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-extrabold text-gray-900 dark:text-white truncate">
                                       {(() => {
                                         const amount = paymentAmount || "0";
                                         const formattedAmount = (() => {
@@ -7527,7 +7625,7 @@ function TableDetailContent() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="grid grid-cols-4 gap-2.5 w-full auto-rows-fr">
+                              <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-2.5 w-full flex-1 min-h-0 pb-2 sm:pb-3 md:pb-4">
                                 {/* 7, 8, 9 */}
                                 {[7, 8, 9].map((num) => (
                                   <Button
@@ -7547,7 +7645,7 @@ function TableDetailContent() {
                                         setPaymentAmount(newValue);
                                       }
                                     }}
-                                    className="aspect-square w-full min-h-[60px] sm:min-h-[70px] md:min-h-[80px] p-0 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                    className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                   >
                                     {num}
                                   </Button>
@@ -7563,9 +7661,9 @@ function TableDetailContent() {
                                       setPaymentAmount("0");
                                     }
                                   }}
-                                  className="aspect-square w-full min-h-[60px] sm:min-h-[70px] md:min-h-[80px] p-0 bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  className="w-full h-full p-0 bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                 >
-                                  <Delete className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 lg:h-16 lg:w-16 text-white" />
+                                  <Delete className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 lg:h-8 lg:w-8 xl:h-10 xl:w-10 text-white" />
                                 </Button>
                                 {/* 4, 5, 6 */}
                                 {[4, 5, 6].map((num) => (
@@ -7586,7 +7684,7 @@ function TableDetailContent() {
                                         setPaymentAmount(newValue);
                                       }
                                     }}
-                                    className="aspect-square w-full min-h-[60px] sm:min-h-[70px] md:min-h-[80px] p-0 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                    className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                   >
                                     {num}
                                   </Button>
@@ -7597,7 +7695,7 @@ function TableDetailContent() {
                                   onClick={() => {
                                     setPaymentAmount("0");
                                   }}
-                                  className="aspect-square w-full min-h-[60px] sm:min-h-[70px] md:min-h-[80px] p-0 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                 >
                                   C
                                 </Button>
@@ -7620,7 +7718,7 @@ function TableDetailContent() {
                                         setPaymentAmount(newValue);
                                       }
                                     }}
-                                    className="aspect-square w-full min-h-[60px] sm:min-h-[70px] md:min-h-[80px] p-0 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                    className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                   >
                                     {num}
                                   </Button>
@@ -7677,12 +7775,12 @@ function TableDetailContent() {
                                     !paymentAmount ||
                                     parseFloat(paymentAmount || "0") <= 0
                                   }
-                                  className="row-span-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:hover:bg-gray-400 text-white dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center p-0 w-full min-h-[calc(120px+3px)] sm:min-h-[calc(140px+4px)] md:min-h-[calc(160px+5px)]"
+                                  className="row-span-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:hover:bg-gray-400 text-white dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center p-0 w-full h-full"
                                 >
                                   {isProcessingPayment ? (
-                                    <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 animate-spin" />
+                                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 lg:h-8 lg:w-8 xl:h-10 xl:w-10 animate-spin" />
                                   ) : (
-                                    <ArrowRight className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+                                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 lg:h-8 lg:w-8 xl:h-10 xl:w-10" />
                                   )}
                                 </Button>
                                 {/* 0 */}
@@ -7694,7 +7792,7 @@ function TableDetailContent() {
                                       setPaymentAmount(current + "0");
                                     }
                                   }}
-                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                 >
                                   0
                                 </Button>
@@ -7707,7 +7805,7 @@ function TableDetailContent() {
                                       setPaymentAmount(current + "00");
                                     }
                                   }}
-                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                 >
                                   00
                                 </Button>
@@ -7720,7 +7818,7 @@ function TableDetailContent() {
                                       setPaymentAmount(current + ".");
                                     }
                                   }}
-                                  className="aspect-square w-full min-h-[90px] p-0 text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                  className="w-full h-full p-0 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                                 >
                                   .
                                 </Button>
@@ -8806,7 +8904,8 @@ function TableDetailContent() {
                       });
                       await handleCancelSelectedItemsWithQuantities(
                         selectedCancelQuantities,
-                        allIndices
+                        allIndices,
+                        order
                       );
                       // Modal'ı kapat
                       setShowQuantitySelectionModal(false);

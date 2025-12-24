@@ -14,6 +14,7 @@ import {
   updateOrder,
   addOrder,
   updateOrderStatus,
+  getOrder,
 } from "@/lib/firebase/orders";
 import type { Table, Order } from "@/lib/firebase/types";
 import { customAlert } from "@/components/ui/alert-dialog";
@@ -493,6 +494,143 @@ function TablesView() {
     if (longPressTimer.current && pressingTableIdRef.current === tableId) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+    }
+  };
+
+  // localStorage'dan ürünleri okuyup taşıma işlemini yap
+  const handleMoveFromLocalStorage = async (targetTableId: string) => {
+    const pendingMoveData = localStorage.getItem("pendingMoveItems");
+    if (!pendingMoveData) return;
+
+    try {
+      const { sourceTableId, sourceOrderId, items, indices } = JSON.parse(pendingMoveData);
+      if (!sourceTableId || !sourceOrderId || !items || items.length === 0) {
+        localStorage.removeItem("pendingMoveItems");
+        return;
+      }
+
+      setIsMovingTable(true);
+      setTargetTableIdForMove(targetTableId);
+
+      const targetTable = await getTable(targetTableId);
+      if (!targetTable) {
+        customAlert("Hedef masa bulunamadı", "Hata", "error");
+        localStorage.removeItem("pendingMoveItems");
+        setTargetTableIdForMove(null);
+        setIsMovingTable(false);
+        return;
+      }
+
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+      // Kaynak siparişi al
+      const sourceOrder = await getOrder(sourceOrderId);
+      if (!sourceOrder) {
+        customAlert("Kaynak sipariş bulunamadı", "Hata", "error");
+        localStorage.removeItem("pendingMoveItems");
+        setTargetTableIdForMove(null);
+        setIsMovingTable(false);
+        return;
+      }
+
+      // Kaynak siparişten taşınacak ürünleri index'lere göre çıkar
+      const indicesToRemove = new Set(indices || []);
+      const remainingItems = sourceOrder.items.filter(
+        (_, index) => !indicesToRemove.has(index)
+      );
+
+      // Kaynak siparişi güncelle
+      if (remainingItems.length === 0) {
+        // Tüm ürünler taşındıysa siparişi kapat
+        await updateOrder(sourceOrderId, {
+          items: [],
+          subtotal: 0,
+          total: 0,
+        });
+        await updateOrderStatus(sourceOrderId, "closed");
+        const sourceTable = await getTable(sourceTableId);
+        if (sourceTable) {
+          await updateTableStatus(sourceTableId, "available", undefined);
+        }
+      } else {
+        const subtotal = remainingItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const total = subtotal - (sourceOrder.discount || 0);
+        await updateOrder(sourceOrderId, {
+          items: remainingItems,
+          subtotal: subtotal,
+          total: total,
+        });
+      }
+
+      // Hedef masada sipariş var mı kontrol et
+      const allOrders = await getOrdersByCompany(effectiveCompanyId!, {
+        branchId: effectiveBranchId || undefined,
+      });
+      const targetOrder = allOrders.find(
+        (o) => o.tableId === targetTableId && o.status === "active"
+      );
+
+      if (targetOrder) {
+        // Hedef masada sipariş varsa, ürünleri ekle
+        const existingItems = targetOrder.items || [];
+        const mergedItems = [...existingItems, ...items];
+        const subtotal = mergedItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const total = subtotal - (targetOrder.discount || 0);
+
+        await updateOrder(targetOrder.id!, {
+          items: mergedItems,
+          subtotal: subtotal,
+          total: total,
+        });
+      } else {
+        // Hedef masada sipariş yoksa, yeni sipariş oluştur
+        await addOrder({
+          companyId: effectiveCompanyId!,
+          branchId: effectiveBranchId || targetTable.branchId,
+          tableId: targetTableId,
+          tableNumber: targetTable.tableNumber,
+          items: items,
+          discount: 0,
+          sentItems: items.map((item: any) => item.menuId),
+          createdBy: userData!.id!,
+          status: "active",
+          paymentStatus: "unpaid",
+        });
+        await updateTableStatus(targetTableId, "occupied", undefined);
+      }
+
+      // Masaları ve siparişleri yeniden yükle
+      const [updatedTables, updatedOrders] = await Promise.all([
+        getTablesByCompany(effectiveCompanyId!, effectiveBranchId || undefined),
+        getOrdersByCompany(effectiveCompanyId!, {
+          branchId: effectiveBranchId || undefined,
+        }),
+      ]);
+
+      const uniqueTables = removeDuplicateTables(updatedTables);
+      setTables(uniqueTables);
+      setActiveOrders(updatedOrders.filter((o) => o.status === "active"));
+
+      // localStorage'ı temizle
+      localStorage.removeItem("pendingMoveItems");
+
+      // Hedef masaya yönlendir
+      navigate({
+        to: "/table/$tableId",
+        params: { tableId: targetTableId },
+        search: {
+          area: area || undefined,
+          activeOnly: activeOnly || false,
+        },
+      });
+    } catch (error) {
+      console.error("Taşıma hatası:", error);
+      customAlert("Ürünler taşınırken bir hata oluştu", "Hata", "error");
+      localStorage.removeItem("pendingMoveItems");
+    } finally {
+      setTargetTableIdForMove(null);
+      setIsMovingTable(false);
     }
   };
 
@@ -987,6 +1125,14 @@ function TablesView() {
                           longPressCompletedRef.current = false;
                           handleMoveAllItems(table.id!);
                         } else if (!selectedTableForMove) {
+                          // localStorage'da taşınacak ürünler var mı kontrol et
+                          const pendingMoveData = localStorage.getItem("pendingMoveItems");
+                          if (pendingMoveData) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleMoveFromLocalStorage(table.id!);
+                            return;
+                          }
                           // Normal tıklama - masa detayına git
                           navigate({
                             to: "/table/$tableId",
