@@ -4941,46 +4941,51 @@ function TableDetailContent() {
 
                     {/* İkram Edilen Ürünler */}
                     {Array.from(giftItemsMap.values()).length > 0 && (
-                      <div className="mb-4 pb-4 border-b-2 border-orange-300">
-                        <div className="text-sm font-bold text-orange-700 mb-3 flex items-center gap-2">
+                      <div className="mb-0">
+                        <div className="text-sm font-bold text-white mb-0 px-4 py-2 bg-orange-600 dark:bg-orange-700 flex items-center gap-2">
                           <Utensils className="h-4 w-4" />
-                          İkram
+                          İkram Edilen Ürünler
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-0">
                           {Array.from(giftItemsMap.values()).map((item) => {
                             const hasDiscount =
                               item.originalTotal > item.subtotal;
                             return (
                               <div
                                 key={item.menuName}
-                                className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800"
+                                className="flex items-center justify-between py-2 px-4 bg-orange-600 dark:bg-orange-700"
                               >
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <span className="text-sm font-bold text-white shrink-0">
+                                    {item.quantity}x
+                                  </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-base font-semibold text-orange-900 dark:text-orange-200 truncate">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                       {item.menuName}
                                     </p>
-                                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                                      {item.quantity} adet
-                                    </p>
                                   </div>
-                                  <div className="flex flex-col items-end ml-2">
-                                    {hasDiscount && (
-                                      <span className="text-sm text-gray-500 dark:text-gray-400 line-through mb-1">
-                                        ₺
-                                        {item.originalTotal
-                                          .toFixed(2)
-                                          .replace(".", ",")}
-                                      </span>
-                                    )}
-                                    <span className="font-bold text-base text-orange-900 dark:text-orange-200">
+                                </div>
+                                {hasDiscount ? (
+                                  <div className="flex flex-row items-center gap-2 ml-2">
+                                    <span className="font-bold text-sm text-white line-through">
+                                      ₺
+                                      {item.originalTotal
+                                        .toFixed(2)
+                                        .replace(".", ",")}
+                                    </span>
+                                    <span className="font-bold text-sm text-white">
                                       ₺
                                       {item.subtotal
                                         .toFixed(2)
                                         .replace(".", ",")}
                                     </span>
                                   </div>
-                                </div>
+                                ) : (
+                                  <span className="font-bold text-sm text-white ml-2">
+                                    ₺
+                                    {item.subtotal.toFixed(2).replace(".", ",")}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
@@ -5045,8 +5050,8 @@ function TableDetailContent() {
                                   key={`${group.paymentId}-${item.menuName}-${idx}`}
                                   className={`flex items-center justify-between py-2 px-4 ${
                                     group.hasDiscount
-                                      ? "bg-orange-50 dark:bg-orange-900/30"
-                                      : "bg-green-200 dark:bg-green-800/50"
+                                      ? "bg-orange-600 dark:bg-orange-700"
+                                      : "bg-green-600 dark:bg-green-700"
                                   }`}
                                 >
                                   <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -5070,7 +5075,7 @@ function TableDetailContent() {
                                       </span>
                                       <span className="font-bold text-sm text-white">
                                         ₺
-                                        {item.subtotal
+                                        {group.paymentAmount
                                           .toFixed(2)
                                           .replace(".", ",")}
                                       </span>
@@ -5115,7 +5120,7 @@ function TableDetailContent() {
                           {Array.from(paidItemsMap.values()).map((item) => (
                             <div
                               key={item.menuName}
-                              className="flex items-center justify-between py-2 px-4 bg-green-200 dark:bg-green-800/50"
+                              className="flex items-center justify-between py-2 px-4 bg-green-600 dark:bg-green-700"
                             >
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <span className="text-sm font-bold text-white shrink-0">
@@ -5139,15 +5144,15 @@ function TableDetailContent() {
                     {/* İptal Edilen Ürünler */}
                     {Array.from(canceledItemsMap.values()).length > 0 && (
                       <div className="mb-0">
-                        <div className="text-sm font-bold text-red-500 mb-1 px-4 flex items-center gap-2">
+                        <div className="text-sm font-bold text-white mb-0 px-4 py-2 bg-red-600 dark:bg-red-700 flex items-center gap-2">
                           <X className="h-4 w-4" />
                           İptal Edilen Ürünler
                         </div>
-                        <div className="space-y-0 border-t border-gray-200 dark:border-gray-700">
+                        <div className="space-y-0">
                           {Array.from(canceledItemsMap.values()).map((item) => (
                             <div
                               key={item.menuName}
-                              className="flex items-center justify-between py-2 px-4 border-b border-gray-200 dark:border-gray-700"
+                              className="flex items-center justify-between py-2 px-4 bg-red-600 dark:bg-red-700"
                             >
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <span className="text-sm font-bold text-white shrink-0">
@@ -6389,20 +6394,9 @@ function TableDetailContent() {
                   <div className="flex-1 h-14 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-between">
                     <span className="text-sm text-white">TOPLAM</span>
                     <div className="flex flex-col items-end">
-                      {unpaidOriginalAmount > unpaidTotalAmount ? (
-                        <>
-                          <span className="text-sm font-medium text-white line-through">
-                            ₺{unpaidOriginalAmount.toFixed(2).replace(".", ",")}
-                          </span>
-                          <span className="text-xl font-bold text-white">
-                            ₺{unpaidTotalAmount.toFixed(2).replace(".", ",")}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xl font-bold text-white">
-                          ₺{unpaidTotalAmount.toFixed(2).replace(".", ",")}
-                        </span>
-                      )}
+                      <span className="text-xl font-bold text-white">
+                        ₺{unpaidOriginalAmount.toFixed(2).replace(".", ",")}
+                      </span>
                     </div>
                   </div>
                   <Button
@@ -6669,15 +6663,49 @@ function TableDetailContent() {
                         (item) => (selectedQuantities.get(item.menuId) || 0) > 0
                       );
 
-                      // Seçili ürünlerin toplam fiyatını hesapla
-                      const selectedItemsTotal = selectedItemsList.reduce(
-                        (sum, paymentItem) => {
+                      // Seçili ürünlerin toplam fiyatını hesapla (orijinal)
+                      const selectedItemsOriginalTotal =
+                        selectedItemsList.reduce((sum, paymentItem) => {
                           const selectedQty =
                             selectedQuantities.get(paymentItem.menuId) || 0;
                           return sum + selectedQty * paymentItem.menuPrice;
-                        },
-                        0
+                        }, 0);
+
+                      // İndirim hesapla
+                      let discount = 0;
+                      if (
+                        discountType === "percentage" &&
+                        discountValue &&
+                        discountValue.trim() !== ""
+                      ) {
+                        const percentage = parseFloat(discountValue);
+                        if (!isNaN(percentage) && percentage > 0) {
+                          discount =
+                            (selectedItemsOriginalTotal * percentage) / 100;
+                        }
+                      } else if (
+                        discountType === "amount" &&
+                        discountValue &&
+                        discountValue.trim() !== ""
+                      ) {
+                        const amount = parseFloat(discountValue);
+                        if (!isNaN(amount) && amount > 0) {
+                          discount = Math.min(
+                            amount,
+                            selectedItemsOriginalTotal
+                          );
+                        }
+                      }
+
+                      // İndirimli toplam
+                      const selectedItemsTotal = Math.max(
+                        0,
+                        selectedItemsOriginalTotal - discount
                       );
+                      const discountRatio =
+                        selectedItemsOriginalTotal > 0
+                          ? discount / selectedItemsOriginalTotal
+                          : 0;
 
                       if (selectedItemsList.length === 0) {
                         return (
@@ -6699,8 +6727,10 @@ function TableDetailContent() {
                                 const selectedQty =
                                   selectedQuantities.get(paymentItem.menuId) ||
                                   0;
-                                const itemTotal =
+                                const itemOriginalTotal =
                                   selectedQty * paymentItem.menuPrice;
+                                const itemDiscountedTotal =
+                                  itemOriginalTotal * (1 - discountRatio);
                                 return (
                                   <div
                                     key={paymentItem.menuId}
@@ -6715,12 +6745,29 @@ function TableDetailContent() {
                                           {selectedQty} /{" "}
                                           {paymentItem.totalQuantity} adet
                                         </span>
-                                        <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                          ₺
-                                          {itemTotal
-                                            .toFixed(2)
-                                            .replace(".", ",")}
-                                        </span>
+                                        {discount > 0 ? (
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 line-through">
+                                              ₺
+                                              {itemOriginalTotal
+                                                .toFixed(2)
+                                                .replace(".", ",")}
+                                            </span>
+                                            <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                              ₺
+                                              {itemDiscountedTotal
+                                                .toFixed(2)
+                                                .replace(".", ",")}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                            ₺
+                                            {itemOriginalTotal
+                                              .toFixed(2)
+                                              .replace(".", ",")}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2 ml-3">
@@ -6783,16 +6830,40 @@ function TableDetailContent() {
                           </div>
                           {/* Seçili Ürünler Toplamı - Sabit */}
                           <div className="shrink-0 p-3 border-t border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                Seçili Ürünler Toplamı
-                              </span>
-                              <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                                ₺
-                                {selectedItemsTotal
-                                  .toFixed(2)
-                                  .replace(".", ",")}
-                              </span>
+                            <div className="flex flex-col items-end gap-1">
+                              {discount > 0 ? (
+                                <>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 line-through">
+                                    ₺
+                                    {selectedItemsOriginalTotal
+                                      .toFixed(2)
+                                      .replace(".", ",")}
+                                  </span>
+                                  <div className="flex items-center justify-between w-full">
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                      Seçili Ürünler Toplamı
+                                    </span>
+                                    <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                                      ₺
+                                      {selectedItemsTotal
+                                        .toFixed(2)
+                                        .replace(".", ",")}
+                                    </span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex items-center justify-between w-full">
+                                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                    Seçili Ürünler Toplamı
+                                  </span>
+                                  <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                                    ₺
+                                    {selectedItemsTotal
+                                      .toFixed(2)
+                                      .replace(".", ",")}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </>
@@ -7145,24 +7216,148 @@ function TableDetailContent() {
                                 <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider block pt-4 leading-tight shrink-0">
                                   İşlemler
                                 </label>
-                                <div className="grid grid-cols-3 gap-2.5">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-2.5">
                                   <Button
                                     type="button"
                                     onClick={() => setShowDiscountModal(true)}
-                                    className="h-10 sm:h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    className="h-10 sm:h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
                                   >
                                     <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    İndirim
+                                    <span className="hidden sm:inline">
+                                      İndirim
+                                    </span>
                                   </Button>
                                   <Button
                                     type="button"
                                     onClick={() => {
                                       setShowCustomerModal(true);
                                     }}
-                                    className="h-10 sm:h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    className="h-10 sm:h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
                                   >
                                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    Cari
+                                    <span className="hidden sm:inline">
+                                      Cari
+                                    </span>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!order || order.items.length === 0) {
+                                        customAlert(
+                                          "Sipariş bulunamadı",
+                                          "Uyarı",
+                                          "warning"
+                                        );
+                                        return;
+                                      }
+
+                                      const hasSelectedItems =
+                                        (selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0) ||
+                                        selectedItems.size > 0;
+
+                                      if (!hasSelectedItems) {
+                                        customAlert(
+                                          "Lütfen iptal etmek için ürün seçin",
+                                          "Uyarı",
+                                          "warning"
+                                        );
+                                        return;
+                                      }
+
+                                      // İptal modalını aç veya direkt iptal et
+                                      // Şimdilik direkt iptal edelim
+                                      try {
+                                        if (
+                                          selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0
+                                        ) {
+                                          // Miktar seçimi yapılmışsa
+                                          const allIndices: number[] = [];
+                                          pendingPaymentItems.forEach(
+                                            (paymentItem) => {
+                                              allIndices.push(
+                                                ...paymentItem.indices
+                                              );
+                                            }
+                                          );
+                                          await handleCancelSelectedItemsWithQuantities(
+                                            selectedQuantities,
+                                            allIndices
+                                          );
+                                        } else if (selectedItems.size > 0) {
+                                          // Ürün seçimi yapılmışsa
+                                          const selectedIndices =
+                                            Array.from(selectedItems);
+                                          const quantities = new Map<
+                                            string,
+                                            number
+                                          >();
+                                          selectedIndices.forEach((index) => {
+                                            const item = order.items[index];
+                                            if (item) {
+                                              quantities.set(
+                                                item.menuId,
+                                                item.quantity
+                                              );
+                                            }
+                                          });
+                                          await handleCancelSelectedItemsWithQuantities(
+                                            quantities,
+                                            selectedIndices
+                                          );
+                                        }
+                                        setSelectedItems(new Set());
+                                        setSelectedQuantities(new Map());
+                                      } catch (error) {
+                                        customAlert(
+                                          "Ürün iptal edilirken bir hata oluştu",
+                                          "Hata",
+                                          "error"
+                                        );
+                                      }
+                                    }}
+                                    className="h-10 sm:h-12 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                                  >
+                                    <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <span className="hidden sm:inline">
+                                      İptal
+                                    </span>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!order || order.items.length === 0) {
+                                        customAlert(
+                                          "Sipariş bulunamadı",
+                                          "Uyarı",
+                                          "warning"
+                                        );
+                                        return;
+                                      }
+
+                                      const hasSelectedItems =
+                                        (selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0) ||
+                                        selectedItems.size > 0;
+
+                                      if (!hasSelectedItems) {
+                                        customAlert(
+                                          "Lütfen taşımak için ürün seçin",
+                                          "Uyarı",
+                                          "warning"
+                                        );
+                                        return;
+                                      }
+
+                                      setShowMoveModal(true);
+                                    }}
+                                    className="h-10 sm:h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
+                                  >
+                                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <span className="hidden sm:inline">
+                                      Taşı
+                                    </span>
                                   </Button>
                                   <Button
                                     type="button"

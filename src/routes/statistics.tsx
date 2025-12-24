@@ -254,6 +254,7 @@ function StatisticsContent() {
 
     // İkram ödemelerini ayrı olarak topla
     let totalGiftRevenue = 0;
+    let totalGiftCount = 0;
     orders.forEach((order) => {
       if (order.payments && order.payments.length > 0) {
         order.payments.forEach((payment: Payment) => {
@@ -262,6 +263,7 @@ function StatisticsContent() {
             if (payment.paidItems && payment.paidItems.length > 0) {
               payment.paidItems.forEach((paidItem) => {
                 totalGiftRevenue += paidItem.subtotal;
+                totalGiftCount += paidItem.quantity;
               });
             } else {
               // Tam ödeme ise, amount'u kullan
@@ -504,6 +506,7 @@ function StatisticsContent() {
     return {
       totalRevenue,
       totalGiftRevenue,
+      totalGiftCount,
       totalOrders,
       averageOrderValue,
       topProducts,
@@ -838,11 +841,14 @@ function StatisticsContent() {
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
                 İptal
               </p>
-              <p className="text-base font-bold text-red-600 dark:text-red-400">
+              <p className="text-sm font-bold text-red-600 dark:text-red-400">
                 {Math.round(stats.cancelledOrders)}
               </p>
+              <p className="text-[10px] font-semibold text-red-600 dark:text-red-400 mt-0.5 truncate">
+                ₺{stats.cancelledRevenue.toFixed(2)}
+              </p>
             </div>
-            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg p-2 shadow-sm border border-gray-200 dark:border-gray-700">
@@ -880,11 +886,14 @@ function StatisticsContent() {
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">
                 İkramlar
               </p>
-              <p className="text-base font-bold text-orange-600 dark:text-orange-400 truncate">
+              <p className="text-sm font-bold text-orange-600 dark:text-orange-400">
+                {Math.round(stats.totalGiftCount || 0)}
+              </p>
+              <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 mt-0.5 truncate">
                 ₺{stats.totalGiftRevenue.toFixed(2)}
               </p>
             </div>
-            <Utensils className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+            <Utensils className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0" />
           </div>
         </div>
       </div>
@@ -896,11 +905,11 @@ function StatisticsContent() {
             <CreditCard className="h-5 w-5" />
             Ödeme Yöntemine Göre Toplam
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+          <div className="flex flex-wrap gap-2 justify-between">
             {stats.paymentMethodStats.map((method, index) => (
               <div
                 key={index}
-                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
+                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 border border-gray-200 dark:border-gray-600 flex-1 min-w-[120px] max-w-[200px]"
               >
                 <div className="flex items-center justify-between mb-1">
                   <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
