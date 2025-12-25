@@ -72,6 +72,7 @@ import {
   Loader2,
   Utensils,
   Delete,
+  Printer,
 } from "lucide-react";
 import { POSLayout } from "@/components/layouts/POSLayout";
 
@@ -349,6 +350,47 @@ function TableDetailContent() {
 
   // Masa değiştiğinde sipariş state'ini hemen temizle - eski siparişlerin görünmesini engelle
   useEffect(() => {
+    // Masa değiştiğinde, eğer önceki order varsa ve indirim varsa ve localStorage'da seçili ürünler varsa,
+    // indirimi order'dan kaldır (seçili ürünlere uygulanan indirim iptal edilsin)
+    const cleanupDiscount = async () => {
+      const prevOrder = prevOrderRef.current;
+      if (
+        prevOrder &&
+        prevOrder.discount &&
+        prevOrder.discount > 0 &&
+        prevOrder.id
+      ) {
+        try {
+          // localStorage'dan kontrol et - eğer seçili ürünler varsa, indirimi kaldır
+          const savedSelectedItems = localStorage.getItem(
+            `selectedItems_${prevOrder.tableId}`
+          );
+          if (savedSelectedItems) {
+            // Seçili ürünlere indirim uygulanmış, indirimi kaldır
+            const orderSubtotal = prevOrder.items.reduce(
+              (sum, item) => sum + item.menuPrice * item.quantity,
+              0
+            );
+            await updateOrder(prevOrder.id, {
+              discount: 0,
+              total: orderSubtotal,
+            });
+            // localStorage'dan da temizle
+            localStorage.removeItem(`selectedItems_${prevOrder.tableId}`);
+            console.log(
+              "✅ Seçili ürünlere uygulanan indirim iptal edildi (masa değişti)"
+            );
+          }
+        } catch (error) {
+          console.error("Error cleaning up discount:", error);
+        }
+      }
+      // prevOrderRef'i temizle
+      prevOrderRef.current = null;
+    };
+
+    cleanupDiscount();
+
     // Masa değiştiğinde hemen temizle
     setOrder(null);
     setCart([]);
@@ -366,8 +408,15 @@ function TableDetailContent() {
     isInitialLoadRef.current = true;
   }, [table?.id]);
 
+  // Order değiştiğinde prevOrderRef'i güncelle
+  useEffect(() => {
+    prevOrderRef.current = order;
+  }, [order]);
+
   // İlk yükleme flag'i - cart'ı sadece ilk yüklemede temizlemek için
   const isInitialLoadRef = useRef(true);
+  // Önceki order'ı sakla - masa değiştiğinde indirimi kaldırmak için
+  const prevOrderRef = useRef<Order | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -502,7 +551,87 @@ function TableDetailContent() {
 
         // Sadece aktif sipariş varsa göster, yoksa temizle
         if (orderData && orderData.status === "active") {
-          setOrder(orderData);
+          // Eğer indirim varsa ama localStorage'da seçili ürünler yoksa, indirimi kaldır
+          // (Bu, masadan çıkıldığında indirimin iptal edilmesi gerektiğini gösterir)
+          let updatedOrderData = orderData;
+          if (
+            orderData.discount &&
+            orderData.discount > 0 &&
+            table?.id &&
+            orderData.items &&
+            orderData.items.length > 0
+          ) {
+            try {
+              const savedSelectedItems = localStorage.getItem(
+                `selectedItems_${table.id}`
+              );
+              if (!savedSelectedItems) {
+                // localStorage'da seçili ürün yoksa ama indirim varsa, indirimi kaldır
+                const orderSubtotal = orderData.items.reduce(
+                  (sum, item) => sum + item.menuPrice * item.quantity,
+                  0
+                );
+                await updateOrder(orderData.id!, {
+                  discount: 0,
+                  total: orderSubtotal,
+                });
+                // Order'ı güncelle
+                updatedOrderData = {
+                  ...orderData,
+                  discount: 0,
+                  total: orderSubtotal,
+                };
+                console.log(
+                  "✅ İndirim iptal edildi (localStorage'da seçili ürün yok)"
+                );
+              }
+            } catch (error) {
+              console.error("Error checking discount:", error);
+            }
+          }
+
+          setOrder(updatedOrderData);
+
+          // Eğer indirim varsa, seçili ürünleri localStorage'dan geri yükle
+          if (
+            updatedOrderData.discount &&
+            updatedOrderData.discount > 0 &&
+            table?.id &&
+            updatedOrderData.items &&
+            updatedOrderData.items.length > 0
+          ) {
+            try {
+              const savedSelectedItems = localStorage.getItem(
+                `selectedItems_${table.id}`
+              );
+              if (savedSelectedItems) {
+                const savedItems = JSON.parse(savedSelectedItems) as number[];
+                // Geçerli index'leri filtrele (order.items.length değişmiş olabilir)
+                const validIndices = savedItems.filter(
+                  (index) => index >= 0 && index < updatedOrderData.items.length
+                );
+                if (validIndices.length > 0) {
+                  setSelectedItems(new Set(validIndices));
+                  console.log(
+                    "✅ Order yüklendiğinde seçili ürünler yüklendi:",
+                    validIndices
+                  );
+                } else {
+                  // Geçerli index yoksa, localStorage'dan temizle
+                  localStorage.removeItem(`selectedItems_${table.id}`);
+                  setSelectedItems(new Set());
+                }
+              } else {
+                setSelectedItems(new Set());
+              }
+            } catch (error) {
+              console.error("Error loading selected items:", error);
+              setSelectedItems(new Set());
+            }
+          } else {
+            setSelectedItems(new Set());
+          }
+
           // Cart'ı sadece ilk yüklemede temizle
           if (isInitialLoad) {
             setCart([]);
@@ -512,6 +641,7 @@ function TableDetailContent() {
         } else {
           // Aktif sipariş yoksa
           setOrder(null);
+          setSelectedItems(new Set());
           // Cart'ı sadece ilk yüklemede temizle
           if (isInitialLoad) {
             setCart([]);
@@ -551,10 +681,161 @@ function TableDetailContent() {
     // order?.id kaldırıldı - masa değiştiğinde sipariş state'i zaten temizleniyor
   ]);
 
+  // Order yüklendiğinde localStorage'dan seçili ürünleri geri yükle (indirim varsa)
+  useEffect(() => {
+    if (
+      order &&
+      order.discount &&
+      order.discount > 0 &&
+      table?.id &&
+      order.items &&
+      order.items.length > 0
+    ) {
+      try {
+        const savedSelectedItems = localStorage.getItem(
+          `selectedItems_${table.id}`
+        );
+        if (savedSelectedItems) {
+          const savedItems = JSON.parse(savedSelectedItems) as number[];
+          // Geçerli index'leri filtrele (order.items.length değişmiş olabilir)
+          const validIndices = savedItems.filter(
+            (index) => index >= 0 && index < order.items.length
+          );
+          if (validIndices.length > 0) {
+            // selectedItems'ı set et
+            setSelectedItems(new Set(validIndices));
+            console.log(
+              "✅ Seçili ürünler localStorage'dan yüklendi:",
+              validIndices
+            );
+          } else {
+            // Geçerli index yoksa, localStorage'dan temizle
+            localStorage.removeItem(`selectedItems_${table.id}`);
+            setSelectedItems(new Set());
+          }
+        } else {
+          // localStorage'da seçili ürün yoksa, selectedItems'ı temizle
+          setSelectedItems(new Set());
+        }
+      } catch (error) {
+        console.error("Error loading selected items from localStorage:", error);
+        setSelectedItems(new Set());
+      }
+    } else if (order && (!order.discount || order.discount === 0)) {
+      // İndirim yoksa selectedItems'ı temizle
+      setSelectedItems(new Set());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, order?.discount, order?.items?.length, table?.id]);
+
+  // Seçili ürünleri localStorage'a kaydet (indirim varsa)
+  useEffect(() => {
+    if (order && order.discount && order.discount > 0 && table?.id) {
+      try {
+        const selectedItemsArray = Array.from(selectedItems);
+        // Geçerli index'leri filtrele (order.items.length değişmiş olabilir)
+        const validIndices = selectedItemsArray.filter(
+          (index) => index >= 0 && index < order.items.length
+        );
+        if (validIndices.length > 0) {
+          localStorage.setItem(
+            `selectedItems_${table.id}`,
+            JSON.stringify(validIndices)
+          );
+        } else {
+          // Geçerli index yoksa localStorage'dan temizle
+          localStorage.removeItem(`selectedItems_${table.id}`);
+        }
+      } catch (error) {
+        console.error("Error saving selected items:", error);
+      }
+    } else if (
+      table?.id &&
+      (!order || !order.discount || order.discount === 0)
+    ) {
+      // İndirim yoksa localStorage'dan temizle
+      localStorage.removeItem(`selectedItems_${table.id}`);
+    }
+  }, [selectedItems, order, table?.id]);
+
   // Ödeme modalı açıldığında tüm ürünleri göster
   // NOT: Eğer pendingPaymentItems zaten doluysa (seçili ürünler varsa), yeniden oluşturma
   useEffect(() => {
     if (showPaymentModal && order && order.items.length > 0) {
+      // Eğer indirim varsa, localStorage'dan seçili ürünleri yükle
+      if (order.discount && order.discount > 0 && table?.id) {
+        try {
+          const savedSelectedItems = localStorage.getItem(
+            `selectedItems_${table.id}`
+          );
+          if (savedSelectedItems) {
+            const savedItems = JSON.parse(savedSelectedItems) as number[];
+            // Seçili ürünleri selectedItems state'ine set et
+            setSelectedItems(new Set(savedItems));
+
+            // Seçili ürünleri menuId'ye göre grupla ve pendingPaymentItems'a set et
+            const groupedItems = new Map<
+              string,
+              {
+                menuId: string;
+                menuName: string;
+                totalQuantity: number;
+                menuPrice: number;
+                indices: number[];
+              }
+            >();
+
+            // Geçerli index'leri filtrele (order.items.length değişmiş olabilir)
+            const validIndices = savedItems.filter(
+              (index) => index >= 0 && index < order.items.length
+            );
+
+            // Geçerli index'leri selectedItems state'ine set et
+            setSelectedItems(new Set(validIndices));
+
+            validIndices.forEach((index) => {
+              const item = order.items[index];
+              if (!item) return;
+
+              const existing = groupedItems.get(item.menuId);
+              if (existing) {
+                existing.totalQuantity += item.quantity;
+                existing.indices.push(index);
+              } else {
+                groupedItems.set(item.menuId, {
+                  menuId: item.menuId,
+                  menuName: item.menuName,
+                  totalQuantity: item.quantity,
+                  menuPrice: item.menuPrice,
+                  indices: [index],
+                });
+              }
+            });
+
+            const newPendingItems = Array.from(groupedItems.values());
+            setPendingPaymentItems(newPendingItems);
+
+            // selectedQuantities'yi güncelle
+            setSelectedQuantities((prev) => {
+              const newMap = new Map(prev);
+              newPendingItems.forEach((item) => {
+                if (!newMap.has(item.menuId)) {
+                  newMap.set(item.menuId, item.totalQuantity); // Seçili miktarı set et
+                }
+              });
+              return newMap;
+            });
+
+            return; // Seçili ürünler yüklendi, çık
+          }
+        } catch (error) {
+          console.error(
+            "Error loading selected items from localStorage:",
+            error
+          );
+        }
+      }
+
       // Eğer pendingPaymentItems zaten doluysa ve seçili ürünler varsa, koru
       // (indirim uygulandıktan sonra seçili ürünlerin korunması için)
       if (pendingPaymentItems.length > 0) {
@@ -650,6 +931,96 @@ function TableDetailContent() {
       setShowPaymentModal(true);
     }
   }, [search.payment, order]);
+
+  // Seçili ürünler listesinden tüm ürünler kaldırıldığında indirimi iptal et
+  useEffect(() => {
+    const checkAndCancelDiscount = async () => {
+      // Sadece ödeme modalı açıksa ve order varsa kontrol et
+      if (
+        !showPaymentModal ||
+        !order ||
+        !order.items ||
+        !order.id ||
+        !table?.id
+      ) {
+        return;
+      }
+
+      // Seçili ürün var mı kontrol et
+      const hasSelectedItems =
+        selectedQuantities.size > 0 &&
+        Array.from(selectedQuantities.values()).some((qty) => qty > 0);
+
+      // localStorage'da seçili ürün var mı kontrol et (indirimin uygulanıp uygulanmadığını gösterir)
+      const savedSelectedItems = localStorage.getItem(
+        `selectedItems_${table.id}`
+      );
+
+      // Eğer seçili ürün yoksa ve localStorage'da seçili ürün varsa (indirim uygulanmış),
+      // indirimi iptal et
+      if (!hasSelectedItems && savedSelectedItems) {
+        try {
+          // Orijinal subtotal'ları hesapla
+          const originalSubtotal = order.items.reduce(
+            (sum, item) => sum + item.menuPrice * item.quantity,
+            0
+          );
+
+          // Mevcut total'i al
+          const currentTotal = order.total || originalSubtotal;
+
+          // Eğer currentTotal < originalSubtotal ise, indirim uygulanmış demektir
+          if (currentTotal < originalSubtotal) {
+            // Tüm item'ların subtotal'larını orijinal değerlerine geri çevir
+            const updatedItems = order.items.map((item) => {
+              const originalItemSubtotal = item.menuPrice * item.quantity;
+              return {
+                ...item,
+                subtotal: originalItemSubtotal,
+              };
+            });
+
+            // Yeni toplamları hesapla
+            const newSubtotal = updatedItems.reduce(
+              (sum, item) => sum + item.menuPrice * item.quantity,
+              0
+            );
+            const newTotal = newSubtotal; // İndirim yok
+
+            // Siparişi güncelle
+            await updateOrder(order.id, {
+              items: updatedItems,
+              subtotal: newSubtotal,
+              discount: 0,
+              total: newTotal,
+            });
+
+            // Güncellenmiş siparişi al
+            const updatedOrder = await getOrder(order.id);
+            if (updatedOrder) {
+              setOrder(updatedOrder);
+            }
+
+            // localStorage'dan seçili ürünleri temizle
+            localStorage.removeItem(`selectedItems_${table.id}`);
+
+            console.log("✅ Seçili ürün kalmadığı için indirim iptal edildi");
+          }
+        } catch (error) {
+          console.error("Error canceling discount:", error);
+        }
+      }
+    };
+
+    checkAndCancelDiscount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedQuantities,
+    showPaymentModal,
+    order?.id,
+    order?.total,
+    table?.id,
+  ]);
 
   // Seçili kategorinin ürünlerini filtrele
   // menu.category alanı kategori adını (name) tutuyor, ID değil
@@ -2807,6 +3178,28 @@ function TableDetailContent() {
         setCurrentPaymentItemIndex(0);
         setSelectedQuantities(new Map());
 
+        // Eğer kısmi ödeme yapıldıysa (seçili ürünler varsa) ve indirim varsa,
+        // seçili ürünleri koru (kullanıcı henüz masadan çıkmadı, sadece kısmi ödeme yaptı)
+        // Tam ödeme yapıldıysa, seçili ürünleri temizle
+        if (
+          !isPartialPayment &&
+          updatedOrder?.discount &&
+          updatedOrder.discount > 0 &&
+          tableId
+        ) {
+          // Tam ödeme yapıldıysa ve indirim varsa, tüm seçili ürünleri temizle
+          setSelectedItems(new Set());
+          try {
+            localStorage.removeItem(`selectedItems_${tableId}`);
+          } catch (error) {
+            console.error(
+              "Error removing selected items after full payment:",
+              error
+            );
+          }
+        }
+        // Kısmi ödeme durumunda seçili ürünleri koru - useEffect seçili ürünleri localStorage'a kaydedecek
+
         // Navigation ayarını kontrol et (kısmi ödeme için)
         const navSettings = localStorage.getItem("navigationSettings");
         let shouldReturnAfterPayment = false;
@@ -4724,6 +5117,86 @@ function TableDetailContent() {
                 >
                   <ArrowRight className="h-3 w-3" />
                   Taşı
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!order || order.items.length === 0) return;
+
+                    try {
+                      // Tüm iptal edilmemiş ürünleri al
+                      const itemsToPrint = order.items.filter(
+                        (item) => !item.canceledAt
+                      );
+
+                      if (itemsToPrint.length === 0) {
+                        customAlert(
+                          "Yazdırılacak ürün bulunamadı",
+                          "Uyarı",
+                          "warning"
+                        );
+                        return;
+                      }
+
+                      // Default yazıcıyı al
+                      const defaultPrinter = getDefaultPrinter(
+                        printers,
+                        selectedPrinterId
+                      );
+                      if (!defaultPrinter) {
+                        customAlert(
+                          "Yazıcı bulunamadı. Lütfen yazıcı ayarlarını kontrol edin.",
+                          "Hata",
+                          "error"
+                        );
+                        return;
+                      }
+
+                      // Yazdırma içeriğini oluştur
+                      const printContent = formatPrintContent(
+                        "order",
+                        itemsToPrint,
+                        currentTable.tableNumber,
+                        order.orderNumber,
+                        {
+                          companyName: companyData?.name || "",
+                          total: order.total,
+                          isPaid: false,
+                        }
+                      );
+
+                      // Yazdır
+                      const success = await printToPrinter(
+                        defaultPrinter.name,
+                        printContent,
+                        "order"
+                      );
+
+                      if (success) {
+                        customAlert(
+                          "Sipariş başarıyla yazdırıldı",
+                          "Başarılı",
+                          "success"
+                        );
+                      } else {
+                        customAlert(
+                          "Yazdırma sırasında bir hata oluştu",
+                          "Hata",
+                          "error"
+                        );
+                      }
+                    } catch (error) {
+                      console.error("Yazdırma hatası:", error);
+                      customAlert(
+                        "Yazdırma sırasında bir hata oluştu",
+                        "Hata",
+                        "error"
+                      );
+                    }
+                  }}
+                  className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1"
+                >
+                  <Printer className="h-3 w-3" />
+                  Yazdır
                 </Button>
               </div>
             )}
@@ -7061,18 +7534,29 @@ function TableDetailContent() {
                                   return;
                                 }
 
-                                // Seçili ürün kontrolü - seçili ürün yoksa hiçbir şey yapma
+                                // Seçili ürün kontrolü - seçili ürün yoksa uyarı göster
+                                const hasSelectedQuantities =
+                                  selectedQuantities.size > 0 &&
+                                  Array.from(selectedQuantities.values()).some(
+                                    (qty) => qty > 0
+                                  );
                                 const hasSelectedItems =
-                                  (selectedQuantities.size > 0 &&
+                                  (hasSelectedQuantities &&
                                     pendingPaymentItems.length > 0) ||
                                   selectedItems.size > 0;
 
                                 if (!hasSelectedItems) {
+                                  customAlert(
+                                    "Lütfen iptal edilecek ürün seçin",
+                                    "Uyarı",
+                                    "warning"
+                                  );
                                   return;
                                 }
 
                                 // İptal modalını aç veya direkt iptal et
                                 // Şimdilik direkt iptal edelim
+                                setIsCanceling(true);
                                 try {
                                   if (
                                     selectedQuantities.size > 0 &&
@@ -7121,6 +7605,8 @@ function TableDetailContent() {
                                     "Hata",
                                     "error"
                                   );
+                                } finally {
+                                  setIsCanceling(false);
                                 }
                               }}
                               className="h-10 sm:h-12 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2"
@@ -7352,16 +7838,37 @@ function TableDetailContent() {
                           <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
                             KALAN TUTAR
                           </div>
-                          <div className="flex flex-col items-end">
-                            {discount > 0 ? (
-                              <>
-                                <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through mb-0.5">
-                                  ₺
-                                  {originalTotal
-                                    // İndirim öncesi toplam (orijinal fiyat)
-                                    .toFixed(2)
-                                    .replace(".", ",")}
-                                </span>
+                          <div className="flex items-center justify-end gap-2">
+                            {(() => {
+                              // İndirim var mı kontrol et: originalTotal ile remaining arasında fark varsa veya order.discount varsa indirim var
+                              // Ayrıca modal içindeki discount değişkenini de kontrol et (yeni indirim uygulanıyorsa)
+                              const hasDiscount =
+                                discount > 0 ||
+                                originalTotal > remaining ||
+                                (order.discount && order.discount > 0);
+                              return hasDiscount ? (
+                                <>
+                                  <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
+                                    ₺
+                                    {originalTotal
+                                      // İndirim öncesi toplam (orijinal fiyat)
+                                      .toFixed(2)
+                                      .replace(".", ",")}
+                                  </span>
+                                  <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-red-600 dark:text-red-400">
+                                    ₺
+                                    {(
+                                      remaining -
+                                      appliedPayments.reduce(
+                                        (sum, p) => sum + p.amount,
+                                        0
+                                      )
+                                    )
+                                      .toFixed(2)
+                                      .replace(".", ",")}
+                                  </div>
+                                </>
+                              ) : (
                                 <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-red-600 dark:text-red-400">
                                   ₺
                                   {(
@@ -7374,21 +7881,8 @@ function TableDetailContent() {
                                     .toFixed(2)
                                     .replace(".", ",")}
                                 </div>
-                              </>
-                            ) : (
-                              <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-red-600 dark:text-red-400">
-                                ₺
-                                {(
-                                  remaining -
-                                  appliedPayments.reduce(
-                                    (sum, p) => sum + p.amount,
-                                    0
-                                  )
-                                )
-                                  .toFixed(2)
-                                  .replace(".", ",")}
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                         </div>
                         <div className="flex-none flex justify-end">
@@ -7546,7 +8040,12 @@ function TableDetailContent() {
                                   key={pm.id}
                                   type="button"
                                   onClick={() => {
-                                    setPaymentMethod(pm.code);
+                                    // Eğer zaten seçiliyse, seçimi kaldır (toggle)
+                                    if (paymentMethod === pm.code) {
+                                      setPaymentMethod("");
+                                    } else {
+                                      setPaymentMethod(pm.code);
+                                    }
                                   }}
                                   className={`w-full h-8 sm:h-9 md:h-10 text-[10px] sm:text-xs md:text-sm font-bold rounded-lg sm:rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 ${
                                     paymentMethod === pm.code

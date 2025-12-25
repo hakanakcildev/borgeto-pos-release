@@ -622,6 +622,7 @@ function TablesView() {
         search: {
           area: area || undefined,
           activeOnly: activeOnly || false,
+          payment: undefined,
         },
       });
     } catch (error) {

@@ -276,59 +276,59 @@ export function HomePage() {
           </div>
         </header>
 
-        {/* Main Content - Ortada - CRITICAL FIX: Overflow ve responsive düzenleme */}
-        <div className="flex-1 flex items-center justify-center min-h-0 overflow-y-auto">
-          <div className="flex flex-col items-center justify-center w-full max-w-6xl px-4 sm:px-6 py-4 sm:py-6">
-            {/* Tüm içerik tek bir container içinde - gap'leri küçült */}
-            <div className="flex flex-col items-center gap-4 sm:gap-6 w-full">
-              {/* Üst kısım: Tarih/Saat ve Döviz Kurları - CRITICAL FIX: Daha kompakt */}
-              <div className="flex items-center justify-between w-full gap-4 sm:gap-6">
-                {/* Date & Time - Sol taraf - CRITICAL FIX: Daha küçük font */}
+        {/* Main Content - Ortada - Sabit boyut, scroll yok, tam ekranın ortasında */}
+        <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
+          <div className="flex flex-col items-center justify-center w-full h-full max-w-6xl px-2 sm:px-4 md:px-6">
+            {/* Tüm içerik tek bir container içinde - ortalanmış */}
+            <div className="flex flex-col items-center justify-center w-full gap-3 sm:gap-4 md:gap-6">
+              {/* Üst kısım: Tarih/Saat ve Döviz Kurları - Responsive boyutlar */}
+              <div className="flex items-center justify-between w-full gap-2 sm:gap-4 md:gap-6">
+                {/* Date & Time - Sol taraf - Responsive font boyutları */}
                 <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                  <p className="text-white/90 text-sm sm:text-base md:text-lg mb-1 sm:mb-2">
+                  <p className="text-white/90 text-xs sm:text-sm md:text-base lg:text-lg mb-0.5 sm:mb-1 md:mb-2">
                     {formatDate(currentTime)}
                   </p>
-                  <p className="text-white text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight">
+                  <p className="text-white text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold leading-tight">
                     {formatTime(currentTime)}
                   </p>
                 </div>
 
-                {/* Exchange Rates - Sağ taraf - CRITICAL FIX: Daha kompakt */}
-                <div className="flex flex-col gap-1 sm:gap-2 flex-1 items-center min-w-0">
-                  <h3 className="text-white/80 text-xs sm:text-sm font-medium">
+                {/* Exchange Rates - Sağ taraf - Responsive boyutlar */}
+                <div className="flex flex-col gap-0.5 sm:gap-1 md:gap-2 flex-1 items-center min-w-0 shrink-0">
+                  <h3 className="text-white/80 text-[10px] sm:text-xs md:text-sm font-medium">
                     Döviz Kurları
                   </h3>
                   {exchangeRatesLoading ? (
-                    <div className="flex items-center gap-2 text-white/60 text-xs sm:text-sm">
-                      <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white"></div>
+                    <div className="flex items-center gap-1 sm:gap-2 text-white/60 text-[10px] sm:text-xs md:text-sm">
+                      <div className="animate-spin rounded-full h-2 w-2 sm:h-3 sm:w-3 md:h-4 md:w-4 border-b-2 border-white"></div>
                       <span>Yükleniyor...</span>
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <span className="text-white/70 text-[10px] sm:text-xs font-medium">
+                      <div className="flex items-center gap-1 sm:gap-2 md:gap-3">
+                        <div className="px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
+                          <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2">
+                            <span className="text-white/70 text-[9px] sm:text-[10px] md:text-xs font-medium">
                               USD
                             </span>
-                            <span className="text-white text-sm sm:text-base md:text-lg font-bold">
+                            <span className="text-white text-xs sm:text-sm md:text-base lg:text-lg font-bold">
                               ₺{exchangeRates.USD.toFixed(2)}
                             </span>
                           </div>
                         </div>
-                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <span className="text-white/70 text-[10px] sm:text-xs font-medium">
+                        <div className="px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
+                          <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2">
+                            <span className="text-white/70 text-[9px] sm:text-[10px] md:text-xs font-medium">
                               EUR
                             </span>
-                            <span className="text-white text-sm sm:text-base md:text-lg font-bold">
+                            <span className="text-white text-xs sm:text-sm md:text-base lg:text-lg font-bold">
                               ₺{exchangeRates.EUR.toFixed(2)}
                             </span>
                           </div>
                         </div>
                       </div>
                       {exchangeRates.lastUpdated && (
-                        <p className="text-white/50 text-[10px] sm:text-xs text-center">
+                        <p className="text-white/50 text-[9px] sm:text-[10px] md:text-xs text-center">
                           Son güncelleme:{" "}
                           {exchangeRates.lastUpdated.toLocaleTimeString(
                             "tr-TR",
@@ -344,41 +344,31 @@ export function HomePage() {
                 </div>
               </div>
 
-              {/* Menu Grid - CRITICAL FIX: Responsive grid ve daha küçük butonlar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 md:gap-6 w-full px-2 sm:px-4 md:px-6 py-2 sm:py-4 md:py-6">
+              {/* Menu Grid - Responsive grid, butonlar arası boşluk */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4 w-full">
                 {menuItems.map((item, index) => {
                   const Icon = item.icon;
                   return (
                     <button
                       key={index}
                       onClick={item.onClick}
-                      className="group relative bg-white/10 backdrop-blur-sm rounded-xl hover:bg-white/20 transition-all duration-200 border border-white/20 hover:border-white/40 hover:scale-105 flex flex-col items-center justify-center aspect-square"
-                      style={{ minWidth: "120px", minHeight: "120px" }}
+                      className="group relative bg-white/10 backdrop-blur-sm rounded-lg sm:rounded-xl hover:bg-white/20 transition-all duration-200 border border-white/20 hover:border-white/40 hover:scale-105 flex flex-col items-center justify-center w-full aspect-square"
                     >
-                      <div className="mb-2 sm:mb-3 p-3 sm:p-4 md:p-5 rounded-lg transition-all">
-                        <Icon className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white" />
+                      <div className="mb-1 sm:mb-1.5 md:mb-2 p-1.5 sm:p-2 md:p-2.5 lg:p-3 rounded-lg transition-all flex-shrink-0">
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 lg:h-7 lg:w-7 xl:h-8 xl:w-8 text-white" />
                       </div>
-                      <span className="text-white text-xs sm:text-sm md:text-base font-semibold text-center leading-tight px-1 sm:px-2">
+                      <span className="text-white text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-semibold text-center leading-tight px-0.5 sm:px-1 flex-shrink-0">
                         {item.title}
                       </span>
                     </button>
                   );
                 })}
               </div>
-
-              {/* Oturumu Kapat Butonu - CRITICAL FIX: Daha küçük */}
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors text-white text-xs sm:text-sm font-medium"
-              >
-                <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
-                Oturumu Kapat
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Footer - CRITICAL FIX: Sabit yükseklik ve daha kompakt */}
+        {/* Footer - Sabit yükseklik, Oturumu Kapat butonu sağda */}
         <footer className="h-[60px] shrink-0 px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between bg-black/20 backdrop-blur-sm">
           <button
             onClick={() => navigate({ to: "/support" })}
@@ -386,6 +376,13 @@ export function HomePage() {
           >
             <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="text-xs sm:text-sm">Müşteri Hizmetleri</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors text-white text-[10px] sm:text-xs md:text-sm font-medium"
+          >
+            <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
+            Oturumu Kapat
           </button>
         </footer>
       </div>
