@@ -407,17 +407,26 @@ function TableDetailContent() {
     setAppliedPayments([]);
     // İlk yükleme flag'ini reset et - yeni masada cart temizlensin
     isInitialLoadRef.current = true;
+    // originalOrderItemsRef'i de temizle
+    originalOrderItemsRef.current = [];
   }, [table?.id]);
 
-  // Order değiştiğinde prevOrderRef'i güncelle
+  // Order değiştiğinde prevOrderRef ve originalOrderItemsRef'i güncelle
   useEffect(() => {
     prevOrderRef.current = order;
+    if (order) {
+      originalOrderItemsRef.current = [...order.items];
+    } else {
+      originalOrderItemsRef.current = [];
+    }
   }, [order]);
 
   // İlk yükleme flag'i - cart'ı sadece ilk yüklemede temizlemek için
   const isInitialLoadRef = useRef(true);
   // Önceki order'ı sakla - masa değiştiğinde indirimi kaldırmak için
   const prevOrderRef = useRef<Order | null>(null);
+  // Order'ın başlangıç items'ını saklamak için ref (adisyon oluştururken kullanılacak)
+  const originalOrderItemsRef = useRef<OrderItem[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -487,6 +496,13 @@ function TableDetailContent() {
         const orderData = allOrders.find(
           (o) => o.tableId === table.id && o.status === "active"
         );
+
+        // Order yüklendiğinde originalOrderItemsRef'i güncelle
+        if (orderData) {
+          originalOrderItemsRef.current = [...orderData.items];
+        } else {
+          originalOrderItemsRef.current = [];
+        }
 
         // Sadece müsait ürünleri göster
         const availableMenus = menusData.filter((menu) => menu.isAvailable);
@@ -3033,6 +3049,131 @@ function TableDetailContent() {
 
           // Tüm ürünler kaldırıldıysa ya da tam ödeme alındıysa veya kurye atandıysa siparişi kapat
           if (updatedOrder && currentTable.id) {
+            // Order kapatılmadan önce adisyon oluştur (tüm ürünler ve tüm ödemeler ile)
+            const effectiveCompanyId = companyId || userData?.companyId;
+            const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+            if (effectiveCompanyId) {
+              try {
+                const allPayments = updatedOrder.payments || [];
+                const billItemsMap = new Map<string, OrderItem>();
+
+                // Önce payments'lardaki tüm paidItems'ları topla
+                const paidItemsByMenuId = new Map<
+                  string,
+                  Array<{
+                    quantity: number;
+                    subtotal: number;
+                    menuName: string;
+                    menuPrice: number;
+                  }>
+                >();
+
+                allPayments.forEach((payment) => {
+                  if (payment.paidItems) {
+                    payment.paidItems.forEach((paidItem) => {
+                      const existing = paidItemsByMenuId.get(paidItem.menuId);
+                      if (existing) {
+                        existing.push({
+                          quantity: paidItem.quantity,
+                          subtotal: paidItem.subtotal,
+                          menuName: paidItem.menuName,
+                          menuPrice: paidItem.menuPrice,
+                        });
+                      } else {
+                        paidItemsByMenuId.set(paidItem.menuId, [
+                          {
+                            quantity: paidItem.quantity,
+                            subtotal: paidItem.subtotal,
+                            menuName: paidItem.menuName,
+                            menuPrice: paidItem.menuPrice,
+                          },
+                        ]);
+                      }
+                    });
+                  }
+                });
+
+                // Önce originalOrderItemsRef'teki tüm ürünleri ekle
+                const sourceItems =
+                  originalOrderItemsRef.current.length > 0
+                    ? originalOrderItemsRef.current
+                    : updatedOrder.items.length > 0
+                      ? updatedOrder.items
+                      : [];
+
+                sourceItems.forEach((item) => {
+                  billItemsMap.set(item.menuId, {
+                    ...item,
+                    subtotal: item.subtotal || item.menuPrice * item.quantity,
+                  });
+                });
+
+                // Şimdi paidItems'lardaki ürünleri de ekle veya güncelle
+                paidItemsByMenuId.forEach((paidItemsArray, menuId) => {
+                  const existingItem = billItemsMap.get(menuId);
+                  const totalPaidQuantity = paidItemsArray.reduce(
+                    (sum, pi) => sum + pi.quantity,
+                    0
+                  );
+                  const totalPaidSubtotal = paidItemsArray.reduce(
+                    (sum, pi) => sum + pi.subtotal,
+                    0
+                  );
+                  const firstPaidItem = paidItemsArray[0];
+
+                  if (existingItem) {
+                    existingItem.subtotal = totalPaidSubtotal;
+                    existingItem.quantity = Math.max(
+                      existingItem.quantity,
+                      totalPaidQuantity
+                    );
+                  } else {
+                    billItemsMap.set(menuId, {
+                      menuId: menuId,
+                      menuName: firstPaidItem.menuName,
+                      menuPrice: firstPaidItem.menuPrice,
+                      quantity: totalPaidQuantity,
+                      subtotal: totalPaidSubtotal,
+                      addedAt: new Date(),
+                      selectedExtras: [],
+                    });
+                  }
+                });
+
+                const billItems: OrderItem[] = Array.from(
+                  billItemsMap.values()
+                );
+                const billSubtotal = billItems.reduce(
+                  (sum, item) => sum + item.menuPrice * item.quantity,
+                  0
+                );
+                const billDiscount = updatedOrder.discount || 0;
+                const billTotal = Math.max(0, billSubtotal - billDiscount);
+
+                if (billItems.length > 0 && allPayments.length > 0) {
+                  await addBill({
+                    companyId: effectiveCompanyId,
+                    branchId: effectiveBranchId || undefined,
+                    tableId: currentTable.id!,
+                    tableNumber: currentTable.tableNumber,
+                    orderId: updatedOrder.id!,
+                    items: billItems,
+                    subtotal: billSubtotal,
+                    discount: billDiscount > 0 ? billDiscount : undefined,
+                    total: billTotal,
+                    payments: allPayments,
+                    customerName: updatedOrder.customerName,
+                    customerPhone: updatedOrder.customerPhone,
+                    notes: updatedOrder.notes,
+                    createdBy: userData?.id || currentUser?.uid || "",
+                  });
+                }
+              } catch (err) {
+                console.error("Adisyon oluşturulurken hata:", err);
+              }
+            }
+
             await updateOrderStatus(updatedOrder.id!, "closed");
             // Masa durumunu güncelle
             try {
