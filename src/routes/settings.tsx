@@ -343,12 +343,12 @@ function SettingsContent({
                   </span>
                   <span
                     className={`text-sm font-medium px-2 py-1 rounded ${
-                      serverStatus === "connected"
+                      serverStatus === "connected" && isOnline
                         ? "text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30"
                         : "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30"
                     }`}
                   >
-                    {serverStatus === "connected"
+                    {serverStatus === "connected" && isOnline
                       ? "Server BAĞLI"
                       : "Server BAĞLI DEĞİL"}
                   </span>

@@ -23,9 +23,11 @@ import {
   Clock,
   Loader2,
   ArrowLeft,
+  WifiOff,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { HomePage } from "@/components/HomePage";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -129,6 +131,7 @@ function TablesView() {
   const { userData, companyId, branchId, companyData, branchData } = useAuth();
   const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
+  const { isOnline } = useNetworkStatus();
   const { area, activeOnly } = Route.useSearch();
   const [tables, setTables] = useState<Table[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -976,6 +979,16 @@ function TablesView() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Internet Durumu - Sadece internet kesildiğinde göster */}
+          {!isOnline && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/90 backdrop-blur-sm">
+              <WifiOff className="h-4 w-4 text-white" />
+              <span className="text-sm text-white font-medium">
+                İnternet bağlantısı yok
+              </span>
+            </div>
+          )}
+          
           {/* Branch Info */}
           <div className="flex items-center gap-3">
             <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
