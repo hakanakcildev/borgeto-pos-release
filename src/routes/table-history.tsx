@@ -187,6 +187,7 @@ function TableHistoryContent() {
       const paymentMethods = selectedBill.payments.map(p => paymentMethodName(p.method)).join(", ");
 
       // Yazdırma içeriğini oluştur
+      // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
       const content = formatPrintContent(
         "payment",
         orderItems,
@@ -466,13 +467,41 @@ function TableHistoryContent() {
                       };
                     }> = [];
 
-                    // Payments'larda bu ürünü ara
+                    // Payments'larda bu ürünü ara - sadece bu ürünün ödendiği payment'ları kullan
                     for (const payment of selectedBill.payments) {
-                      if (payment.paidItems) {
+                      if (payment.paidItems && payment.paidItems.length > 0) {
+                        // Bu payment'ta bu ürün var mı kontrol et
                         const paidItem = payment.paidItems.find(
                           (pi) => pi.menuId === item.menuId
                         );
                         if (paidItem) {
+                          // Bu payment'ta bu ürün ödenmiş, bu payment'ın method'unu ekle
+                          const paymentMethodConfig = paymentMethods.find(
+                            (pm) => pm.code === payment.method
+                          );
+                          const methodName = paymentMethodConfig
+                            ? paymentMethodConfig.name
+                            : payment.method === "cash"
+                              ? "Nakit"
+                              : payment.method === "card"
+                                ? "Kart"
+                                : payment.method === "mealCard"
+                                  ? "Yemek Kartı"
+                                  : payment.method;
+                          // Sadece unique method'ları ekle
+                          if (!paymentInfos.find((pi) => pi.method === payment.method)) {
+                            paymentInfos.push({
+                              method: payment.method,
+                              methodName,
+                              paidItem,
+                            });
+                          }
+                        }
+                      } else if (!payment.paidItems && selectedBill.payments.length > 0) {
+                        // Eğer paidItems yoksa ve sadece bir payment varsa, bu tam ödeme demektir
+                        // Bu durumda tüm ürünler için bu payment'ın method'u kullanılır
+                        // Ama sadece bir kere ekle
+                        if (paymentInfos.length === 0) {
                           const paymentMethodConfig = paymentMethods.find(
                             (pm) => pm.code === payment.method
                           );
@@ -488,36 +517,6 @@ function TableHistoryContent() {
                           paymentInfos.push({
                             method: payment.method,
                             methodName,
-                            paidItem,
-                          });
-                        }
-                      }
-                    }
-
-                    // Eğer paidItems'da bulunamadıysa, bu ürün son ödeme ile ödenmiş demektir
-                    // Son ödemeyi (veya tüm ödemeleri) kullan
-                    if (paymentInfos.length === 0 && selectedBill.payments.length > 0) {
-                      // Tüm payments'ları kontrol et (son ödeme ile ödenen ürün için)
-                      // Her payment için ödeme yöntemini ekle
-                      selectedBill.payments.forEach((payment) => {
-                        const paymentMethodConfig = paymentMethods.find(
-                          (pm) => pm.code === payment.method
-                        );
-                        const methodName = paymentMethodConfig
-                          ? paymentMethodConfig.name
-                          : payment.method === "cash"
-                            ? "Nakit"
-                            : payment.method === "card"
-                              ? "Kart"
-                              : payment.method === "mealCard"
-                                ? "Yemek Kartı"
-                                : payment.method;
-                        // Tam ödeme durumunda paidItem yok, bu yüzden item bilgilerini kullan
-                        // Ama sadece bir kere ekle (her payment için değil, sadece unique method'lar için)
-                        if (!paymentInfos.find((pi) => pi.method === payment.method)) {
-                          paymentInfos.push({
-                            method: payment.method,
-                            methodName,
                             paidItem: {
                               menuId: item.menuId,
                               menuName: item.menuName,
@@ -527,8 +526,9 @@ function TableHistoryContent() {
                             },
                           });
                         }
-                      });
+                      }
                     }
+
 
                     // Tüm ödeme yöntemlerini birleştir (unique method'lar)
                     const uniquePaymentMethods = Array.from(

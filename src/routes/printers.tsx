@@ -40,6 +40,10 @@ interface PrinterDevice {
   assignedCategories?: string[]; // Kategori ID'leri
   paperWidth?: number; // Kağıt genişliği (karakter sayısı)
   paperType?: string; // Kağıt tipi (örn: "80mm", "58mm", "110mm")
+  options?: {
+    paperWidth?: number;
+    paperType?: string;
+  };
 }
 
 export function PrintersContent() {
@@ -73,7 +77,7 @@ export function PrintersContent() {
             setSelectedPrinter(selected);
           }
         }
-      } catch (error) {
+      } catch {
         // Error loading saved printers
       }
     };
@@ -165,7 +169,9 @@ export function PrintersContent() {
               });
             }
           }
-        } catch (error) {}
+        } catch {
+          // Error saving printers
+        }
       };
 
       // Kısa bir gecikme ile tarama yap (sayfa yüklendikten sonra)
@@ -187,7 +193,9 @@ export function PrintersContent() {
           effectiveBranchId
         );
         setCategories(cats);
-      } catch (error) {}
+      } catch {
+        // Error loading categories
+      }
     };
 
     loadCategories();
@@ -203,6 +211,7 @@ export function PrintersContent() {
     if ("serial" in navigator) {
       try {
         // Kullanıcıdan port seçmesini iste - tüm portları göster
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const port = await (navigator as any).serial.requestPort({
           filters: [], // Tüm portları göster
         });
@@ -224,8 +233,12 @@ export function PrintersContent() {
             isConnected: true,
           });
         }
-      } catch (error: any) {
-        if (error.name !== "NotFoundError" && error.name !== "SecurityError") {
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.name !== "NotFoundError" &&
+          error.name !== "SecurityError"
+        ) {
           throw error;
         }
       }
@@ -241,6 +254,7 @@ export function PrintersContent() {
     if ("usb" in navigator) {
       try {
         // Printer class (7) ve tüm alt sınıfları için filtre
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const device = await (navigator as any).usb.requestDevice({
           filters: [
             { classCode: 7 }, // Printer class
@@ -270,8 +284,12 @@ export function PrintersContent() {
             await device.close();
           }
         }
-      } catch (error: any) {
-        if (error.name !== "NotFoundError" && error.name !== "SecurityError") {
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.name !== "NotFoundError" &&
+          error.name !== "SecurityError"
+        ) {
           throw error;
         }
       }
@@ -336,7 +354,9 @@ export function PrintersContent() {
             });
           });
         }
-      } catch (error) {}
+      } catch {
+        // Error detecting system printers
+      }
     } else {
       // Electron API yoksa fallback (web ortamı)
       if (window.matchMedia && window.matchMedia("print").media !== "print") {
@@ -363,8 +383,11 @@ export function PrintersContent() {
       // WebRTC kullanarak yerel IP'yi al (sadece Chrome/Edge)
       const localIP = await new Promise<string | null>((resolve) => {
         const RTCPeerConnection =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).RTCPeerConnection ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).webkitRTCPeerConnection ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).mozRTCPeerConnection;
 
         if (!RTCPeerConnection) {
@@ -479,7 +502,7 @@ export function PrintersContent() {
         Promise.all(scanPromises),
         new Promise((resolve) => setTimeout(resolve, 5000)),
       ]);
-    } catch (error) {
+    } catch {
       // Ağ tarama hatası - sessizce devam et
     }
 
@@ -549,7 +572,7 @@ export function PrintersContent() {
       try {
         const networkPrinters = await detectNetworkPrinters();
         allPrinters.push(...networkPrinters);
-      } catch (error: any) {
+      } catch {
         // Ağ tarama hatası - sessizce devam et
       }
 
@@ -587,16 +610,17 @@ export function PrintersContent() {
               } else {
                 morePorts = false;
               }
-            } catch (error: any) {
-              if (error.name === "NotFoundError") {
+            } catch (error: unknown) {
+              if (error instanceof Error && error.name === "NotFoundError") {
                 morePorts = false; // Kullanıcı port seçmeyi iptal etti
               } else {
                 throw error;
               }
             }
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (
+            error instanceof Error &&
             error.name !== "NotFoundError" &&
             error.name !== "SecurityError"
           ) {
@@ -639,16 +663,17 @@ export function PrintersContent() {
               } else {
                 moreDevices = false;
               }
-            } catch (error: any) {
-              if (error.name === "NotFoundError") {
+            } catch (error: unknown) {
+              if (error instanceof Error && error.name === "NotFoundError") {
                 moreDevices = false; // Kullanıcı cihaz seçmeyi iptal etti
               } else {
                 throw error;
               }
             }
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (
+            error instanceof Error &&
             error.name !== "NotFoundError" &&
             error.name !== "SecurityError"
           ) {
@@ -703,8 +728,12 @@ export function PrintersContent() {
           "Hiç yazıcı bulunamadı. Lütfen yazıcıların bağlı olduğundan emin olun."
         );
       }
-    } catch (error: any) {
-      setError(error.message || "Yazıcılar taranırken bir hata oluştu");
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Yazıcılar taranırken bir hata oluştu"
+      );
     } finally {
       setIsScanning(false);
     }
@@ -865,10 +894,13 @@ export function PrintersContent() {
         try {
           const company = await getCompany(companyId);
           companyName = company?.name || "";
-        } catch (err) {}
+        } catch {
+          // Error loading company name
+        }
       }
 
-      // Yazdırma içeriğini oluştur (yazıcının kağıt genişliğini kullan)
+      // Yazdırma içeriğini oluştur
+      // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
       const printContent = formatPrintContent(
         "order",
         exampleItems,
@@ -897,8 +929,12 @@ export function PrintersContent() {
       } else {
         setError("Yazdırma API'si kullanılamıyor");
       }
-    } catch (error: any) {
-      setError(error.message || "Yazdırma sırasında bir hata oluştu");
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Yazdırma sırasında bir hata oluştu"
+      );
     }
   }, [selectedPrinter, printers, companyId]);
 
@@ -1030,7 +1066,7 @@ export function PrintersContent() {
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div
-                    className={`p-2 rounded-lg flex-shrink-0 ${
+                    className={`p-2 rounded-lg shrink-0 ${
                       printer.isConnected
                         ? "bg-green-100 dark:bg-green-900/20"
                         : "bg-gray-100 dark:bg-gray-700"
@@ -1146,7 +1182,7 @@ export function PrintersContent() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {selectedPrinter === printer.id && (
                     <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-sm font-medium">
                       <Check className="h-4 w-4" />
@@ -1267,7 +1303,9 @@ export function PrintersContent() {
                 try {
                   // Burada sadece örnek gösteriyoruz, gerçek firma adı test yazdırmada alınacak
                   companyName = "Firma Adi";
-                } catch {}
+                } catch {
+                  // Error loading company name
+                }
               }
               return getExamplePrintOutput(companyName || "Firma Adi");
             })()}

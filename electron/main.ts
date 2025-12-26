@@ -552,6 +552,7 @@ $printers | ConvertTo-Json -Depth 10
           const scriptPath = join(tmpdir(), `get-printers-${Date.now()}.ps1`);
           writeFileSync(scriptPath, powershellScript, "utf8");
 
+          try {
             const { stdout } = await execAsync(
               `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
             );
@@ -566,7 +567,7 @@ $printers | ConvertTo-Json -Depth 10
             const printers = JSON.parse(stdout);
             const printerArray = Array.isArray(printers) ? printers : [printers];
 
-          printerArray.forEach((printer: any, index: number) => {
+            printerArray.forEach((printer: any, index: number) => {
             if (printer && printer.Name) {
               // Kağıt boyutunu tespit et
               let paperWidth = 56; // Varsayılan: 80mm termal yazıcı (56 karakter - küçük font)
@@ -948,26 +949,61 @@ $printers | ConvertTo-Json -Depth 10
           }
 
           try {
-            // Notepad /PT komutu ile yazdır (sessiz yazdırma)
-            // /PT: Print to printer without dialog
+            // Raw printing - doğrudan yazıcı portuna yaz (margin yok)
             safeLog(
-              `📤 Attempting to print via notepad to: ${data.printerName}`
+              `📤 Attempting to print via raw port to: ${data.printerName}`
             );
 
             try {
-              // PowerShell kullanarak notepad'i yazdırma modunda çalıştır
+              // PowerShell ile yazıcı port adını al ve doğrudan port'a yaz
               const printerNameSafe = data.printerName.replace(/"/g, '`"');
               const tempFileSafe = tempFile.replace(/\\/g, "\\\\");
-              const psScript = `$printerName = "${printerNameSafe}";
-$file = "${tempFileSafe}";
-
-# Notepad ile yazdır
-Start-Process -FilePath "notepad.exe" -ArgumentList "/pt","\`"$file\`"","\`"$printerName\`"" -Wait -WindowStyle Hidden;
-
-# Biraz bekle
-Start-Sleep -Milliseconds 500;
-
-Write-Output "SUCCESS";`;
+              const psScript = "$printerName = \"" + printerNameSafe + "\";\n" +
+                "$file = \"" + tempFileSafe + "\";\n\n" +
+                "# Yazıcıyı ve port adını al\n" +
+                "$printer = Get-Printer -Name $printerName -ErrorAction SilentlyContinue;\n" +
+                "if (-not $printer) {\n" +
+                "  Write-Output \"ERROR: Printer not found\";\n" +
+                "  exit 1;\n" +
+                "}\n\n" +
+                "$portName = $printer.PortName;\n" +
+                "Write-Host \"Printer Port: $portName\";\n\n" +
+                "# Port tipine göre yazdır\n" +
+                "if ($portName -like \"LPT*\" -or $portName -like \"USB*\" -or $portName -like \"COM*\") {\n" +
+                "  # LPT, USB veya COM portu - doğrudan copy /b komutu ile raw printing (margin yok)\n" +
+                "  # USB portları genellikle \"USB001\", \"USB002\" formatındadır\n" +
+                "  try {\n" +
+                "    cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1 | Out-Null;\n" +
+                "    if ($LASTEXITCODE -eq 0) {\n" +
+                "      Write-Output \"SUCCESS\";\n" +
+                "    } else {\n" +
+                "      # Copy başarısız olursa Out-Printer'a fallback yap\n" +
+                "      $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "      $content | Out-Printer -Name $printerName;\n" +
+                "      Write-Output \"SUCCESS\";\n" +
+                "    }\n" +
+                "  } catch {\n" +
+                "    # Hata durumunda Out-Printer'a fallback yap\n" +
+                "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "    $content | Out-Printer -Name $printerName;\n" +
+                "    Write-Output \"SUCCESS\";\n" +
+                "  }\n" +
+                "} else {\n" +
+                "  # Network veya diğer portlar - Out-Printer kullan ama margin'i minimize etmeye çalış\n" +
+                "  # Yazıcı ayarlarını geçici olarak değiştirmeye çalış (margin = 0)\n" +
+                "  try {\n" +
+                "    # Yazıcı ayarlarını al\n" +
+                "    $printerSettings = Get-WmiObject -Class Win32_PrinterConfiguration -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
+                "    \n" +
+                "    # Out-Printer ile yazdır (yazıcı sürücüsü ayarlarına bağlı)\n" +
+                "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "    $content | Out-Printer -Name $printerName;\n" +
+                "    Write-Output \"SUCCESS\";\n" +
+                "  } catch {\n" +
+                "    Write-Output \"ERROR: Print failed - $($_.Exception.Message)\";\n" +
+                "    exit 1;\n" +
+                "  }\n" +
+                "}";
 
               const psScriptFile = join(
                 tmpdir(),

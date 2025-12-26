@@ -17,120 +17,90 @@ interface PrinterDevice {
   };
 }
 
-// Yazdırma içeriği oluştur - yeni format gereksinimlerine göre
+// Türkçe karakterleri ASCII karşılıklarına çevir (termal yazıcı uyumluluğu için)
+function turkishToAscii(text: string): string {
+  return text
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "G")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "S")
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "I")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "C")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "O")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "U");
+}
+
+// Yazdırma içeriği oluştur - 80mm termal yazıcı için optimize edilmiş
 export function formatPrintContent(
   type: "order" | "cancel" | "payment",
   items: OrderItem[],
   tableNumber: string | number,
-  _orderNumber?: string, // Kullanılmıyor ama geriye dönük uyumluluk için bırakıldı
+  _orderNumber?: string,
   additionalInfo?: {
     companyName?: string;
     total?: number;
     paymentMethod?: string;
     subtotal?: number;
     discount?: number;
-    paperWidth?: number; // Kağıt genişliği (karakter sayısı)
-    canceledItems?: OrderItem[]; // İptal edilmiş ürünler (tekrar yazdırma için)
-    isPaid?: boolean; // Ödeme alındı mı?
+    paperWidth?: number;
+    canceledItems?: OrderItem[];
+    isPaid?: boolean;
   }
 ): string {
-  // Türkçe karakterleri koru (UTF-8)
-  const companyName = additionalInfo?.companyName;
+  const companyName = additionalInfo?.companyName
+    ? turkishToAscii(additionalInfo.companyName)
+    : undefined;
   const tableNum = String(tableNumber);
   const isPaid = additionalInfo?.isPaid || type === "payment";
 
-  // Kağıt genişliği - 220 karakter (iki katına çıkarıldı)
-  const separatorWidth = 220; // Sabit 220 karakter genişliği (önceden 110 idi)
+  // 56mm termal yazıcı için karakter genişliği
+  // Font A (12x24) ile 56mm kağıt için yaklaşık 30 karakter
+  const paperWidth = 30;
 
   // İçeriği oluştur
   let content = "";
 
-  // ESC/POS komutları
-  const ESC = "\x1B"; // ESC karakteri
-  const boldOn = ESC + "E" + "\x01"; // Bold on
-  const boldOff = ESC + "E" + "\x00"; // Bold off
-  const fontSmall = ESC + "M" + "\x01"; // Font B (küçük font - 9x17)
+  // ESC/POS komutları - RAW veri biçimi için
+  const ESC = String.fromCharCode(0x1b); // ESC karakteri
+  const resetPrinter = ESC + "@"; // ESC @ - Reset printer
+  const fontA = ESC + "M" + String.fromCharCode(0x00); // ESC M 0 - Font A (12x24) - Büyük font
+  const boldOn = ESC + "E" + String.fromCharCode(0x01); // ESC E 1 - Bold on
+  const boldOff = ESC + "E" + String.fromCharCode(0x00); // ESC E 0 - Bold off
+  const leftAlign = ESC + "a" + String.fromCharCode(0x00); // ESC a 0 - Left align
 
-  // Tüm içerik için küçük font kullan
-  content += fontSmall;
+  // Yazıcıyı sıfırla ve Font A'ya ayarla (büyük font)
+  content += resetPrinter;
+  content += fontA;
+  content += leftAlign;
 
-  // 1. Firma Adı (ortalanmış, tek satır, tam genişlik, kalın)
-  const centeredCompanyName =
-    companyName && companyName.length <= separatorWidth
-      ? companyName
-          .padStart(Math.floor((separatorWidth + companyName.length) / 2), " ")
-          .padEnd(separatorWidth, " ")
-      : companyName
-        ? companyName.substring(0, separatorWidth).padEnd(separatorWidth, " ")
-        : "".padEnd(separatorWidth, " ");
-
-  // Firma adını kalın yaz
+  // 1. Firma Adı (sola yaslı, tam genişlik, kalın)
   if (companyName) {
-    content += boldOn + centeredCompanyName + boldOff + "\n";
+    const nameToPrint =
+      companyName.length > paperWidth
+        ? companyName.substring(0, paperWidth)
+        : companyName;
+    content += boldOn;
+    // Satırı tam genişliğe tamamla (sola yaslı)
+    content += nameToPrint.padEnd(paperWidth);
+    content += boldOff;
+    content += "\n";
   }
 
-  // 2. Masa bilgisi/numarası (ortalanmış, tek satır, tam genişlik)
+  // 2. Masa bilgisi (sola yaslı, tam genişlik)
   const tableInfo = `Masa ${tableNum}`;
-  const centeredTableInfo =
-    tableInfo.length <= separatorWidth
-      ? tableInfo
-          .padStart(Math.floor((separatorWidth + tableInfo.length) / 2), " ")
-          .padEnd(separatorWidth, " ")
-      : tableInfo.substring(0, separatorWidth).padEnd(separatorWidth, " ");
-  content += centeredTableInfo + "\n";
-
-  // Çizgi
-  content += "=".repeat(separatorWidth) + "\n";
-
-  // Satırları formatla (tam genişlik kullan, uzun satırları wrap et) - tüm fonksiyon için kullanılacak
-  const formatLine = (line: string): string => {
-    if (line.trim().length === 0) return line;
-
-    // Her zaman tam genişlikte formatla
-    if (line.length <= separatorWidth) {
-      // Tam genişlikte padding ekle (sağa hizalı değil, tam genişlik)
-      return line.padEnd(separatorWidth, " ");
-    }
-
-    // Uzun satırları wrap et
-    const words = line.split(" ");
-    const result: string[] = [];
-    let currentLine = "";
-
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      if (testLine.length <= separatorWidth) {
-        currentLine = testLine;
-      } else {
-        if (currentLine) {
-          // Her satırı tam genişlikte formatla
-          result.push(currentLine.padEnd(separatorWidth, " "));
-        }
-        // Çok uzun kelimeyi parçala
-        if (word.length > separatorWidth) {
-          let remaining = word;
-          while (remaining.length > separatorWidth) {
-            // Her parçayı tam genişlikte formatla
-            result.push(
-              remaining.substring(0, separatorWidth).padEnd(separatorWidth, " ")
-            );
-            remaining = remaining.substring(separatorWidth);
-          }
-          currentLine = remaining;
-        } else {
-          currentLine = word;
-        }
-      }
-    }
-    if (currentLine) {
-      // Son satırı da tam genişlikte formatla
-      result.push(currentLine.padEnd(separatorWidth, " "));
-    }
-    return result.join("\n");
-  };
+  const tableToPrint =
+    tableInfo.length > paperWidth
+      ? tableInfo.substring(0, paperWidth)
+      : tableInfo;
+  // Satırı tam genişliğe tamamla (sola yaslı)
+  content += tableToPrint.padEnd(paperWidth);
+  content += "\n";
 
   // 3. Ürünler listesi - Aynı ürünleri birleştir
-  // Aynı menuId, aynı extras ve aynı notes'a sahip ürünleri birleştir
   const mergedItems = new Map<
     string,
     {
@@ -141,7 +111,6 @@ export function formatPrintContent(
   >();
 
   for (const item of items) {
-    // Birleştirme anahtarı: menuId + extras + notes
     const extrasKey =
       item.selectedExtras && item.selectedExtras.length > 0
         ? JSON.stringify(
@@ -170,63 +139,136 @@ export function formatPrintContent(
 
   // Birleştirilmiş ürünleri yazdır
   for (const { item, totalQuantity, totalSubtotal } of mergedItems.values()) {
-    const itemName = item.menuName;
+    // Ürün adını Türkçe karakterlerden temizle ve büyük harfe çevir
+    const itemName = turkishToAscii(item.menuName).toUpperCase();
     const price = item.menuPrice || 0;
 
-    // Adet x Ürün Adı (birleştirilmiş miktar)
-    const itemLine = `${totalQuantity}x ${itemName}`;
-    // Fiyat satırı (birleştirilmiş toplam)
-    const priceLine = `${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL`;
+    // Ürün bilgisi: "Adetx ÜRÜN ADI"
+    const itemInfo = `${totalQuantity}x ${itemName}`;
 
-    content += formatLine(itemLine) + "\n";
-    content += formatLine(priceLine) + "\n";
+    // Fiyat: "Fiyat TL xAdet = Toplam TL"
+    const priceText = `${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL`;
+
+    // Manuel boşluk hesaplama: Ürün bilgisi + boşluklar + fiyat = paperWidth
+    const itemInfoLen = Math.min(itemInfo.length, paperWidth - 1);
+    const priceTextLen = Math.min(priceText.length, paperWidth - 1);
+    const totalLen = itemInfoLen + priceTextLen;
+
+    let finalLine = "";
+    if (totalLen <= paperWidth) {
+      // Normal durum: boşluk ekle
+      const spaces = paperWidth - totalLen;
+      finalLine =
+        itemInfo.substring(0, itemInfoLen) +
+        " ".repeat(spaces) +
+        priceText.substring(0, priceTextLen);
+    } else {
+      // Uzun durum: ürün bilgisini kısalt
+      const maxItemLen = Math.max(1, paperWidth - priceTextLen - 1);
+      const spaces = paperWidth - maxItemLen - priceTextLen;
+      finalLine =
+        itemInfo.substring(0, maxItemLen) +
+        " ".repeat(spaces) +
+        priceText.substring(0, priceTextLen);
+    }
+
+    // Satırı tam genişliğe tamamla
+    if (finalLine.length < paperWidth) {
+      finalLine = finalLine + " ".repeat(paperWidth - finalLine.length);
+    } else if (finalLine.length > paperWidth) {
+      finalLine = finalLine.substring(0, paperWidth);
+    }
+
+    // Ürün adı (kalın)
+    content += boldOn;
+    content += finalLine;
+    content += boldOff;
+    content += "\n";
 
     // Ekstra malzemeler varsa göster
     if (item.selectedExtras && item.selectedExtras.length > 0) {
       for (const extra of item.selectedExtras) {
-        const extraLine = `+ ${extra.name} (+${extra.price.toFixed(2)} TL)`;
-        content += formatLine(extraLine) + "\n";
+        const extraName = turkishToAscii(extra.name);
+        const extraLine = `  + ${extraName} (+${extra.price.toFixed(2)} TL)`;
+        const extraLineToPrint =
+          extraLine.length > paperWidth
+            ? extraLine.substring(0, paperWidth)
+            : extraLine;
+        content += extraLineToPrint.padEnd(paperWidth);
+        content += "\n";
       }
     }
 
     // Not varsa göster
     if (item.notes && item.notes.trim()) {
-      const noteLine = `Not: ${item.notes}`;
-      content += formatLine(noteLine) + "\n";
+      const noteText = turkishToAscii(item.notes);
+      const noteLine = `  Not: ${noteText}`;
+      const noteLineToPrint =
+        noteLine.length > paperWidth
+          ? noteLine.substring(0, paperWidth)
+          : noteLine;
+      content += noteLineToPrint.padEnd(paperWidth);
+      content += "\n";
     }
   }
 
-  // 4. İptal edilmiş ürünler varsa göster (tekrar yazdırma için)
+  // 4. İptal edilmiş ürünler varsa göster
   if (
     additionalInfo?.canceledItems &&
     additionalInfo.canceledItems.length > 0
   ) {
-    content += "=".repeat(separatorWidth) + "\n";
+    content += "\n";
     const canceledHeader = "IPTAL EDILEN URUNLER";
-    const centeredCanceledHeader = canceledHeader
-      .padStart(Math.floor((separatorWidth + canceledHeader.length) / 2), " ")
-      .padEnd(separatorWidth, " ");
-    content += centeredCanceledHeader + "\n";
-    content += "=".repeat(separatorWidth) + "\n";
+    const headerToPrint =
+      canceledHeader.length > paperWidth
+        ? canceledHeader.substring(0, paperWidth)
+        : canceledHeader;
+    content += headerToPrint.padEnd(paperWidth);
+    content += "\n";
 
     for (const item of additionalInfo.canceledItems) {
-      const itemName = item.menuName;
+      const itemName = turkishToAscii(item.menuName).toUpperCase();
       const quantity = item.quantity;
       const price = item.menuPrice || 0;
       const subtotal = item.subtotal || 0;
 
-      const itemLine = `${quantity}x ${itemName} (IPTAL)`;
-      const priceLine = `${price.toFixed(2)} TL x${quantity} = ${subtotal.toFixed(2)} TL`;
+      const itemInfo = `${quantity}x ${itemName} (IPTAL)`;
+      const priceText = `${price.toFixed(2)} TL x${quantity} = ${subtotal.toFixed(2)} TL`;
 
-      content += formatLine(itemLine) + "\n";
-      content += formatLine(priceLine) + "\n";
+      const itemInfoLen = Math.min(itemInfo.length, paperWidth - 1);
+      const priceTextLen = Math.min(priceText.length, paperWidth - 1);
+      const totalLen = itemInfoLen + priceTextLen;
+
+      let finalLine = "";
+      if (totalLen <= paperWidth) {
+        const spaces = paperWidth - totalLen;
+        finalLine =
+          itemInfo.substring(0, itemInfoLen) +
+          " ".repeat(spaces) +
+          priceText.substring(0, priceTextLen);
+      } else {
+        const maxItemLen = Math.max(1, paperWidth - priceTextLen - 1);
+        const spaces = paperWidth - maxItemLen - priceTextLen;
+        finalLine =
+          itemInfo.substring(0, maxItemLen) +
+          " ".repeat(spaces) +
+          priceText.substring(0, priceTextLen);
+      }
+
+      if (finalLine.length < paperWidth) {
+        finalLine = finalLine + " ".repeat(paperWidth - finalLine.length);
+      } else if (finalLine.length > paperWidth) {
+        finalLine = finalLine.substring(0, paperWidth);
+      }
+
+      content += boldOn;
+      content += finalLine;
+      content += boldOff;
+      content += "\n";
     }
   }
 
-  // 5. Toplam satırı (çizgi öncesi)
-  content += "=".repeat(separatorWidth) + "\n";
-
-  // Toplam tutar (birleştirilmiş ürünlerin toplamı)
+  // 5. Toplam tutar (sola yaslı, tam genişlik)
   const total =
     additionalInfo?.total ||
     Array.from(mergedItems.values()).reduce(
@@ -234,43 +276,55 @@ export function formatPrintContent(
       0
     );
 
-  // Ödeme durumuna göre farklı format
+  content += "\n";
+
   if (isPaid) {
-    // Ödeme alındıysa: "Toplam Tutar: XXX TL - Ödendi"
     const totalLine = `Toplam Tutar: ${total.toFixed(2)} TL - Odendi`;
-    const centeredTotal =
-      totalLine.length <= separatorWidth
-        ? totalLine
-            .padStart(Math.floor((separatorWidth + totalLine.length) / 2), " ")
-            .padEnd(separatorWidth, " ")
-        : totalLine.substring(0, separatorWidth).padEnd(separatorWidth, " ");
-    content += centeredTotal + "\n";
+    const totalLineToPrint =
+      totalLine.length > paperWidth
+        ? totalLine.substring(0, paperWidth)
+        : totalLine;
+    content += boldOn;
+    content += totalLineToPrint.padEnd(paperWidth);
+    content += boldOff;
+    content += "\n";
   } else {
-    // Sadece yazdırıldıysa: "Toplam Fiyat: XXX TL"
     const totalLine = `Toplam Fiyat: ${total.toFixed(2)} TL`;
-    const centeredTotal =
-      totalLine.length <= separatorWidth
-        ? totalLine
-            .padStart(Math.floor((separatorWidth + totalLine.length) / 2), " ")
-            .padEnd(separatorWidth, " ")
-        : totalLine.substring(0, separatorWidth).padEnd(separatorWidth, " ");
-    content += centeredTotal + "\n";
+    const totalLineToPrint =
+      totalLine.length > paperWidth
+        ? totalLine.substring(0, paperWidth)
+        : totalLine;
+    content += boldOn;
+    content += totalLineToPrint.padEnd(paperWidth);
+    content += boldOff;
+    content += "\n";
   }
 
   // Ödeme yöntemi varsa göster
   if (type === "payment" && additionalInfo?.paymentMethod) {
-    const paymentLine = `Odeme Yontemi: ${additionalInfo.paymentMethod}`;
-    content += paymentLine.padEnd(separatorWidth, " ") + "\n";
+    const paymentMethodText = turkishToAscii(additionalInfo.paymentMethod);
+    const paymentLine = `Odeme Yontemi: ${paymentMethodText}`;
+    const paymentLineToPrint =
+      paymentLine.length > paperWidth
+        ? paymentLine.substring(0, paperWidth)
+        : paymentLine;
+    content += paymentLineToPrint.padEnd(paperWidth);
+    content += "\n";
   }
 
   // İndirim varsa göster
   if (additionalInfo?.discount && additionalInfo.discount > 0) {
     const discountLine = `Iskonto: -${additionalInfo.discount.toFixed(2)} TL`;
-    content += discountLine.padEnd(separatorWidth, " ") + "\n";
+    const discountLineToPrint =
+      discountLine.length > paperWidth
+        ? discountLine.substring(0, paperWidth)
+        : discountLine;
+    content += discountLineToPrint.padEnd(paperWidth);
+    content += "\n";
   }
 
-  // Boş satırlar (yazıcı için)
-  content += "\n\n";
+  // Boş satır (yazıcı için)
+  content += "\n";
 
   return content;
 }
@@ -280,52 +334,45 @@ export function getExamplePrintOutput(
   companyName: string = "Firma Adi",
   tableNumber: string = "5"
 ): string {
-  const maxPaperWidth = 220; // Varsayılan kağıt genişliği (iki katına çıkarıldı)
-  const separatorWidth = maxPaperWidth;
+  const paperWidth = 30; // 56mm kağıt için Font A
 
   let content = "";
 
-  // Firma Adı (ortalanmış)
-  const centeredCompanyName = companyName
-    .padStart(Math.floor((separatorWidth + companyName.length) / 2))
-    .padEnd(separatorWidth);
-  content += centeredCompanyName + "\n";
+  // Firma Adı (sola yaslı)
+  const companyNameClean = turkishToAscii(companyName);
+  content += companyNameClean + "\n";
 
-  // Masa bilgisi (ortalanmış)
+  // Masa bilgisi (sola yaslı)
   const tableInfo = `Masa ${tableNumber}`;
-  const centeredTableInfo = tableInfo
-    .padStart(Math.floor((separatorWidth + tableInfo.length) / 2))
-    .padEnd(separatorWidth);
-  content += centeredTableInfo + "\n";
-
-  // Çizgi
-  content += "=".repeat(separatorWidth) + "\n";
-  content += "\n";
+  content += tableInfo + "\n";
 
   // Örnek ürünler
   const exampleItems = [
-    { name: "1x Şirin Kahvaltı", price: "1050.00 TL x1 = 1050.00 TL" },
-    { name: "2x Çay", price: "10.00 TL x2 = 20.00 TL" },
-    { name: "1x Kahve", price: "15.00 TL x1 = 15.00 TL" },
+    { name: "SIRIN KAHVALTI", quantity: 1, price: 1050.0, subtotal: 1050.0 },
+    { name: "CAY", quantity: 2, price: 10.0, subtotal: 20.0 },
+    { name: "KAHVE", quantity: 1, price: 15.0, subtotal: 15.0 },
   ];
 
   for (const item of exampleItems) {
-    content += item.name.padEnd(separatorWidth) + "\n";
-    content += item.price.padEnd(separatorWidth) + "\n";
-    content += "\n";
+    // Ürün bilgisi ve fiyatı aynı satırda, manuel boşluk hesaplama ile
+    const itemInfo = `${item.quantity}x ${item.name}`;
+    const priceText = `${item.price.toFixed(2)} TL x${item.quantity} = ${item.subtotal.toFixed(2)} TL`;
+    const totalLength = itemInfo.length + priceText.length;
+    const spacesNeeded = Math.max(0, paperWidth - totalLength);
+
+    const line = itemInfo + " ".repeat(spacesNeeded) + priceText;
+    const finalLine =
+      line.length > paperWidth ? line.substring(0, paperWidth) : line;
+    content += finalLine.padEnd(paperWidth) + "\n";
   }
 
   // Toplam
-  content += "=".repeat(separatorWidth) + "\n";
   content += "\n";
   const totalLine = "Toplam Fiyat: 1085.00 TL";
-  const centeredTotal = totalLine
-    .padStart(Math.floor((separatorWidth + totalLine.length) / 2))
-    .padEnd(separatorWidth);
-  content += centeredTotal + "\n";
+  content += totalLine + "\n";
 
   // Boş satırlar
-  content += "\n\n\n";
+  content += "\n\n";
 
   return content;
 }

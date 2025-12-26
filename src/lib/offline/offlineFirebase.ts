@@ -173,11 +173,11 @@ export async function addPayment(
  */
 export async function updateOrderStatus(
   orderId: string,
-  status: "active" | "completed" | "cancelled" | "closed"
+  status: "active" | "closed"
 ): Promise<void> {
   if (isOnline()) {
     try {
-      await firebaseUpdateOrderStatus(orderId, status);
+      await firebaseUpdateOrderStatus(orderId, status as any);
       const order = await firebaseGetOrder(orderId);
       if (order) {
         updateOrderOffline(order);

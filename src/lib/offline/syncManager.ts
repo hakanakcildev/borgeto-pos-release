@@ -215,8 +215,8 @@ async function refreshOfflineData(
 ): Promise<void> {
   try {
     const [orders, tables] = await Promise.all([
-      getOrdersByCompany(companyId, { branchId }),
-      getTablesByCompany(companyId, branchId),
+      firebaseGetOrdersByCompany(companyId, { branchId }),
+      firebaseGetTablesByCompany(companyId, branchId),
     ]);
 
     saveOrdersOffline(orders);

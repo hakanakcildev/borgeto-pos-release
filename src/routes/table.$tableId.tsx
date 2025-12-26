@@ -1822,6 +1822,7 @@ function TableDetailContent() {
 
                 // Her yazıcıya bu kategorideki TÜM ürünleri tek adisyonda yazdır
                 for (const printer of categoryPrinters) {
+                  // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                   const printContent = formatPrintContent(
                     "order",
                     categoryItems, // Tüm ürünler tek adisyonda
@@ -2782,72 +2783,9 @@ function TableDetailContent() {
                 ? "Yemek Kartı"
                 : paymentMethodToUse;
 
-        // Adisyon ve masa geçmişi kayıtlarını paralel olarak arka planda yap
+        // Masa geçmişine kaydetme işlemini arka planda başlat
+        // NOT: Adisyon sadece masa tamamen kapatıldığında oluşturulacak (order kapatılırken)
         if (effectiveCompanyId) {
-          // Adisyon oluşturma işlemini arka planda başlat
-          (async () => {
-            try {
-              // Ödenen ürünleri belirle
-              let billItems: OrderItem[] = [];
-
-              if (isPartialPayment && paidItems) {
-                // Kısmi ödeme: Sadece ödenen ürünleri al
-                billItems = paidItems.map((paidItem) => {
-                  const orderItem = order.items.find(
-                    (item) => item.menuId === paidItem.menuId
-                  );
-                  if (orderItem) {
-                    return {
-                      ...orderItem,
-                      quantity: paidItem.quantity,
-                      subtotal: paidItem.subtotal,
-                    };
-                  }
-                  return {
-                    menuId: paidItem.menuId,
-                    menuName: paidItem.menuName,
-                    menuPrice: paidItem.subtotal / paidItem.quantity,
-                    quantity: paidItem.quantity,
-                    subtotal: paidItem.subtotal,
-                    addedAt: new Date(),
-                  };
-                });
-              } else {
-                // Tam ödeme: Tüm ürünleri al
-                billItems = [...order.items];
-              }
-
-              // Adisyon toplamlarını hesapla
-              // Orijinal fiyatları kullan (indirim öncesi)
-              const billSubtotal = billItems.reduce(
-                (sum, item) => sum + item.menuPrice * item.quantity,
-                0
-              );
-              const billDiscount = isPartialPayment ? 0 : order.discount || 0;
-              const billTotal = Math.max(0, billSubtotal - billDiscount);
-
-              // Adisyon oluştur
-              await addBill({
-                companyId: effectiveCompanyId,
-                branchId: effectiveBranchId || undefined,
-                tableId: currentTable.id!,
-                tableNumber: currentTable.tableNumber,
-                orderId: order.id!,
-                items: billItems,
-                subtotal: billSubtotal,
-                discount: billDiscount > 0 ? billDiscount : undefined,
-                total: billTotal,
-                payments: [payment],
-                customerName: order.customerName,
-                customerPhone: order.customerPhone,
-                notes: order.notes,
-                createdBy: userData?.id || currentUser?.uid || "",
-              });
-            } catch {
-              // Error saving bill
-            }
-          })();
-
           // Masa geçmişine kaydetme işlemini arka planda başlat
           (async () => {
             try {
@@ -2987,6 +2925,7 @@ function TableDetailContent() {
               }
 
               if (paidItemsForPrint.length > 0) {
+                // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                 const printContent = formatPrintContent(
                   "payment",
                   paidItemsForPrint,
@@ -2999,7 +2938,6 @@ function TableDetailContent() {
                     subtotal: printData.subtotal,
                     companyName: companyData?.name || "",
                     isPaid: true, // Ödeme alındı
-                    paperWidth: defaultPrinter?.options?.paperWidth || 110,
                   }
                 );
                 await printToPrinter(
@@ -3498,6 +3436,7 @@ function TableDetailContent() {
 
                 // Her yazıcıya yazdır
                 for (const printer of categoryPrinters) {
+                  // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                   const printContent = formatPrintContent(
                     "cancel",
                     [canceledItem],
@@ -3607,6 +3546,7 @@ function TableDetailContent() {
 
             // Her yazıcıya yazdır
             for (const printer of categoryPrinters) {
+              // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
               const printContent = formatPrintContent(
                 "cancel",
                 [canceledItem],
@@ -3614,7 +3554,6 @@ function TableDetailContent() {
                 order.orderNumber,
                 {
                   companyName: companyData?.name || "",
-                  paperWidth: printer.paperWidth || 48,
                 }
               );
               await printToPrinter(printer.name, printContent, "cancel");
@@ -3830,6 +3769,7 @@ function TableDetailContent() {
                   );
 
                   for (const printer of categoryPrinters) {
+                    // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                     const printContent = formatPrintContent(
                       "cancel",
                       [canceledItem],
@@ -3837,7 +3777,6 @@ function TableDetailContent() {
                       orderToUse.orderNumber,
                       {
                         companyName: companyData?.name || "",
-                        paperWidth: printer.paperWidth || 48,
                       }
                     );
                     await printToPrinter(printer.name, printContent, "cancel");
@@ -5308,6 +5247,7 @@ function TableDetailContent() {
                       }
 
                       // Yazdırma içeriğini oluştur
+                      // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                       const printContent = formatPrintContent(
                         "order",
                         itemsToPrint,
@@ -6901,6 +6841,7 @@ function TableDetailContent() {
                               );
 
                               for (const printer of categoryPrinters) {
+                                // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
                                 const printContent = formatPrintContent(
                                   "cancel",
                                   [canceledItem],
@@ -6908,7 +6849,6 @@ function TableDetailContent() {
                                   order.orderNumber,
                                   {
                                     companyName: companyData?.name || "",
-                                    paperWidth: printer.paperWidth || 48,
                                   }
                                 );
                                 await printToPrinter(
