@@ -6976,6 +6976,24 @@ function TableDetailContent() {
             })()}
         </div>
       </div>
+
+      {/* Numerik Tuşlar - Sol sidebar'ın dışında, sağında */}
+      <div className="hidden lg:flex lg:flex-none lg:w-16 lg:h-full flex-col gap-0.5 sm:gap-1 p-1 sm:p-1.5 shrink-0 overflow-hidden">
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+          <button
+            key={num}
+            onClick={() => {
+              // Numerik tuş fonksiyonu - şimdilik boş, gerekirse eklenebilir
+              console.log("Numerik tuş:", num);
+            }}
+            className="flex-1 min-h-0 aspect-square w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded text-xs sm:text-sm md:text-base lg:text-lg flex items-center justify-center transition-colors active:scale-95"
+            style={{ aspectRatio: "1 / 1" }}
+          >
+            {num}
+          </button>
+        ))}
+      </div>
+
       {/* Main Content - Products */}
       <div className="flex-1 flex flex-col">
         {/* Categories - Mobile (Horizontal Scroll) */}
@@ -7017,7 +7035,7 @@ function TableDetailContent() {
                 return (
                   <div
                     key={menu.id}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer"
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer flex flex-col items-center justify-center aspect-square p-1 sm:p-1.5 md:p-2"
                     onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
                     onMouseDown={() =>
                       !isRefreshingOrder && handleLongPressStart(menu)
@@ -7034,25 +7052,12 @@ function TableDetailContent() {
                       opacity: isRefreshingOrder ? 0.5 : 1,
                     }}
                   >
-                    {menu.image && (
-                      <div className="aspect-square overflow-hidden">
-                        <img
-                          src={menu.image}
-                          alt={menu.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="p-2">
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1 text-xs sm:text-sm line-clamp-2">
-                        {menu.name}
-                      </h3>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400">
-                          ₺{menu.price.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1 sm:mb-1.5 text-[10px] sm:text-xs md:text-sm text-center line-clamp-2 leading-tight">
+                      {menu.name}
+                    </h3>
+                    <span className="text-xs sm:text-sm md:text-base font-bold text-blue-600 dark:text-blue-400">
+                      ₺{menu.price.toFixed(2)}
+                    </span>
                   </div>
                 );
               })}
@@ -9225,11 +9230,11 @@ function TableDetailContent() {
         className="hidden lg:flex lg:w-64 flex-col h-full overflow-hidden backdrop-blur-sm"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
       >
-        <div className="flex-1 overflow-y-auto p-3">
-          <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden p-3">
+          <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide shrink-0">
             Kategoriler
           </h2>
-          <div className="space-y-1.5">
+          <div className="flex-1 flex flex-col gap-0.5 sm:gap-1 min-h-0 overflow-hidden">
             {categories.length === 0 ? (
               <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">
                 Kategori bulunamadı
@@ -9244,16 +9249,18 @@ function TableDetailContent() {
                       setSelectedCategoryId(category.id!);
                       setSelectedCategoryName(category.name);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
+                    className={`w-full flex-1 min-h-0 text-left px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all duration-200 text-[10px] sm:text-xs md:text-sm flex flex-col items-start justify-center ${
                       isSelected
                         ? "bg-blue-600 dark:bg-blue-500 text-white shadow-md"
                         : "bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     }`}
                   >
-                    <div className="font-medium">{category.name}</div>
+                    <div className="font-medium truncate w-full">
+                      {category.name}
+                    </div>
                     {category.description && (
                       <div
-                        className={`text-xs mt-1 ${
+                        className={`text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1 truncate w-full ${
                           isSelected
                             ? "text-blue-100"
                             : "text-gray-500 dark:text-gray-400"

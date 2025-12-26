@@ -970,7 +970,7 @@ function StatisticsContent() {
                       <span className="text-[10px] text-gray-500 dark:text-gray-400">•</span>
                       <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                         ₺{product.revenue.toFixed(2)}
-                      </p>
+                    </p>
                     </div>
                   </div>
                 </div>
