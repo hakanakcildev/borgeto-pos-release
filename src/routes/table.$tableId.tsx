@@ -161,6 +161,9 @@ function TableDetailContent() {
   const [loading, setLoading] = useState(true);
   const [, setNotes] = useState("");
   const [showCart, setShowCart] = useState(false);
+  const [selectedNumericKey, setSelectedNumericKey] = useState<number | null>(
+    null
+  );
 
   // Miktar girme modalı için state'ler
   const [, setShowQuantityModal] = useState(false);
@@ -1074,12 +1077,21 @@ function TableDetailContent() {
 
   // Ürün ekleme butonuna tıklandığında ekstra malzeme kontrolü yap
   const handleAddToCart = useCallback(
-    (menu: Menu) => {
+    (menu: Menu, quantity?: number) => {
       // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
       if (isRefreshingOrder) return;
 
-      // Eğer üründe ekstra malzeme varsa modal göster
-      if (menu.extras && menu.extras.length > 0) {
+      // Eğer quantity belirtilmemişse, seçili numerik tuşu kullan
+      const finalQuantity =
+        quantity ??
+        (selectedNumericKey !== null
+          ? selectedNumericKey === 0
+            ? 10
+            : selectedNumericKey
+          : 1);
+
+      // Eğer üründe ekstra malzeme varsa modal göster (sadece quantity 1 ise)
+      if (finalQuantity === 1 && menu.extras && menu.extras.length > 0) {
         setSelectedMenuForExtra(menu);
         // Zorunlu ekstraları otomatik seç
         const requiredExtras = new Set(
@@ -1090,26 +1102,28 @@ function TableDetailContent() {
         setSelectedExtras(requiredExtras);
         setShowExtraModal(true);
       } else {
-        // Ekstra malzeme yoksa direkt sepete ekle
-        setCart((prev) => {
-          const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}`;
-          return [
-            ...prev,
-            {
-              cartItemId,
-              menuId: menu.id!,
-              menuName: menu.name,
-              menuPrice: menu.price,
-              quantity: 1,
-              subtotal: menu.price,
-              addedAt: new Date(),
-            },
-          ];
+        // Ekstra malzeme yoksa veya quantity > 1 ise direkt sepete ekle
+        const itemsToAdd = Array.from({ length: finalQuantity }, (_, index) => {
+          const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}-${index}`;
+          return {
+            cartItemId,
+            menuId: menu.id!,
+            menuName: menu.name,
+            menuPrice: menu.price,
+            quantity: 1,
+            subtotal: menu.price,
+            addedAt: new Date(),
+          };
         });
+
+        setCart((prev) => [...prev, ...itemsToAdd]);
         setShowCart(true);
       }
+
+      // Ürün eklendikten sonra numerik tuş seçimini temizle
+      setSelectedNumericKey(null);
     },
-    [isRefreshingOrder]
+    [isRefreshingOrder, selectedNumericKey]
   );
 
   // Ekstra malzemeleri seçip sepete ekle (kullanılmıyor - handleAddToCart kullanılıyor)
@@ -1293,44 +1307,47 @@ function TableDetailContent() {
 
   // Cart içindeki ürünler için miktar artırma
   const increaseCartItemQuantity = useCallback((menuId: string) => {
-    setCart((prev) =>
-      prev.map((item) => {
-        if (item.menuId === menuId) {
-          const newQuantity = item.quantity + 1;
-          return {
-            ...item,
-            quantity: newQuantity,
-            subtotal: newQuantity * item.menuPrice,
-          };
-        }
-        return item;
-      })
-    );
+    setCart((prev) => {
+      // İlk bulunan item'ın index'ini bul
+      const index = prev.findIndex((item) => item.menuId === menuId);
+      if (index === -1) return prev;
+
+      // Sadece ilk bulunan item'ın quantity'sini artır
+      const updated = [...prev];
+      const item = updated[index];
+      updated[index] = {
+        ...item,
+        quantity: item.quantity + 1,
+        subtotal: (item.quantity + 1) * item.menuPrice,
+      };
+      return updated;
+    });
   }, []);
 
   // Cart içindeki ürünler için miktar azaltma
   const decreaseCartItemQuantity = useCallback((menuId: string) => {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.menuId === menuId) {
-            const newQuantity = Math.max(1, item.quantity - 1);
-            return {
-              ...item,
-              quantity: newQuantity,
-              subtotal: newQuantity * item.menuPrice,
-            };
-          }
-          return item;
-        })
-        .filter((item) => {
-          // Miktarı 0 olan ürünleri kaldır
-          if (item.menuId === menuId) {
-            return item.quantity > 0;
-          }
-          return true;
-        })
-    );
+    setCart((prev) => {
+      // İlk bulunan item'ın index'ini bul
+      const index = prev.findIndex((item) => item.menuId === menuId);
+      if (index === -1) return prev;
+
+      const item = prev[index];
+      const newQuantity = item.quantity - 1;
+
+      // Eğer miktar 0 veya daha az olursa, item'ı kaldır
+      if (newQuantity <= 0) {
+        return prev.filter((_, i) => i !== index);
+      }
+
+      // Sadece ilk bulunan item'ın quantity'sini azalt
+      const updated = [...prev];
+      updated[index] = {
+        ...item,
+        quantity: newQuantity,
+        subtotal: newQuantity * item.menuPrice,
+      };
+      return updated;
+    });
   }, []);
 
   // Cart içindeki ürünleri silme
@@ -6979,19 +6996,30 @@ function TableDetailContent() {
 
       {/* Numerik Tuşlar - Sol sidebar'ın dışında, sağında */}
       <div className="hidden lg:flex lg:flex-none lg:w-16 lg:h-full flex-col gap-0.5 sm:gap-1 p-1 sm:p-1.5 shrink-0 overflow-hidden">
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-          <button
-            key={num}
-            onClick={() => {
-              // Numerik tuş fonksiyonu - şimdilik boş, gerekirse eklenebilir
-              console.log("Numerik tuş:", num);
-            }}
-            className="flex-1 min-h-0 aspect-square w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded text-xs sm:text-sm md:text-base lg:text-lg flex items-center justify-center transition-colors active:scale-95"
-            style={{ aspectRatio: "1 / 1" }}
-          >
-            {num}
-          </button>
-        ))}
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+          const isSelected = selectedNumericKey === num;
+          return (
+            <button
+              key={num}
+              onClick={() => {
+                // Numerik tuşu seç/seçimi kaldır
+                if (isSelected) {
+                  setSelectedNumericKey(null);
+                } else {
+                  setSelectedNumericKey(num);
+                }
+              }}
+              className={`flex-1 min-h-0 aspect-square w-full font-bold rounded text-xs sm:text-sm md:text-base lg:text-lg flex items-center justify-center transition-colors active:scale-95 ${
+                isSelected
+                  ? "bg-blue-600 dark:bg-blue-500 text-white shadow-lg"
+                  : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
+              }`}
+              style={{ aspectRatio: "1 / 1" }}
+            >
+              {num}
+            </button>
+          );
+        })}
       </div>
 
       {/* Main Content - Products */}
