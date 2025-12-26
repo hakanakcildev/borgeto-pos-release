@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import {
   Settings as SettingsIcon,
   RefreshCw,
@@ -282,6 +283,8 @@ function SettingsContent({
   };
 
   const [localIP, setLocalIP] = useState<string | null>(null);
+  const { isOnline } = useNetworkStatus();
+  const [serverStatus, setServerStatus] = useState<"connected" | "disconnected">("connected");
 
   useEffect(() => {
     const loadIP = async () => {
@@ -290,6 +293,11 @@ function SettingsContent({
       setLocalIP(ip);
     };
     loadIP();
+  }, []);
+
+  // Server durumunu kontrol et (basit bir kontrol için)
+  useEffect(() => {
+    setServerStatus("connected");
   }, []);
 
   return (
@@ -315,13 +323,37 @@ function SettingsContent({
         </h2>
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
                 Bağlı WiFi IP Adresi
               </p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {localIP || "Yükleniyor..."}
-              </p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {localIP || "Yükleniyor..."}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-sm font-medium px-2 py-1 rounded ${
+                      isOnline
+                        ? "text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30"
+                        : "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30"
+                    }`}
+                  >
+                    {isOnline ? "Internet BAĞLI" : "Internet BAĞLI DEĞİL"}
+                  </span>
+                  <span
+                    className={`text-sm font-medium px-2 py-1 rounded ${
+                      serverStatus === "connected"
+                        ? "text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30"
+                        : "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30"
+                    }`}
+                  >
+                    {serverStatus === "connected"
+                      ? "Server BAĞLI"
+                      : "Server BAĞLI DEĞİL"}
+                  </span>
+                </div>
+              </div>
             </div>
             <button
               onClick={async () => {
@@ -329,7 +361,7 @@ function SettingsContent({
                 const ip = await getLocalIP();
                 setLocalIP(ip);
               }}
-              className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+              className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors ml-2 shrink-0"
             >
               <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </button>

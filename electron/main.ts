@@ -426,16 +426,145 @@ function registerIpcHandlers() {
         options: Record<string, any>;
       }> = [];
 
-      // Windows için PowerShell komutu ile yazıcıları al (kağıt boyutu bilgisi ile)
+      // Windows için kapsamlı yazıcı tarama (USB, WiFi, Bluetooth, Network)
       if (process.platform === "win32") {
         try {
-          // WMI kullanarak yazıcı bilgilerini al (kağıt boyutu dahil)
-          const { stdout } = await execAsync(
-            'powershell -Command "Get-WmiObject -Class Win32_Printer | Select-Object Name, PrinterStatus, Default, PaperSizesSupported, MaxWidth, MaxHeight | ConvertTo-Json"'
-          );
+          // PowerShell script'ini geçici dosyaya yaz ve çalıştır (escape sorunlarını önlemek için)
+          const powershellScript = `
+$printers = @()
+try {
+  # WMI ile tüm yazıcıları al (detaylı bilgi ile)
+  $wmiPrinters = Get-WmiObject -Class Win32_Printer -ErrorAction SilentlyContinue | Select-Object Name, PrinterStatus, Default, PortName, Local, Network, Shared, DeviceID, Location, Comment, WorkOffline
+  
+  foreach ($printer in $wmiPrinters) {
+    # Bağlantı türünü belirle
+    $connectionType = "unknown"
+    $portName = if ($printer.PortName) { $printer.PortName.ToLower() } else { "" }
+    
+    if ($portName -like "*usb*" -or $portName -like "*dot4*" -or $portName -like "*wsd*" -or $portName.StartsWith("USB")) {
+      $connectionType = "usb"
+    } elseif ($portName -like "*tcp*" -or $portName -like "*ip*" -or $portName -like "*lpd*" -or $portName -like "*9100*" -or $portName -like "*snmp*" -or $portName -like "*http*" -or $portName -like "*https*") {
+      $connectionType = "network"
+    } elseif ($portName -like "*bth*" -or $portName -like "*bluetooth*") {
+      $connectionType = "bluetooth"
+    } elseif ($portName -like "*com*" -or $portName -like "*lpt*" -or $portName -like "*serial*") {
+      $connectionType = "serial"
+    } elseif ($printer.Network -eq $true -or $printer.Shared -eq $true) {
+      $connectionType = "network"
+    } elseif ($printer.Local -eq $true -and -not $portName -like "*tcp*") {
+      $connectionType = "usb"
+    }
+    
+    # Kağıt boyutu bilgilerini al
+    $maxWidth = $null
+    $maxHeight = $null
+    try {
+      $printerNameEscaped = $printer.Name -replace "'", "''"
+      $printerConfig = Get-WmiObject -Class Win32_PrinterConfiguration -Filter "Name='$printerNameEscaped'" -ErrorAction SilentlyContinue
+      if ($printerConfig) {
+        $maxWidth = $printerConfig.MaxExtentX
+        $maxHeight = $printerConfig.MaxExtentY
+      }
+    } catch {}
+    
+    $printers += @{
+      Name = $printer.Name
+      PrinterStatus = $printer.PrinterStatus
+      Default = $printer.Default
+      PortName = $printer.PortName
+      ConnectionType = $connectionType
+      Network = $printer.Network
+      Local = $printer.Local
+      Shared = $printer.Shared
+      Location = $printer.Location
+      Comment = $printer.Comment
+      DeviceID = $printer.DeviceID
+      WorkOffline = $printer.WorkOffline
+      MaxWidth = $maxWidth
+      MaxHeight = $maxHeight
+    }
+  }
+  
+  # Alternatif: PowerShell Get-Printer cmdlet ile (daha modern, bazı yazıcıları daha iyi bulur)
+  try {
+    $psPrinters = Get-Printer -ErrorAction SilentlyContinue | Select-Object Name, PrinterStatus, Type, PortName, Shared, Default
+    foreach ($printer in $psPrinters) {
+      # Eğer WMI'de yoksa ekle
+      $exists = $printers | Where-Object { $_.Name -eq $printer.Name }
+      if (-not $exists) {
+        $connectionType = "unknown"
+        $portName = if ($printer.PortName) { $printer.PortName.ToLower() } else { "" }
+        
+        if ($portName -like "*usb*" -or $portName -like "*dot4*" -or $portName -like "*wsd*") {
+          $connectionType = "usb"
+        } elseif ($portName -like "*tcp*" -or $portName -like "*ip*" -or $portName -like "*lpd*" -or $portName -like "*9100*") {
+          $connectionType = "network"
+        } elseif ($portName -like "*bth*" -or $portName -like "*bluetooth*") {
+          $connectionType = "bluetooth"
+        } elseif ($printer.Type -like "*Network*" -or $printer.Shared -eq $true) {
+          $connectionType = "network"
+        } elseif ($printer.Type -like "*Local*") {
+          $connectionType = "usb"
+        }
+        
+        $printers += @{
+          Name = $printer.Name
+          PrinterStatus = if ($printer.PrinterStatus -eq "Idle") { 3 } elseif ($printer.PrinterStatus -eq "Printing") { 4 } else { 0 }
+          Default = $printer.Default
+          PortName = $printer.PortName
+          ConnectionType = $connectionType
+          Network = $printer.Shared -eq $true
+          Local = $printer.Shared -eq $false
+          Shared = $printer.Shared
+          Location = ""
+          Comment = ""
+          DeviceID = $printer.Name
+          WorkOffline = $false
+          MaxWidth = $null
+          MaxHeight = $null
+        }
+      }
+    }
+  } catch {}
+  
+  # Network yazıcıları için ekstra tarama (WSD, Bonjour, vs.)
+  try {
+    $networkPrinters = Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*TCP*" -or $_.Name -like "*WSD*" -or $_.Name -like "*IP*" } | Select-Object Name, Description
+    foreach ($port in $networkPrinters) {
+      # Port'a bağlı yazıcıları bul
+      $portPrinters = $printers | Where-Object { $_.PortName -eq $port.Name }
+      foreach ($p in $portPrinters) {
+        if ($p.ConnectionType -eq "unknown" -or $p.ConnectionType -eq "usb") {
+          $p.ConnectionType = "network"
+        }
+      }
+    }
+  } catch {}
+  
+} catch {
+  Write-Error $_.Exception.Message
+}
 
-          const printers = JSON.parse(stdout);
-          const printerArray = Array.isArray(printers) ? printers : [printers];
+$printers | ConvertTo-Json -Depth 10
+          `.trim();
+
+          // Script'i geçici dosyaya yaz
+          const scriptPath = join(tmpdir(), `get-printers-${Date.now()}.ps1`);
+          writeFileSync(scriptPath, powershellScript, "utf8");
+
+            const { stdout } = await execAsync(
+              `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
+            );
+
+            // Geçici dosyayı temizle
+            try {
+              unlinkSync(scriptPath);
+            } catch (e) {
+              // Dosya silme hatası - önemli değil
+            }
+
+            const printers = JSON.parse(stdout);
+            const printerArray = Array.isArray(printers) ? printers : [printers];
 
           printerArray.forEach((printer: any, index: number) => {
             if (printer && printer.Name) {
@@ -443,54 +572,88 @@ function registerIpcHandlers() {
               let paperWidth = 56; // Varsayılan: 80mm termal yazıcı (56 karakter - küçük font)
               let paperType = "80mm"; // Varsayılan
 
-              // MaxWidth bilgisi varsa kullan (mikron cinsinden)
+              // MaxWidth bilgisi varsa kullan (mikron veya pixel cinsinden olabilir)
               if (printer.MaxWidth) {
-                const widthMM = printer.MaxWidth / 1000; // Mikron'dan mm'ye çevir
+                let widthMM = printer.MaxWidth / 1000; // Mikron'dan mm'ye çevir (eğer mikron ise)
+                // Eğer çok büyükse (pixel olabilir), farklı hesaplama yap
+                if (widthMM > 1000) {
+                  widthMM = printer.MaxWidth / 100; // Pixel olabilir
+                }
                 if (widthMM >= 75 && widthMM <= 85) {
-                  // 80mm termal yazıcı (küçük font ile 56 karakter)
                   paperWidth = 56;
                   paperType = "80mm";
                 } else if (widthMM >= 55 && widthMM <= 62) {
-                  // 58mm termal yazıcı (küçük font ile 40 karakter)
                   paperWidth = 40;
                   paperType = "58mm";
                 } else if (widthMM >= 100 && widthMM <= 110) {
-                  // 110mm termal yazıcı (küçük font ile 80 karakter)
                   paperWidth = 80;
                   paperType = "110mm";
                 } else {
-                  // Diğer boyutlar için hesapla (1mm ≈ 0.7 karakter - küçük font)
                   paperWidth = Math.floor(widthMM * 0.7);
                   paperType = `${Math.round(widthMM)}mm`;
                 }
               }
 
+              // Bağlantı türü açıklaması
+              let connectionDescription = "";
+              if (printer.ConnectionType === "usb") {
+                connectionDescription = "USB Bağlantı";
+              } else if (printer.ConnectionType === "network") {
+                connectionDescription = "WiFi/Ağ Bağlantı";
+              } else if (printer.ConnectionType === "bluetooth") {
+                connectionDescription = "Bluetooth Bağlantı";
+              } else if (printer.ConnectionType === "serial") {
+                connectionDescription = "Seri Port Bağlantı";
+              } else {
+                connectionDescription = printer.PortName || "Bilinmeyen Bağlantı";
+              }
+
+              // Location veya Comment bilgisi varsa description'a ekle
+              const locationInfo = printer.Location ? ` [${printer.Location}]` : "";
+              const commentInfo = printer.Comment ? ` - ${printer.Comment}` : "";
+              const description = `${connectionDescription}${locationInfo}${commentInfo}`;
+
               formattedPrinters.push({
-                id: `system_${printer.Name}_${index}`,
+                id: `system_${printer.Name.replace(/[^a-zA-Z0-9]/g, "_")}_${index}`,
                 name: printer.Name,
-                description: printer.PrinterStatus || "",
+                description: description,
                 status:
-                  printer.PrinterStatus === 3
+                  printer.PrinterStatus === 3 || printer.PrinterStatus === "Idle"
                     ? 0
-                    : printer.PrinterStatus === 4
+                    : printer.PrinterStatus === 4 || printer.PrinterStatus === "Printing"
                       ? 1
-                      : 2, // 3=Idle, 4=Printing
+                      : printer.WorkOffline === true
+                        ? 2
+                        : 0,
                 isDefault: printer.Default === true,
                 options: {
                   paperWidth: paperWidth,
                   paperType: paperType,
                   maxWidth: printer.MaxWidth,
                   maxHeight: printer.MaxHeight,
+                  connectionType: printer.ConnectionType || "unknown",
+                  portName: printer.PortName || "",
                 },
               });
             }
           });
+          } catch (execError) {
+            // Geçici dosyayı temizle (hata durumunda da)
+            try {
+              if (existsSync(scriptPath)) {
+                unlinkSync(scriptPath);
+              }
+            } catch (e) {
+              // Dosya silme hatası - önemli değil
+            }
+            throw execError;
+          }
         } catch (error) {
           console.error("PowerShell command error:", error);
           // Fallback: Basit Get-Printer komutu
           try {
             const { stdout } = await execAsync(
-              'powershell -Command "Get-Printer | Select-Object Name, PrinterStatus, Default | ConvertTo-Json"'
+              'powershell -Command "Get-Printer | Select-Object Name, PrinterStatus, Default, PortName | ConvertTo-Json"'
             );
 
             const printers = JSON.parse(stdout);
@@ -500,10 +663,21 @@ function registerIpcHandlers() {
 
             printerArray.forEach((printer: any, index: number) => {
               if (printer && printer.Name) {
+                // Bağlantı türünü port name'den tespit et
+                const portName = (printer.PortName || "").toLowerCase();
+                let connectionType = "unknown";
+                if (portName.includes("usb") || portName.includes("dot4")) {
+                  connectionType = "usb";
+                } else if (portName.includes("tcp") || portName.includes("ip") || portName.includes("9100")) {
+                  connectionType = "network";
+                } else if (portName.includes("bth") || portName.includes("bluetooth")) {
+                  connectionType = "bluetooth";
+                }
+
                 formattedPrinters.push({
-                  id: `system_${printer.Name}_${index}`,
+                  id: `system_${printer.Name.replace(/[^a-zA-Z0-9]/g, "_")}_${index}`,
                   name: printer.Name,
-                  description: printer.PrinterStatus || "",
+                  description: connectionType !== "unknown" ? `${connectionType.toUpperCase()} Bağlantı` : printer.PortName || "",
                   status:
                     printer.PrinterStatus === "Idle"
                       ? 0
@@ -512,8 +686,10 @@ function registerIpcHandlers() {
                         : 2,
                   isDefault: printer.Default === true,
                   options: {
-                    paperWidth: 56, // Varsayılan (80mm - küçük font)
+                    paperWidth: 56,
                     paperType: "80mm",
+                    connectionType: connectionType,
+                    portName: printer.PortName || "",
                   },
                 });
               }
@@ -523,9 +699,10 @@ function registerIpcHandlers() {
           }
         }
       } else if (process.platform === "darwin") {
-        // macOS için lpstat komutu
+        // macOS için kapsamlı yazıcı tarama (USB, WiFi, Bluetooth, Network)
         try {
-          const { stdout } = await execAsync("lpstat -p -d");
+          // lpstat ile tüm yazıcıları al
+          const { stdout } = await execAsync("lpstat -p -d -v");
           const lines = stdout.split("\n");
           let defaultPrinter = "";
 
@@ -542,17 +719,71 @@ function registerIpcHandlers() {
             // Ignore
           }
 
+          // lpstat -v ile port bilgilerini al
+          const portInfoMap: Record<string, string> = {};
+          try {
+            const { stdout: portStdout } = await execAsync("lpstat -v");
+            const portLines = portStdout.split("\n");
+            portLines.forEach((line: string) => {
+              const match = line.match(/device for (.+): (.+)/);
+              if (match) {
+                portInfoMap[match[1]] = match[2];
+              }
+            });
+          } catch (e) {
+            // Ignore
+          }
+
           lines.forEach((line: string, index: number) => {
             const match = line.match(/printer (.+) is/);
             if (match) {
               const printerName = match[1];
+              const portInfo = portInfoMap[printerName] || "";
+              const portLower = portInfo.toLowerCase();
+
+              // Bağlantı türünü belirle
+              let connectionType = "unknown";
+              let connectionDescription = "";
+              if (portLower.includes("usb") || portLower.includes("usbprint")) {
+                connectionType = "usb";
+                connectionDescription = "USB Bağlantı";
+              } else if (
+                portLower.includes("ipp") ||
+                portLower.includes("ipp://") ||
+                portLower.includes("http://") ||
+                portLower.includes("https://") ||
+                portLower.includes("socket://") ||
+                portLower.includes("lpd://") ||
+                portLower.includes("dnssd://")
+              ) {
+                connectionType = "network";
+                connectionDescription = "WiFi/Ağ Bağlantı";
+              } else if (
+                portLower.includes("bluetooth") ||
+                portLower.includes("bth")
+              ) {
+                connectionType = "bluetooth";
+                connectionDescription = "Bluetooth Bağlantı";
+              } else if (
+                portLower.includes("serial") ||
+                portLower.includes("/dev/tty")
+              ) {
+                connectionType = "serial";
+                connectionDescription = "Seri Port Bağlantı";
+              } else if (portInfo) {
+                connectionDescription = portInfo;
+              }
+
               formattedPrinters.push({
                 id: `system_${printerName}_${index}`,
                 name: printerName,
-                description: "",
+                description: connectionDescription,
                 status: 0,
                 isDefault: printerName === defaultPrinter,
-                options: {},
+                options: {
+                  connectionType: connectionType,
+                  portName: portInfo,
+                },
               });
             }
           });
@@ -560,9 +791,9 @@ function registerIpcHandlers() {
           console.error("lpstat command error:", error);
         }
       } else {
-        // Linux için lpstat komutu
+        // Linux için kapsamlı yazıcı tarama (USB, WiFi, Bluetooth, Network)
         try {
-          const { stdout } = await execAsync("lpstat -p -d");
+          const { stdout } = await execAsync("lpstat -p -d -v");
           const lines = stdout.split("\n");
           let defaultPrinter = "";
 
@@ -578,17 +809,77 @@ function registerIpcHandlers() {
             // Ignore
           }
 
+          // lpstat -v ile port bilgilerini al
+          const portInfoMap: Record<string, string> = {};
+          try {
+            const { stdout: portStdout } = await execAsync("lpstat -v");
+            const portLines = portStdout.split("\n");
+            portLines.forEach((line: string) => {
+              const match = line.match(/device for (.+): (.+)/);
+              if (match) {
+                portInfoMap[match[1]] = match[2];
+              }
+            });
+          } catch (e) {
+            // Ignore
+          }
+
           lines.forEach((line: string, index: number) => {
             const match = line.match(/printer (.+) is/);
             if (match) {
               const printerName = match[1];
+              const portInfo = portInfoMap[printerName] || "";
+              const portLower = portInfo.toLowerCase();
+
+              // Bağlantı türünü belirle
+              let connectionType = "unknown";
+              let connectionDescription = "";
+              if (
+                portLower.includes("usb") ||
+                portLower.includes("/dev/usb") ||
+                portLower.includes("usbprint")
+              ) {
+                connectionType = "usb";
+                connectionDescription = "USB Bağlantı";
+              } else if (
+                portLower.includes("ipp") ||
+                portLower.includes("ipp://") ||
+                portLower.includes("http://") ||
+                portLower.includes("https://") ||
+                portLower.includes("socket://") ||
+                portLower.includes("lpd://") ||
+                portLower.includes("dnssd://") ||
+                portLower.includes("ipp14://")
+              ) {
+                connectionType = "network";
+                connectionDescription = "WiFi/Ağ Bağlantı";
+              } else if (
+                portLower.includes("bluetooth") ||
+                portLower.includes("bth")
+              ) {
+                connectionType = "bluetooth";
+                connectionDescription = "Bluetooth Bağlantı";
+              } else if (
+                portLower.includes("serial") ||
+                portLower.includes("/dev/tty") ||
+                portLower.includes("/dev/ttyS")
+              ) {
+                connectionType = "serial";
+                connectionDescription = "Seri Port Bağlantı";
+              } else if (portInfo) {
+                connectionDescription = portInfo;
+              }
+
               formattedPrinters.push({
                 id: `system_${printerName}_${index}`,
                 name: printerName,
-                description: "",
+                description: connectionDescription,
                 status: 0,
                 isDefault: printerName === defaultPrinter,
-                options: {},
+                options: {
+                  connectionType: connectionType,
+                  portName: portInfo,
+                },
               });
             }
           });
@@ -1058,9 +1349,9 @@ try {
     }
   });
 
-  // DevTools'u açmak için IPC handler
+  // DevTools'u açmak için IPC handler (sadece development'ta)
   ipcMain.handle("open-dev-tools", async () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (isDev && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.openDevTools();
       safeLog("🔧 DevTools açıldı (IPC handler)");
     }
@@ -1324,8 +1615,7 @@ const createWindow = (): void => {
               safeError(
                 "⚠️ Root element kontrolü başarısız - React render edilmemiş olabilir"
               );
-              // DevTools'u aç (sadece development'ta)
-              mainWindow?.webContents.openDevTools();
+              // DevTools otomatik açılmasın (müşteri konsolu görmesin)
             }
           })
           .catch((err) => {
@@ -1362,65 +1652,8 @@ const createWindow = (): void => {
       mainWindow?.webContents.focus();
     }, 500);
 
-    // Open DevTools in development
-    if (isDev) {
-      mainWindow?.webContents.openDevTools();
-    }
-
-    // Production'da da DevTools'u otomatik aç (beyaz ekran sorununu debug etmek için)
-    // Dokunmatik ekran kullanıldığı için klavye yok, bu yüzden otomatik açılması kritik
-    if (!isDev && mainWindow) {
-      // ÇOKLU YAKLAŞIM: Birden fazla event'te DevTools'u aç
-
-      // 1. ready-to-show event'inde aç (en erken)
-      safeLog("🔧 Production'da DevTools açılacak (ready-to-show)");
-      setTimeout(() => {
-        safeLog("🔧 DevTools açılıyor (ready-to-show timeout)");
-        mainWindow?.webContents.openDevTools();
-      }, 1000);
-
-      // 2. did-finish-load event'inde aç
-      mainWindow.webContents.once("did-finish-load", () => {
-        safeLog("🔧 Production'da DevTools açılıyor (did-finish-load)");
-        setTimeout(() => {
-          mainWindow?.webContents.openDevTools();
-        }, 300);
-      });
-
-      // 3. DOMContentLoaded event'ini de dinle (daha erken)
-      mainWindow.webContents
-        .executeJavaScript(
-          `
-        (function() {
-          function openDevTools() {
-            console.log('🔧 DevTools açılıyor (DOMContentLoaded)');
-            // DevTools'u açmak için IPC kullan
-            if (window.electronAPI && window.electronAPI.openDevTools) {
-              window.electronAPI.openDevTools().catch(() => {
-                console.error('DevTools açılamadı (IPC)');
-              });
-            }
-          }
-          
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', openDevTools);
-          } else {
-            openDevTools();
-          }
-          
-          // Fallback: 2 saniye sonra da aç
-          setTimeout(openDevTools, 2000);
-        })();
-      `
-        )
-        .catch(() => {});
-
-      // 4. Ekstra güvenlik: 3 saniye sonra da aç
-      setTimeout(() => {
-        safeLog("🔧 DevTools açılıyor (fallback timeout)");
-        mainWindow?.webContents.openDevTools();
-      }, 3000);
-    }
+    // DevTools otomatik açılmasın (müşteri konsolu görmesin)
+    // Development'ta manuel olarak Ctrl+Shift+I ile açılabilir
 
     // Production'da console hatalarını yakala ve log'la
     if (!isDev && mainWindow) {

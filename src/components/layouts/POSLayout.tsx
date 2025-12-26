@@ -8,11 +8,8 @@ import {
   CheckCircle,
   ArrowLeft,
   X,
-  Wifi,
-  Server,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
-import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 interface POSLayoutProps {
   children?: React.ReactNode;
@@ -26,10 +23,6 @@ interface POSLayoutProps {
 export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
   const navigate = useNavigate();
   const { userData, companyData, branchData } = useAuth();
-  const { isOnline } = useNetworkStatus();
-  const [serverStatus, setServerStatus] = useState<
-    "connected" | "disconnected"
-  >("connected");
 
   // Güncelleme state'leri
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -46,11 +39,6 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
   //     window.electronAPI.enableAutoDownload().catch(() => {});
   //   }
   // }, [userData]);
-
-  // Sunucu durumunu kontrol et
-  useEffect(() => {
-    setServerStatus("connected");
-  }, []);
 
   // Electron güncelleme event listener'ları
   useEffect(() => {
@@ -192,28 +180,6 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Internet Status */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-                <Wifi
-                  className={`h-4 w-4 ${isOnline ? "text-green-400" : "text-red-400"}`}
-                />
-                <span className="text-sm text-white font-medium">
-                  {isOnline ? "Internet BAĞLI" : "Internet BAĞLI DEĞİL"}
-                </span>
-              </div>
-
-              {/* Server Status */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-                <Server
-                  className={`h-4 w-4 ${serverStatus === "connected" ? "text-green-400" : "text-red-400"}`}
-                />
-                <span className="text-sm text-white font-medium">
-                  {serverStatus === "connected"
-                    ? "Server BAĞLI"
-                    : "Server BAĞLI DEĞİL"}
-                </span>
-              </div>
-
               {/* Branch Info */}
               <div className="flex items-center gap-3">
                 <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">

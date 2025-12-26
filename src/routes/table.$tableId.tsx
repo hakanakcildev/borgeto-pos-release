@@ -6996,7 +6996,7 @@ function TableDetailContent() {
 
       {/* Numerik Tuşlar - Sol sidebar'ın dışında, sağında */}
       <div className="hidden lg:flex lg:flex-none lg:w-16 lg:h-full flex-col gap-0.5 sm:gap-1 p-1 sm:p-1.5 shrink-0 overflow-hidden">
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => {
           const isSelected = selectedNumericKey === num;
           return (
             <button
@@ -7016,7 +7016,7 @@ function TableDetailContent() {
               }`}
               style={{ aspectRatio: "1 / 1" }}
             >
-              {num}
+              {num === 0 ? "10" : num}
             </button>
           );
         })}

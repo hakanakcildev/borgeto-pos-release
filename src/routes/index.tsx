@@ -23,12 +23,9 @@ import {
   Clock,
   Loader2,
   ArrowLeft,
-  Wifi,
-  Server,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { HomePage } from "@/components/HomePage";
-import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -132,10 +129,6 @@ function TablesView() {
   const { userData, companyId, branchId, companyData, branchData } = useAuth();
   const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
-  const { isOnline } = useNetworkStatus();
-  const [serverStatus, setServerStatus] = useState<
-    "connected" | "disconnected"
-  >("connected");
   const { area, activeOnly } = Route.useSearch();
   const [tables, setTables] = useState<Table[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -149,11 +142,6 @@ function TablesView() {
   );
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [defaultTablesCreated, setDefaultTablesCreated] = useState(false);
-
-  // Sunucu durumunu kontrol et
-  useEffect(() => {
-    setServerStatus("connected");
-  }, []);
 
   // URL search params değiştiğinde state'i güncelle
   useEffect(() => {
@@ -988,28 +976,6 @@ function TablesView() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Internet Status */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-            <Wifi
-              className={`h-4 w-4 ${isOnline ? "text-green-400" : "text-red-400"}`}
-            />
-            <span className="text-sm text-white font-medium">
-              {isOnline ? "Internet BAĞLI" : "Internet BAĞLI DEĞİL"}
-            </span>
-          </div>
-
-          {/* Server Status */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-            <Server
-              className={`h-4 w-4 ${serverStatus === "connected" ? "text-green-400" : "text-red-400"}`}
-            />
-            <span className="text-sm text-white font-medium">
-              {serverStatus === "connected"
-                ? "Server BAĞLI"
-                : "Server BAĞLI DEĞİL"}
-            </span>
-          </div>
-
           {/* Branch Info */}
           <div className="flex items-center gap-3">
             <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
