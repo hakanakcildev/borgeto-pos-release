@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getBillsByCompany, clearAllBills } from "@/lib/firebase/bills";
-import type { Bill, OrderItem } from "@/lib/firebase/types";
+import { getPaymentMethodsByCompany } from "@/lib/firebase/paymentMethods";
+import type { Bill, OrderItem, PaymentMethodConfig } from "@/lib/firebase/types";
 import { POSLayout } from "@/components/layouts/POSLayout";
 import { History, Clock, Receipt, X, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ function TableHistoryContent() {
   const [loading, setLoading] = useState(true);
   const [bills, setBills] = useState<Bill[]>([]);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>([]);
   
   // Yazıcılar için state
   const [printers, setPrinters] = useState<Array<{
@@ -68,6 +70,30 @@ function TableHistoryContent() {
 
     loadPrinters();
   }, [companyId, userData?.companyId]);
+
+  // Ödeme yöntemlerini yükle
+  useEffect(() => {
+    const loadPaymentMethods = async () => {
+      const effectiveCompanyId = companyId || userData?.companyId;
+      const effectiveBranchId = branchId || userData?.assignedBranchId;
+      
+      if (!effectiveCompanyId) {
+        return;
+      }
+
+      try {
+        const methods = await getPaymentMethodsByCompany(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        );
+        setPaymentMethods(methods);
+      } catch (error) {
+        // Error loading payment methods
+      }
+    };
+
+    loadPaymentMethods();
+  }, [companyId, branchId, userData?.companyId, userData?.assignedBranchId]);
 
   // Tüm adisyonları yükle
   useEffect(() => {
@@ -426,31 +452,138 @@ function TableHistoryContent() {
                   Ürünler
                 </h3>
                 <div className="space-y-2">
-                  {selectedBill.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {item.menuName}
-                        </p>
-                        {item.notes && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Not: {item.notes}
+                  {selectedBill.items.map((item, idx) => {
+                    // Bu ürün için tüm ödeme bilgilerini topla (birden fazla ödeme olabilir)
+                    const paymentInfos: Array<{
+                      method: string;
+                      methodName: string;
+                      paidItem: {
+                        menuId: string;
+                        menuName: string;
+                        quantity: number;
+                        menuPrice: number;
+                        subtotal: number;
+                      };
+                    }> = [];
+
+                    // Payments'larda bu ürünü ara
+                    for (const payment of selectedBill.payments) {
+                      if (payment.paidItems) {
+                        const paidItem = payment.paidItems.find(
+                          (pi) => pi.menuId === item.menuId
+                        );
+                        if (paidItem) {
+                          const paymentMethodConfig = paymentMethods.find(
+                            (pm) => pm.code === payment.method
+                          );
+                          const methodName = paymentMethodConfig
+                            ? paymentMethodConfig.name
+                            : payment.method === "cash"
+                              ? "Nakit"
+                              : payment.method === "card"
+                                ? "Kart"
+                                : payment.method === "mealCard"
+                                  ? "Yemek Kartı"
+                                  : payment.method;
+                          paymentInfos.push({
+                            method: payment.method,
+                            methodName,
+                            paidItem,
+                          });
+                        }
+                      }
+                    }
+
+                    // Eğer paidItems'da bulunamadıysa, bu ürün son ödeme ile ödenmiş demektir
+                    // Son ödemeyi (veya tüm ödemeleri) kullan
+                    if (paymentInfos.length === 0 && selectedBill.payments.length > 0) {
+                      // Tüm payments'ları kontrol et (son ödeme ile ödenen ürün için)
+                      // Her payment için ödeme yöntemini ekle
+                      selectedBill.payments.forEach((payment) => {
+                        const paymentMethodConfig = paymentMethods.find(
+                          (pm) => pm.code === payment.method
+                        );
+                        const methodName = paymentMethodConfig
+                          ? paymentMethodConfig.name
+                          : payment.method === "cash"
+                            ? "Nakit"
+                            : payment.method === "card"
+                              ? "Kart"
+                              : payment.method === "mealCard"
+                                ? "Yemek Kartı"
+                                : payment.method;
+                        // Tam ödeme durumunda paidItem yok, bu yüzden item bilgilerini kullan
+                        // Ama sadece bir kere ekle (her payment için değil, sadece unique method'lar için)
+                        if (!paymentInfos.find((pi) => pi.method === payment.method)) {
+                          paymentInfos.push({
+                            method: payment.method,
+                            methodName,
+                            paidItem: {
+                              menuId: item.menuId,
+                              menuName: item.menuName,
+                              quantity: item.quantity,
+                              menuPrice: item.menuPrice,
+                              subtotal: item.subtotal || item.menuPrice * item.quantity,
+                            },
+                          });
+                        }
+                      });
+                    }
+
+                    // Tüm ödeme yöntemlerini birleştir (unique method'lar)
+                    const uniquePaymentMethods = Array.from(
+                      new Set(paymentInfos.map((pi) => pi.methodName))
+                    );
+                    const allPaymentMethods = uniquePaymentMethods.join(", ");
+
+                    // İndirimli olup olmadığını kontrol et
+                    // item.subtotal zaten doğru fiyatı içeriyor (indirimli olabilir)
+                    const originalTotal = item.menuPrice * item.quantity;
+                    const paidTotal = item.subtotal || originalTotal;
+                    const hasDiscount = paidTotal < originalTotal;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {item.menuName}
                           </p>
-                        )}
+                          {item.notes && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              Not: {item.notes}
+                            </p>
+                          )}
+                          {allPaymentMethods && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
+                              Ödeme: {allPaymentMethods}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right ml-4">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {item.quantity} adet
+                          </p>
+                          {hasDiscount ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="font-semibold text-gray-900 dark:text-white line-through text-sm">
+                                ₺{originalTotal.toFixed(2)}
+                              </span>
+                              <span className="font-semibold text-green-600 dark:text-green-400">
+                                ₺{paidTotal.toFixed(2)}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                              ₺{paidTotal.toFixed(2)}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right ml-4">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {item.quantity} adet
-                        </p>
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          ₺{(item.menuPrice * item.quantity).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

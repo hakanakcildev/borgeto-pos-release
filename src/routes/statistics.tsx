@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getOrdersByCompany } from "@/lib/firebase/orders";
+import { getBillsByCompany } from "@/lib/firebase/bills";
 import { clearAllStatistics } from "@/lib/firebase/statistics";
 import { getPaymentMethodsByCompany } from "@/lib/firebase/paymentMethods";
 import { getCourierAssignmentsByCompany } from "@/lib/firebase/couriers";
@@ -12,6 +13,7 @@ import type {
   Payment,
   PaymentMethodConfig,
   User,
+  Bill,
 } from "@/lib/firebase/types";
 import {
   BarChart3,
@@ -79,6 +81,7 @@ function StatisticsContent() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [orders, setOrders] = useState<Order[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
     []
   );
@@ -91,6 +94,7 @@ function StatisticsContent() {
   const [waiterDetailPeriod, setWaiterDetailPeriod] =
     useState<PeriodType>("daily");
   const [showWaiterDetail, setShowWaiterDetail] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
 
   // Tarih aralığını hesapla
   const getDateRange = useCallback(
@@ -143,6 +147,7 @@ function StatisticsContent() {
 
         const [
           allOrders,
+          allBills,
           paymentMethodsData,
           courierAssignmentsData,
           usersData,
@@ -154,6 +159,18 @@ function StatisticsContent() {
             startDate: start,
             endDate: end,
           }),
+          // Bills'ları tarih aralığına göre filtrele
+          getBillsByCompany(effectiveCompanyId, {
+            branchId: effectiveBranchId || undefined,
+          }).then((bills) => {
+            // Tarih aralığına göre filtrele
+            return bills.filter((bill) => {
+              const billDate = bill.createdAt instanceof Date 
+                ? bill.createdAt 
+                : new Date(bill.createdAt);
+              return billDate >= start && billDate <= end;
+            });
+          }).catch(() => []),
           getPaymentMethodsByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
@@ -171,6 +188,7 @@ function StatisticsContent() {
         ]);
 
         setOrders(allOrders);
+        setBills(allBills);
         setPaymentMethods(paymentMethodsData);
         setCourierAssignments(courierAssignmentsData);
         setUsers(usersData);
@@ -301,25 +319,33 @@ function StatisticsContent() {
     const averageOrderValue =
       paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
 
-    // En çok satılan ürünler: Ödemesi alınan tüm ürünler
+    // En çok satılan ürünler: Bills'dan tüm ödenen ürünleri topla
     const productMap = new Map<string, ProductStats>();
-    allPaidItems.forEach((item) => {
-      const existing = productMap.get(item.menuId);
-      if (existing) {
-        existing.quantity += item.quantity;
-        existing.revenue += item.subtotal;
-      } else {
-        productMap.set(item.menuId, {
-          menuId: item.menuId,
-          menuName: item.menuName,
-          quantity: item.quantity,
-          revenue: item.subtotal,
-        });
-      }
+    
+    // Bills'dan tüm ödenen ürünleri topla
+    bills.forEach((bill) => {
+      bill.items.forEach((item) => {
+        const existing = productMap.get(item.menuId);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.revenue += item.subtotal;
+        } else {
+          productMap.set(item.menuId, {
+            menuId: item.menuId,
+            menuName: item.menuName,
+            quantity: item.quantity,
+            revenue: item.subtotal,
+          });
+        }
+      });
     });
-    const topProducts = Array.from(productMap.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 10);
+    
+    // Sırala ve standart olarak 10 ürün al (kullanıcı daha fazlasını görebilir)
+    const sortedProducts = Array.from(productMap.values())
+      .sort((a, b) => b.quantity - a.quantity);
+    const topProducts = showAllProducts 
+      ? sortedProducts 
+      : sortedProducts.slice(0, 10);
 
     // İptal edilen ürünleri hesapla: canceledItems + ödemesi alınmayan ürünler
     let cancelledItemCount = 0;
@@ -517,6 +543,7 @@ function StatisticsContent() {
       totalOrders,
       averageOrderValue,
       topProducts,
+      allProductsCount: sortedProducts.length,
       cancelledOrders: cancelledItemCount,
       cancelledRevenue,
       paymentMethodStats,
@@ -526,7 +553,7 @@ function StatisticsContent() {
       waiterStats,
       totalPaymentAmount,
     };
-  }, [orders, paymentMethods, courierAssignments, users]);
+  }, [orders, bills, paymentMethods, courierAssignments, users, showAllProducts]);
 
   const stats = calculateStats();
 
@@ -946,9 +973,23 @@ function StatisticsContent() {
       {/* Top Products */}
       {stats.topProducts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-            En Çok Satılan Ürünler
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              En Çok Satılan Ürünler
+            </h2>
+            {stats.allProductsCount > 10 && (
+              <Button
+                onClick={() => setShowAllProducts(!showAllProducts)}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                {showAllProducts 
+                  ? `10 Ürün Göster (${stats.allProductsCount} toplam)`
+                  : `Tümünü Göster (${stats.allProductsCount})`}
+              </Button>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
             {stats.topProducts.map((product, index) => (
               <div

@@ -1,20 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getTable, addTable } from "@/lib/firebase/tables";
+// Offline-aware Firebase functions
 import {
-  getTable,
   updateTableStatus,
   getTablesByCompany,
-  addTable,
-} from "@/lib/firebase/tables";
-import {
   getOrder,
   addOrder,
   updateOrder,
   addPayment,
   updateOrderStatus,
   getOrdersByCompany,
-} from "@/lib/firebase/orders";
+} from "@/lib/offline/offlineFirebase";
 import {
   getAllMenusByCompany,
   getAllCategoriesByCompany,
@@ -23,12 +21,12 @@ import {
   getPaymentMethodsByCompany,
   createDefaultPaymentMethods,
 } from "@/lib/firebase/paymentMethods";
-import { addTableHistory } from "@/lib/firebase/tableHistory";
+// Offline-aware functions
+import { addTableHistory, addBill } from "@/lib/offline/offlineFirebase";
 import {
   getCouriersByCompany,
   addCourierAssignment,
 } from "@/lib/firebase/couriers";
-import { addBill } from "@/lib/firebase/bills";
 import {
   getCustomersByCompany,
   addCustomer,
@@ -5611,11 +5609,7 @@ function TableDetailContent() {
                               {group.items.map((item, idx) => (
                                 <div
                                   key={`${group.paymentId}-${item.menuName}-${idx}`}
-                                  className={`flex items-center justify-between py-2 px-4 ${
-                                    group.hasDiscount
-                                      ? "bg-orange-600 dark:bg-orange-700"
-                                      : "bg-green-600 dark:bg-green-700"
-                                  }`}
+                                  className="flex items-center justify-between py-2 px-4 bg-green-600 dark:bg-green-700"
                                 >
                                   <div className="flex items-center gap-3 flex-1 min-w-0">
                                     <span className="text-sm font-bold text-white shrink-0">
@@ -5656,7 +5650,7 @@ function TableDetailContent() {
 
                               {/* Grup toplamı - indirimli gruplarda göster (sadece birden fazla ürün varsa) */}
                               {group.hasDiscount && group.items.length > 1 && (
-                                <div className="flex items-center justify-between py-2 px-4 bg-orange-50 dark:bg-orange-900/30">
+                                <div className="flex items-center justify-between py-2 px-4 bg-green-600 dark:bg-green-700">
                                   <p className="text-sm font-bold text-white">
                                     Toplam
                                   </p>

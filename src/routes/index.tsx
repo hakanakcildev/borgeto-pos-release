@@ -4,18 +4,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import {
-  getTablesByCompany,
-  updateTableStatus,
   getTable,
   createDefaultTables,
 } from "@/lib/firebase/tables";
+// Offline-aware Firebase functions
 import {
+  getTablesByCompany,
+  updateTableStatus,
   getOrdersByCompany,
   updateOrder,
   addOrder,
   updateOrderStatus,
   getOrder,
-} from "@/lib/firebase/orders";
+} from "@/lib/offline/offlineFirebase";
 import type { Table, Order } from "@/lib/firebase/types";
 import { customAlert } from "@/components/ui/alert-dialog";
 import {

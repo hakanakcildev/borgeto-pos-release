@@ -10,12 +10,16 @@ import { NetworkStatus } from "@/components/NetworkStatus";
 import TouchKeyboard from "@/components/ui/TouchKeyboard";
 import { useTouchKeyboard } from "@/contexts/TouchKeyboardContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 function RootComponent() {
   const location = useLocation();
   const router = useRouter();
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  
+  // Offline sync hook - internet bağlandığında otomatik sync yapar
+  useOfflineSync();
   const {
     isOpen,
     closeKeyboard,
