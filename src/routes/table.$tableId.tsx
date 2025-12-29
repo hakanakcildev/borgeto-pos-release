@@ -8129,7 +8129,7 @@ function TableDetailContent() {
                                   return;
                                 }
 
-                                // Seçili ürün kontrolü - seçili ürün yoksa uyarı göster
+                                // Seçili ürün kontrolü - seçili ürün yoksa sadece seçimleri temizle ve modal'ı kapat
                                 const hasSelectedQuantities =
                                   selectedQuantities.size > 0 &&
                                   Array.from(selectedQuantities.values()).some(
@@ -8141,16 +8141,27 @@ function TableDetailContent() {
                                   selectedItems.size > 0;
 
                                 if (!hasSelectedItems) {
-                                  customAlert(
-                                    "Lütfen iptal edilecek ürün seçin",
-                                    "Uyarı",
-                                    "warning"
-                                  );
+                                  // Seçili ürün yoksa, sadece seçimleri temizle ve modal'ı kapat
+                                  setSelectedItems(new Set());
+                                  setSelectedQuantities(new Map());
+                                  setShowPaymentModal(false);
+                                  setPaymentAmount("");
+                                  setPaymentMethod("");
+                                  setAppliedPayments([]);
+                                  navigate({
+                                    to: "/table/$tableId",
+                                    params: { tableId: tableId },
+                                    search: (prev) => ({
+                                      area: (prev?.area ?? undefined) as string | undefined,
+                                      activeOnly: prev?.activeOnly ?? false,
+                                      payment: undefined,
+                                    }),
+                                    replace: true,
+                                  });
                                   return;
                                 }
 
-                                // İptal modalını aç veya direkt iptal et
-                                // Şimdilik direkt iptal edelim
+                                // Seçili ürünleri iptal et
                                 setIsCanceling(true);
                                 try {
                                   if (
@@ -8158,17 +8169,48 @@ function TableDetailContent() {
                                     pendingPaymentItems.length > 0
                                   ) {
                                     // Miktar seçimi yapılmışsa
+                                    // selectedQuantities uniqueKey bazlı, handleCancelSelectedItemsWithQuantities menuId bekliyor
+                                    // uniqueKey'den menuId'ye çevir
+                                    const quantitiesByMenuId = new Map<string, number>();
                                     const allIndices: number[] = [];
+                                    
                                     pendingPaymentItems.forEach(
                                       (paymentItem) => {
-                                        allIndices.push(...paymentItem.indices);
+                                        const selectedQty = selectedQuantities.get(paymentItem.uniqueKey) || 0;
+                                        if (selectedQty > 0) {
+                                          // Bu uniqueKey için seçilen miktarı menuId'ye ekle
+                                          const existingQty = quantitiesByMenuId.get(paymentItem.menuId) || 0;
+                                          quantitiesByMenuId.set(paymentItem.menuId, existingQty + selectedQty);
+                                          
+                                          // Sadece seçilen miktar kadar index ekle
+                                          let remainingQty = selectedQty;
+                                          for (const index of paymentItem.indices) {
+                                            if (remainingQty <= 0) break;
+                                            const item = order.items[index];
+                                            if (!item) continue;
+                                            
+                                            // uniqueKey kontrolü
+                                            const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                              if (!extras || extras.length === 0) return "";
+                                              return extras.map((e) => e.id).sort().join(",");
+                                            };
+                                            const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                                            if (itemUniqueKey !== paymentItem.uniqueKey) continue;
+                                            
+                                            allIndices.push(index);
+                                            remainingQty -= item.quantity;
+                                          }
+                                        }
                                       }
                                     );
-                                    await handleCancelSelectedItemsWithQuantities(
-                                      selectedQuantities,
-                                      allIndices,
-                                      order
-                                    );
+                                    
+                                    if (quantitiesByMenuId.size > 0 && allIndices.length > 0) {
+                                      await handleCancelSelectedItemsWithQuantities(
+                                        quantitiesByMenuId,
+                                        allIndices,
+                                        order
+                                      );
+                                    }
                                   } else if (selectedItems.size > 0) {
                                     // Ürün seçimi yapılmışsa
                                     const selectedIndices =

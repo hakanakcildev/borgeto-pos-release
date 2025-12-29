@@ -306,24 +306,62 @@ function StatisticsContent() {
     });
 
     // Toplam ürün sayısı: Ödemesi alınan tüm ürünler
-    const totalOrders = allPaidItems.reduce(
-      (sum, item) => sum + item.quantity,
-      0
-    );
+    // Önce bills'dan say (bills ödenmiş siparişlerin kesin kayıtlarıdır)
+    let totalProductCount = 0;
+    
+    bills.forEach((bill) => {
+      // İkram ödemelerini hariç tut
+      const hasNonGiftPayment = bill.payments && bill.payments.some((p) => !p.isGift);
+      if (!hasNonGiftPayment && bill.payments && bill.payments.length > 0) {
+        // Tüm payments ikram ise, bu bill'ı atla
+        return;
+      }
+      
+      bill.items.forEach((item) => {
+        totalProductCount += item.quantity;
+      });
+    });
+    
+    // Bills'ı olmayan orders'dan da ürün sayısını ekle (kısmi ödemeler için)
+    // Önce bill order ID'lerini topla
+    const billOrderIdsForProducts = new Set<string>();
+    bills.forEach((bill) => {
+      if (bill.orderId) {
+        billOrderIdsForProducts.add(bill.orderId);
+      }
+    });
+    
+    orders.forEach((order) => {
+      if (!billOrderIdsForProducts.has(order.id || "")) {
+        const paidItems = getPaidItemsForOrder(order);
+        paidItems.forEach((item) => {
+          totalProductCount += item.quantity;
+        });
+      }
+    });
 
-    // Ödemesi alınan sipariş sayısı (ortalama hesaplamak için)
-    const paidOrderCount = orders.filter(
-      (order) => getPaidItemsForOrder(order).length > 0
-    ).length;
+    // Ödemesi alınan adisyon sayısı (ortalama hesaplamak için - bills sayısı)
+    const paidBillCount = bills.filter((bill) => {
+      // İkram ödemelerini hariç tut
+      const hasNonGiftPayment = bill.payments && bill.payments.some((p) => !p.isGift);
+      return hasNonGiftPayment || !bill.payments || bill.payments.length === 0;
+    }).length;
 
     const averageOrderValue =
-      paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
+      paidBillCount > 0 ? totalRevenue / paidBillCount : 0;
 
-    // En çok satılan ürünler: Bills'dan tüm ödenen ürünleri topla
+    // En çok satılan ürünler: Bills'dan tüm ödenen ürünleri topla (ikramlar hariç)
     const productMap = new Map<string, ProductStats>();
     
-    // Bills'dan tüm ödenen ürünleri topla
+    // Bills'dan tüm ödenen ürünleri topla (ikramlar hariç)
     bills.forEach((bill) => {
+      // Eğer tüm payments ikram ise, bu bill'ı atla
+      const hasNonGiftPayment = bill.payments && bill.payments.some((p) => !p.isGift);
+      if (!hasNonGiftPayment && bill.payments && bill.payments.length > 0) {
+        // Tüm payments ikram ise, bu bill'ı atla
+        return;
+      }
+      
       bill.items.forEach((item) => {
         const existing = productMap.get(item.menuId);
         if (existing) {
@@ -471,23 +509,110 @@ function StatisticsContent() {
     // Önce bills'dan indirimleri topla (bills ödenmiş siparişlerin kesin kayıtlarıdır)
     const billOrderIds = new Set<string>();
     bills.forEach((bill) => {
-      if (bill.discount) {
+      // İkram ödemelerini hariç tut
+      const hasNonGiftPayment = bill.payments && bill.payments.some((p) => !p.isGift);
+      if (!hasNonGiftPayment && bill.payments && bill.payments.length > 0) {
+        // Tüm payments ikram ise, bu bill'ı atla
+        return;
+      }
+      
+      // Bill'den indirim hesapla
+      if (bill.orderId) {
+        billOrderIds.add(bill.orderId);
+      }
+      
+      // bill.discount varsa onu kullan
+      if (bill.discount !== undefined && bill.discount !== null && bill.discount > 0) {
         totalDiscount += bill.discount;
-        if (bill.orderId) {
-          billOrderIds.add(bill.orderId);
+      } else {
+        // bill.discount yoksa veya 0 ise, bill.items'dan hesapla
+        // bill.items içindeki item.subtotal'ları topla (indirimli toplam)
+        const billItemsSubtotalTotal = bill.items.reduce(
+          (sum, item) => sum + (item.subtotal || 0),
+          0
+        );
+        
+        // Orijinal toplamı hesapla (ekstra malzemeler dahil)
+        let billItemsOriginalTotal = 0;
+        bill.items.forEach((item) => {
+          const extrasTotal = (item.selectedExtras || []).reduce(
+            (sum, extra) => sum + extra.price,
+            0
+          );
+          const itemOriginalPrice = ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+          billItemsOriginalTotal += itemOriginalPrice;
+        });
+        
+        // İndirim = Orijinal toplam - İndirimli toplam (item.subtotal toplamı)
+        const calculatedDiscount = billItemsOriginalTotal - billItemsSubtotalTotal;
+        if (calculatedDiscount > 0) {
+          totalDiscount += calculatedDiscount;
         }
       }
     });
     
     // Orders'dan sadece bill'ı olmayan siparişlerin indirimlerini topla
-    // (kısmi ödeme durumları için)
+    // (kısmi ödeme durumları için - henüz bill oluşturulmamış)
     orders.forEach((order) => {
-      // Eğer bu sipariş için bill yoksa, order'dan indirimi say
+      // Eğer bu sipariş için bill yoksa, payment'lardan indirimi hesapla
       if (!billOrderIds.has(order.id || "")) {
         const paidItems = getPaidItemsForOrder(order);
         // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
-        if (paidItems.length > 0 && order.discount) {
-          totalDiscount += order.discount;
+        if (paidItems.length > 0) {
+          // Payment'lar yoksa veya paidItems yoksa, order.discount'u kullan (eski siparişler için)
+          // Ama dikkat: order.discount tüm sipariş için, sadece ödenen kısım için değil
+          // Bu yüzden ödenen kısım için orantılı indirim hesaplamalıyız
+          if (order.payments && order.payments.length > 0) {
+            // Payment'larda paidItems varsa, onlardan indirim hesapla
+            let hasPaidItems = false;
+            order.payments.forEach((payment) => {
+              // İkram ödemelerini hariç tut
+              if (payment.isGift) return;
+              
+              if (payment.paidItems && payment.paidItems.length > 0) {
+                hasPaidItems = true;
+                // paidItems'lardan indirim hesaplama - bu kısım yanlış olabilir
+                // Çünkü paidItem.subtotal zaten indirimli fiyat, ama ekstra malzemeleri de içeriyor
+                // Bu yüzden bu kısmı atlayalım, sadece order.discount kullan
+              }
+            });
+            
+            // Eğer paidItems yoksa ve order.discount varsa, orantılı indirim hesapla
+            if (!hasPaidItems && order.discount && order.discount > 0) {
+              // Ödenen ürünlerin toplam fiyatına göre orantılı indirim
+              const orderSubtotal = (order.items || []).reduce(
+                (sum, item) => sum + item.subtotal,
+                0
+              );
+              const paidSubtotal = paidItems.reduce(
+                (sum, item) => sum + item.subtotal,
+                0
+              );
+              
+              if (orderSubtotal > 0) {
+                const discountRatio = order.discount / orderSubtotal;
+                const paidDiscount = paidSubtotal * discountRatio;
+                totalDiscount += paidDiscount;
+              }
+            }
+          } else if (order.discount) {
+            // Payment'lar yoksa, order.discount'u kullan (eski siparişler için)
+            // Ama sadece ödenen kısım için orantılı indirim
+            const orderSubtotal = (order.items || []).reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+            const paidSubtotal = paidItems.reduce(
+              (sum, item) => sum + item.subtotal,
+              0
+            );
+            
+            if (orderSubtotal > 0) {
+              const discountRatio = order.discount / orderSubtotal;
+              const paidDiscount = paidSubtotal * discountRatio;
+              totalDiscount += paidDiscount;
+            }
+          }
         }
       }
     });
@@ -557,7 +682,7 @@ function StatisticsContent() {
       totalRevenue,
       totalGiftRevenue,
       totalGiftCount,
-      totalOrders,
+      totalOrders: totalProductCount,
       averageOrderValue,
       topProducts,
       allProductsCount: sortedProducts.length,
