@@ -328,9 +328,9 @@ function SettingsContent({
                 Bağlı WiFi IP Adresi
               </p>
               <div className="flex items-center gap-3 flex-wrap">
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {localIP || "Yükleniyor..."}
-                </p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {localIP || "Yükleniyor..."}
+              </p>
                 <div className="flex items-center gap-2">
                   <span
                     className={`text-sm font-medium px-2 py-1 rounded ${

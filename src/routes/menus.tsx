@@ -218,13 +218,21 @@ export function MenuManagementContent() {
     }
 
     setEditingMenu(menu);
+    console.log("Loading menu for edit:", menu);
+    console.log("Menu extras:", menu.extras);
+    console.log("Menu extras type:", typeof menu.extras, Array.isArray(menu.extras));
+    
+    // Ensure extras is always an array
+    const menuExtras = Array.isArray(menu.extras) ? menu.extras : (menu.extras ? [menu.extras] : []);
+    console.log("Processed menu extras:", menuExtras);
+    
     setMenuForm({
       name: menu.name,
       description: menu.description || "",
       price: menu.price.toString(),
       category: menu.category,
       isAvailable: menu.isAvailable,
-      extras: menu.extras || [],
+      extras: menuExtras,
     });
     setShowMenuForm(true);
   };
@@ -244,6 +252,23 @@ export function MenuManagementContent() {
     }
 
     try {
+      const extras = menuForm.extras || [];
+      console.log("Saving menu with extras:", extras);
+      
+      // Extras validation
+      if (extras.length > 0) {
+        for (const extra of extras) {
+          if (!extra.id || !extra.name || typeof extra.price !== 'number' || isNaN(extra.price)) {
+            customAlert(
+              "Ekstra malzemelerde geçersiz veri bulundu. Lütfen tüm ekstra malzemeleri kontrol edin.",
+              "Uyarı",
+              "warning"
+            );
+            return;
+          }
+        }
+      }
+      
       const menuData: Omit<Menu, "id" | "createdAt" | "updatedAt"> = {
         companyId: effectiveCompanyId,
         branchId: effectiveBranchId || undefined,
@@ -252,16 +277,41 @@ export function MenuManagementContent() {
         price: parseFloat(menuForm.price),
         category: menuForm.category,
         isAvailable: menuForm.isAvailable,
-        extras: menuForm.extras.length > 0 ? menuForm.extras : undefined,
+        extras: extras.length > 0 ? extras : undefined,
       };
+      
+      console.log("Menu data to save:", menuData);
 
       if (editingMenu) {
         // Güncelleme yaparken branchId'yi koru veya set et
+        if (!editingMenu.id) {
+          customAlert(
+            "Ürün ID'si bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
+            "Hata",
+            "error"
+          );
+          return;
+        }
         const updateData = {
           ...menuData,
           branchId: effectiveBranchId || editingMenu.branchId || undefined,
         };
-        await updateMenu(editingMenu.id!, updateData);
+        try {
+          await updateMenu(editingMenu.id, updateData);
+        } catch (updateError: any) {
+          // Eğer doküman bulunamazsa, yeni bir ürün olarak kaydet
+          if (
+            updateError?.message?.includes("does not exist") ||
+            updateError?.code === "not-found"
+          ) {
+            console.warn(
+              `Menu with id ${editingMenu.id} not found, creating new menu instead`
+            );
+            await addMenu(menuData);
+          } else {
+            throw updateError;
+          }
+        }
       } else {
         // Yeni ürün eklerken branchId'yi set et
         await addMenu(menuData);
@@ -287,7 +337,14 @@ export function MenuManagementContent() {
       setShowMenuForm(false);
       setEditingMenu(null);
     } catch (error) {
-      customAlert("Ürün kaydedilirken bir hata oluştu", "Hata", "error");
+      console.error("Menu save error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Bilinmeyen hata";
+      customAlert(
+        `Ürün kaydedilirken bir hata oluştu: ${errorMessage}`,
+        "Hata",
+        "error"
+      );
     }
   };
 
@@ -303,7 +360,16 @@ export function MenuManagementContent() {
   };
 
   const handleEditExtra = (index: number) => {
-    const extra = menuForm.extras[index];
+    const currentExtras = menuForm.extras || [];
+    if (index < 0 || index >= currentExtras.length) {
+      customAlert(
+        "Geçersiz ekstra malzeme seçildi",
+        "Uyarı",
+        "warning"
+      );
+      return;
+    }
+    const extra = currentExtras[index];
     setEditingExtraIndex(index);
     setExtraForm({
       name: extra.name,
@@ -323,18 +389,31 @@ export function MenuManagementContent() {
       return;
     }
 
+    const parsedPrice = parseFloat(extraForm.price);
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      customAlert(
+        "Lütfen geçerli bir fiyat girin",
+        "Uyarı",
+        "warning"
+      );
+      return;
+    }
+
+    // menuForm.extras undefined olabilir, bu durumda boş array kullan
+    const currentExtras = menuForm.extras || [];
+
     const newExtra: MenuExtra = {
       id:
-        editingExtraIndex !== null
-          ? menuForm.extras[editingExtraIndex].id
+        editingExtraIndex !== null && editingExtraIndex < currentExtras.length
+          ? currentExtras[editingExtraIndex].id
           : `extra-${Date.now()}`,
       name: extraForm.name,
-      price: parseFloat(extraForm.price),
+      price: parsedPrice,
       isRequired: extraForm.isRequired,
     };
 
-    const updatedExtras = [...menuForm.extras];
-    if (editingExtraIndex !== null) {
+    const updatedExtras = [...currentExtras];
+    if (editingExtraIndex !== null && editingExtraIndex < currentExtras.length) {
       updatedExtras[editingExtraIndex] = newExtra;
     } else {
       updatedExtras.push(newExtra);
@@ -346,7 +425,8 @@ export function MenuManagementContent() {
   };
 
   const handleDeleteExtra = (index: number) => {
-    const updatedExtras = menuForm.extras.filter((_, i) => i !== index);
+    const currentExtras = menuForm.extras || [];
+    const updatedExtras = currentExtras.filter((_, i) => i !== index);
     setMenuForm({ ...menuForm, extras: updatedExtras });
   };
 
@@ -1007,9 +1087,9 @@ export function MenuManagementContent() {
                     Ekstra Ekle
                   </Button>
                 </div>
-                {menuForm.extras.length > 0 ? (
+                {(menuForm.extras || []).length > 0 ? (
                   <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
-                    {menuForm.extras.map((extra, index) => (
+                    {(menuForm.extras || []).map((extra, index) => (
                       <div
                         key={extra.id}
                         className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded p-2"

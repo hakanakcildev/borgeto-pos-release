@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTable, addTable } from "@/lib/firebase/tables";
 // Offline-aware Firebase functions
@@ -171,11 +171,12 @@ function TableDetailContent() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ekstra malzeme seçimi için state'ler
-  const [, setShowExtraModal] = useState(false);
+  const [showExtraModal, setShowExtraModal] = useState(false);
   const [selectedMenuForExtra, setSelectedMenuForExtra] = useState<Menu | null>(
     null
   );
   const [selectedExtras, setSelectedExtras] = useState<Set<string>>(new Set());
+  const [selectedCartItemForExtra, setSelectedCartItemForExtra] = useState<OrderItem | null>(null);
 
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -241,6 +242,8 @@ function TableDetailContent() {
       totalQuantity: number;
       menuPrice: number;
       indices: number[];
+      uniqueKey: string; // menuId + selectedExtras key
+      selectedExtras?: SelectedExtra[];
     }>
   >([]);
   const [, setCurrentPaymentItemIndex] = useState<number>(0);
@@ -790,7 +793,17 @@ function TableDetailContent() {
             // Seçili ürünleri selectedItems state'ine set et
             setSelectedItems(new Set(savedItems));
 
-            // Seçili ürünleri menuId'ye göre grupla ve pendingPaymentItems'a set et
+            // Seçili ürünleri uniqueKey'e göre grupla ve pendingPaymentItems'a set et
+            // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+            const getExtrasKey = (extras?: SelectedExtra[]): string => {
+              if (!extras || extras.length === 0) return "";
+              // ID'lere göre sırala ve string'e çevir
+              return extras
+                .map((e) => e.id)
+                .sort()
+                .join(",");
+            };
+
             const groupedItems = new Map<
               string,
               {
@@ -799,6 +812,8 @@ function TableDetailContent() {
                 totalQuantity: number;
                 menuPrice: number;
                 indices: number[];
+                uniqueKey: string;
+                selectedExtras?: SelectedExtra[];
               }
             >();
 
@@ -814,17 +829,20 @@ function TableDetailContent() {
               const item = order.items[index];
               if (!item) return;
 
-              const existing = groupedItems.get(item.menuId);
+              const uniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+              const existing = groupedItems.get(uniqueKey);
               if (existing) {
                 existing.totalQuantity += item.quantity;
                 existing.indices.push(index);
               } else {
-                groupedItems.set(item.menuId, {
+                groupedItems.set(uniqueKey, {
                   menuId: item.menuId,
                   menuName: item.menuName,
                   totalQuantity: item.quantity,
                   menuPrice: item.menuPrice,
                   indices: [index],
+                  uniqueKey: uniqueKey,
+                  selectedExtras: item.selectedExtras || undefined,
                 });
               }
             });
@@ -836,8 +854,8 @@ function TableDetailContent() {
             setSelectedQuantities((prev) => {
               const newMap = new Map(prev);
               newPendingItems.forEach((item) => {
-                if (!newMap.has(item.menuId)) {
-                  newMap.set(item.menuId, item.totalQuantity); // Seçili miktarı set et
+                if (!newMap.has(item.uniqueKey)) {
+                  newMap.set(item.uniqueKey, item.totalQuantity); // Seçili miktarı set et
                 }
               });
               return newMap;
@@ -856,20 +874,34 @@ function TableDetailContent() {
       // Eğer pendingPaymentItems zaten doluysa ve seçili ürünler varsa, koru
       // (indirim uygulandıktan sonra seçili ürünlerin korunması için)
       if (pendingPaymentItems.length > 0) {
+        // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+        const getExtrasKey = (extras?: SelectedExtra[]): string => {
+          if (!extras || extras.length === 0) return "";
+          // ID'lere göre sırala ve string'e çevir
+          return extras
+            .map((e) => e.id)
+            .sort()
+            .join(",");
+        };
+
         // Seçili ürünler var, sadece index'leri güncelle (order değişmiş olabilir)
         const updatedPendingItems = pendingPaymentItems
           .map((pendingItem) => {
-            // Yeni order'da aynı menuId'ye sahip ürünlerin index'lerini bul
+            // Yeni order'da aynı uniqueKey'e sahip ürünlerin index'lerini bul
             const newIndices: number[] = [];
             order.items.forEach((item, index) => {
-              if (item.menuId === pendingItem.menuId) {
+              const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+              if (itemUniqueKey === pendingItem.uniqueKey) {
                 newIndices.push(index);
               }
             });
 
             // Toplam miktarı hesapla
             const totalQuantity = order.items
-              .filter((item) => item.menuId === pendingItem.menuId)
+              .filter((item) => {
+                const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                return itemUniqueKey === pendingItem.uniqueKey;
+              })
               .reduce((sum, item) => sum + item.quantity, 0);
 
             return {
@@ -877,8 +909,10 @@ function TableDetailContent() {
               totalQuantity,
               indices: newIndices,
               menuPrice:
-                order.items.find((item) => item.menuId === pendingItem.menuId)
-                  ?.menuPrice || pendingItem.menuPrice,
+                order.items.find((item) => {
+                  const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                  return itemUniqueKey === pendingItem.uniqueKey;
+                })?.menuPrice || pendingItem.menuPrice,
             };
           })
           .filter((item) => item.indices.length > 0); // Sadece hala order'da olan ürünleri tut
@@ -887,7 +921,17 @@ function TableDetailContent() {
         return; // Seçili ürünler korunuyor, çık
       }
 
-      // Tüm ürünleri menuId'ye göre grupla (seçili ürün yoksa)
+      // Tüm ürünleri uniqueKey'e göre grupla (menuId + ekstra malzemeler)
+      // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+      const getExtrasKey = (extras?: SelectedExtra[]): string => {
+        if (!extras || extras.length === 0) return "";
+        // ID'lere göre sırala ve string'e çevir
+        return extras
+          .map((e) => e.id)
+          .sort()
+          .join(",");
+      };
+
       const groupedItems = new Map<
         string,
         {
@@ -896,21 +940,26 @@ function TableDetailContent() {
           totalQuantity: number;
           menuPrice: number;
           indices: number[];
+          uniqueKey: string;
+          selectedExtras?: SelectedExtra[];
         }
       >();
 
       order.items.forEach((item, index) => {
-        const existing = groupedItems.get(item.menuId);
+        const uniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+        const existing = groupedItems.get(uniqueKey);
         if (existing) {
           existing.totalQuantity += item.quantity;
           existing.indices.push(index);
         } else {
-          groupedItems.set(item.menuId, {
+          groupedItems.set(uniqueKey, {
             menuId: item.menuId,
             menuName: item.menuName,
             totalQuantity: item.quantity,
             menuPrice: item.menuPrice,
             indices: [index],
+            uniqueKey: uniqueKey,
+            selectedExtras: item.selectedExtras || undefined,
           });
         }
       });
@@ -923,8 +972,8 @@ function TableDetailContent() {
       setSelectedQuantities((prev) => {
         const newMap = new Map(prev);
         newPendingItems.forEach((item) => {
-          if (!newMap.has(item.menuId)) {
-            newMap.set(item.menuId, 0); // Başlangıçta seçili miktar 0
+          if (!newMap.has(item.uniqueKey)) {
+            newMap.set(item.uniqueKey, 0); // Başlangıçta seçili miktar 0
           }
         });
         return newMap;
@@ -1053,6 +1102,164 @@ function TableDetailContent() {
       })
     : menus;
 
+  // Ürün grid'i için dinamik hesaplama
+  const [productGridSize, setProductGridSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const productGridRef = useRef<HTMLDivElement>(null);
+  const productGridContainerRef = useRef<HTMLDivElement>(null);
+
+  // Ürün grid'i için optimal kolon ve satır sayısını hesapla
+  const calculateProductGrid = (
+    productCount: number,
+    width: number,
+    height: number
+  ) => {
+    if (productCount === 0 || width === 0 || height === 0)
+      return { cols: 2, gap: 8, cardSize: 100 };
+
+    const padding = 24; // p-3 lg:p-4 için (12px * 2)
+    const availableWidth = Math.max(width - padding, 200);
+    const availableHeight = Math.max(height - padding, 200);
+    const gap = 8; // gap-2 için
+    const minCardSize = 50; // Minimum kart boyutunu daha da düşürdük
+
+    // Çok ürün varsa (15+), önce 5 kolon dene
+    const startCols = productCount >= 15 ? 5 : 4;
+    let bestCols = startCols; // Varsayılan olarak startCols kolon
+    let bestCardSize = minCardSize;
+    let bestFit = Infinity;
+
+    // Tüm ürünlerin sığması için en uygun kolon sayısını bul (daha fazla kolon öncelikli)
+    // Önce daha fazla kolon dene (5, 6, 7...) çünkü daha az satır = daha az yükseklik gereksinimi
+    for (let cols = startCols; cols <= 15; cols++) {
+      const rows = Math.ceil(productCount / cols);
+      const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+      const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+      const cardSize = Math.min(cardWidth, cardHeight);
+
+      if (cardSize < minCardSize) continue;
+
+      const requiredWidth = cols * cardSize + (cols - 1) * gap;
+      const requiredHeight = rows * cardSize + (rows - 1) * gap;
+
+      // Genişlik sığmalı, yükseklik kontrolünü çok esnek yap
+      if (requiredWidth <= availableWidth) {
+        // Yükseklik kontrolü: Son satırın görünmesi için çok fazla tolerans ver
+        // Tüm satırların görünmesi için yeterli yükseklik olmalı
+        const heightTolerance = cardSize * 3; // Üç kart yüksekliği kadar tolerans
+        if (requiredHeight <= availableHeight + heightTolerance) {
+          const unusedSpace =
+            availableWidth -
+            requiredWidth +
+            Math.max(0, availableHeight - requiredHeight);
+          if (unusedSpace < bestFit) {
+            bestFit = unusedSpace;
+            bestCols = cols;
+            bestCardSize = cardSize;
+          }
+        }
+      }
+    }
+
+    // Eğer startCols+ kolon sığmıyorsa, daha az kolon dene
+    if (bestFit === Infinity) {
+      const fallbackStart = startCols > 4 ? 4 : 3;
+      for (let cols = fallbackStart; cols >= 2; cols--) {
+        const rows = Math.ceil(productCount / cols);
+        const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+        const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+        const cardSize = Math.min(cardWidth, cardHeight);
+
+        if (cardSize < minCardSize) continue;
+
+        const requiredWidth = cols * cardSize + (cols - 1) * gap;
+        const requiredHeight = rows * cardSize + (rows - 1) * gap;
+
+        if (requiredWidth <= availableWidth) {
+          const heightTolerance = cardSize * 3;
+          if (requiredHeight <= availableHeight + heightTolerance) {
+            const unusedSpace =
+              availableWidth -
+              requiredWidth +
+              Math.max(0, availableHeight - requiredHeight);
+            if (unusedSpace < bestFit) {
+              bestFit = unusedSpace;
+              bestCols = cols;
+              bestCardSize = cardSize;
+            }
+          }
+        }
+      }
+    }
+
+    // Eğer hiçbir kombinasyon sığmıyorsa, en az satır sayısına sahip olanı seç
+    if (bestFit === Infinity) {
+      let minRows = Infinity;
+      for (let cols = 4; cols <= 15; cols++) {
+        const rows = Math.ceil(productCount / cols);
+        if (rows < minRows) {
+          minRows = rows;
+          bestCols = cols;
+          const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+          const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+          bestCardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
+        }
+      }
+    }
+
+    return { cols: bestCols, gap, cardSize: Math.floor(bestCardSize) };
+  };
+
+  // Ürün grid boyutunu güncelle (sidebar genişliğini dikkate al)
+  useEffect(() => {
+    const updateProductGridSize = () => {
+      if (productGridContainerRef.current) {
+        // Container'ın genişliğini ve yüksekliğini al (sidebar zaten dikkate alınmış)
+        // Yüksekliği daha doğru hesapla - parent container'ın tam yüksekliğini kullan
+        const rect = productGridContainerRef.current.getBoundingClientRect();
+        const parentRect =
+          productGridContainerRef.current.parentElement?.getBoundingClientRect();
+        const height = parentRect ? parentRect.height : rect.height;
+
+        setProductGridSize({
+          width: rect.width,
+          height: height,
+        });
+      }
+    };
+
+    // İlk hesaplama
+    updateProductGridSize();
+
+    // Kısa bir gecikme ile tekrar hesapla (layout tamamlanması için)
+    const timeoutId1 = setTimeout(updateProductGridSize, 100);
+    const timeoutId2 = setTimeout(updateProductGridSize, 300);
+    const timeoutId3 = setTimeout(updateProductGridSize, 500);
+
+    window.addEventListener("resize", updateProductGridSize);
+
+    return () => {
+      clearTimeout(timeoutId1);
+      clearTimeout(timeoutId2);
+      clearTimeout(timeoutId3);
+      window.removeEventListener("resize", updateProductGridSize);
+    };
+  }, [filteredMenus.length]); // Kategori değiştiğinde de yeniden hesapla
+
+  // Optimal grid yapısını hesapla
+  const productGridConfig = useMemo(() => {
+    if (!productGridSize) {
+      return { cols: 2, gap: 8, cardSize: 100 };
+    }
+    return calculateProductGrid(
+      filteredMenus.length,
+      productGridSize.width,
+      productGridSize.height
+    );
+  }, [filteredMenus.length, productGridSize]);
+
   // Sepete ürün ekle (not ile birlikte) - kullanılmıyor
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _addToCartWithNote = useCallback(
@@ -1120,13 +1327,13 @@ function TableDetailContent() {
         const itemsToAdd = Array.from({ length: finalQuantity }, (_, index) => {
           const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}-${index}`;
           return {
-            cartItemId,
-            menuId: menu.id!,
-            menuName: menu.name,
-            menuPrice: menu.price,
-            quantity: 1,
-            subtotal: menu.price,
-            addedAt: new Date(),
+              cartItemId,
+              menuId: menu.id!,
+              menuName: menu.name,
+              menuPrice: menu.price,
+              quantity: 1,
+              subtotal: menu.price,
+              addedAt: new Date(),
           };
         });
 
@@ -1140,9 +1347,8 @@ function TableDetailContent() {
     [isRefreshingOrder, selectedNumericKey]
   );
 
-  // Ekstra malzemeleri seçip sepete ekle (kullanılmıyor - handleAddToCart kullanılıyor)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _handleAddToCartWithExtras = useCallback(() => {
+  // Ekstra malzemeleri seçip sepete ekle (yeni ürün eklerken)
+  const handleAddToCartWithExtras = useCallback(() => {
     if (!selectedMenuForExtra) return;
 
     // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
@@ -1170,6 +1376,7 @@ function TableDetailContent() {
     const itemPrice = selectedMenuForExtra.price + extrasTotal;
 
     setCart((prev) => {
+      // Her seferinde yeni bir cart item oluştur (ekstra malzemeler farklı olabilir)
       const cartItemId = `${selectedMenuForExtra.id}-${Date.now()}-${Math.random()}`;
       return [
         ...prev,
@@ -1190,6 +1397,7 @@ function TableDetailContent() {
     // Modal'ı kapat ve state'leri temizle
     setShowExtraModal(false);
     setSelectedMenuForExtra(null);
+    setSelectedCartItemForExtra(null);
     setSelectedExtras(new Set());
     setShowCart(true);
   }, [selectedMenuForExtra, selectedExtras, isRefreshingOrder]);
@@ -1330,7 +1538,7 @@ function TableDetailContent() {
       const updated = [...prev];
       const item = updated[index];
       updated[index] = {
-        ...item,
+            ...item,
         quantity: item.quantity + 1,
         subtotal: (item.quantity + 1) * item.menuPrice,
       };
@@ -1356,10 +1564,10 @@ function TableDetailContent() {
       // Sadece ilk bulunan item'ın quantity'sini azalt
       const updated = [...prev];
       updated[index] = {
-        ...item,
-        quantity: newQuantity,
-        subtotal: newQuantity * item.menuPrice,
-      };
+              ...item,
+              quantity: newQuantity,
+              subtotal: newQuantity * item.menuPrice,
+            };
       return updated;
     });
   }, []);
@@ -1368,6 +1576,53 @@ function TableDetailContent() {
   const removeCartItem = useCallback((menuId: string) => {
     setCart((prev) => prev.filter((item) => item.menuId !== menuId));
   }, []);
+
+  // Sipariş listesindeki ürüne ekstra malzeme ekle
+  const handleAddExtrasToCartItem = useCallback(async () => {
+    if (!selectedMenuForExtra || !selectedCartItemForExtra) return;
+
+    const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
+      .map((extraId) => {
+        const extra = selectedMenuForExtra.extras?.find(
+          (e) => e.id === extraId
+        );
+        return extra
+          ? {
+              id: extra.id,
+              name: extra.name,
+              price: extra.price,
+            }
+          : null;
+      })
+      .filter((e): e is SelectedExtra => e !== null);
+
+    const extrasTotal = selectedExtrasList.reduce(
+      (sum, extra) => sum + extra.price,
+      0
+    );
+
+    // Cart'taki ürünü güncelle
+    setCart((prev) => {
+      return prev.map((item) => {
+        if (item.menuId === selectedCartItemForExtra.menuId && 
+            item.cartItemId === selectedCartItemForExtra.cartItemId) {
+          const newSubtotal = (selectedMenuForExtra.price + extrasTotal) * item.quantity;
+          return {
+            ...item,
+            selectedExtras: selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
+            subtotal: newSubtotal,
+          };
+        }
+        return item;
+      });
+    });
+
+    // Modal'ı kapat ve state'leri temizle
+    setShowExtraModal(false);
+    setSelectedMenuForExtra(null);
+    setSelectedCartItemForExtra(null);
+    setSelectedExtras(new Set());
+  }, [selectedMenuForExtra, selectedCartItemForExtra, selectedExtras]);
 
   // Gönderilmemiş ürünler için miktar artırma
   const increaseUnsentItemQuantity = useCallback(
@@ -1573,29 +1828,56 @@ function TableDetailContent() {
       }
       const existingItems = currentOrder?.items || [];
 
-      // Tüm ürünleri birleştir (mevcut + yeni) - menuId'ye göre birleştir
+      // Tüm ürünleri birleştir (mevcut + yeni) - menuId + ekstra malzemelere göre birleştir
+      // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+      const getExtrasKey = (extras?: SelectedExtra[]): string => {
+        if (!extras || extras.length === 0) return "";
+        // ID'lere göre sırala ve string'e çevir
+        return extras
+          .map((e) => e.id)
+          .sort()
+          .join(",");
+      };
+
       const itemMap = new Map<string, OrderItem>();
 
-      // Önce mevcut siparişteki ürünleri ekle
+      // Önce mevcut siparişteki ürünleri ekle (subtotal'ı ekstra malzemeler dahil yeniden hesapla)
       existingItems.forEach((item) => {
-        itemMap.set(item.menuId, {
+        // Ekstra malzemelerin fiyatını hesapla
+        const extrasTotal = (item.selectedExtras || []).reduce(
+          (sum, extra) => sum + extra.price,
+          0
+        );
+        // Subtotal'ı ekstra malzemeler dahil yeniden hesapla
+        const correctSubtotal = item.quantity * (item.menuPrice + extrasTotal);
+        // Birleştirme anahtarı: menuId + ekstra malzemeler
+        const mergeKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+        itemMap.set(mergeKey, {
           menuId: item.menuId,
           menuName: item.menuName,
           menuPrice: item.menuPrice,
           quantity: item.quantity,
-          subtotal: item.subtotal,
+          subtotal: correctSubtotal,
           notes: item.notes || undefined,
+          selectedExtras: item.selectedExtras || undefined,
           addedAt: item.addedAt || new Date(), // Mevcut item'ın addedAt'ini koru
         });
       });
 
       // Sonra yeni eklenen ürünleri ekle veya birleştir
       cart.forEach((item) => {
-        const existing = itemMap.get(item.menuId);
+        // Birleştirme anahtarı: menuId + ekstra malzemeler
+        const mergeKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+        const existing = itemMap.get(mergeKey);
         if (existing) {
-          // Aynı ürünü birleştir (notları birleştir)
+          // Aynı ürün + aynı ekstra malzemeler → birleştir
           existing.quantity += item.quantity;
-          existing.subtotal = existing.quantity * existing.menuPrice;
+          // Subtotal'ı yeniden hesapla: ekstra malzemeler dahil
+          const extrasTotal = (existing.selectedExtras || []).reduce(
+            (sum, extra) => sum + extra.price,
+            0
+          );
+          existing.subtotal = existing.quantity * (existing.menuPrice + extrasTotal);
           // Notları birleştir (varsa)
           if (item.notes) {
             existing.notes = existing.notes
@@ -1610,19 +1892,21 @@ function TableDetailContent() {
             existing.addedAt = item.addedAt;
           }
         } else {
-          // Yeni ürün ekle
-          itemMap.set(item.menuId, {
+          // Farklı ürün veya farklı ekstra malzemeler → ayrı item
+          itemMap.set(mergeKey, {
             menuId: item.menuId,
             menuName: item.menuName,
             menuPrice: item.menuPrice,
             quantity: item.quantity,
-            subtotal: item.subtotal,
+            subtotal: item.subtotal, // Cart'tan gelen subtotal zaten ekstra malzemeler dahil
             notes: item.notes || undefined,
+            selectedExtras: item.selectedExtras || undefined,
             addedAt: item.addedAt || new Date(),
           });
         }
       });
 
+      // Final items'ı oluştur (subtotal'lar zaten doğru hesaplanmış)
       const finalItems = Array.from(itemMap.values());
 
       // Toplam hesapla
@@ -1927,6 +2211,8 @@ function TableDetailContent() {
         totalQuantity: number;
         menuPrice: number;
         indices: number[];
+        uniqueKey: string;
+        selectedExtras?: SelectedExtra[];
       }>,
       overrideSelectedQuantities?: Map<string, number>,
       overridePaymentMethod?: string,
@@ -4679,7 +4965,7 @@ function TableDetailContent() {
         if (hasSelectedItems) {
           // Seçili ürünleri kaydet
           pendingPaymentItems.forEach((paymentItem) => {
-            const selectedQty = selectedQuantities.get(paymentItem.menuId) || 0;
+            const selectedQty = selectedQuantities.get(paymentItem.uniqueKey) || 0;
             if (selectedQty > 0) {
               let remainingQty = selectedQty;
               for (const index of paymentItem.indices) {
@@ -4786,7 +5072,7 @@ function TableDetailContent() {
                   paymentItem.indices.includes(index)
                 ) {
                   const selectedQty =
-                    selectedQuantities.get(paymentItem.menuId) || 0;
+                    selectedQuantities.get(paymentItem.uniqueKey) || 0;
                   if (selectedQty > 0) {
                     let qtyToRemove = selectedQty;
                     for (const idx of paymentItem.indices) {
@@ -5076,9 +5362,8 @@ function TableDetailContent() {
       <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 sticky top-0 z-40 shrink-0">
         <div className="flex items-center justify-between">
           <Button
-            variant="outline"
             onClick={navigateToHome}
-            className="h-10 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold"
+            className="h-10 px-4 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-bold border-2 border-blue-400 dark:border-blue-500 shadow-lg hover:shadow-xl transition-all active:scale-95"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />
             Geri
@@ -5101,11 +5386,11 @@ function TableDetailContent() {
       </div>
       {/* Left Sidebar - Order (Desktop) */}
       <div
-        className="hidden lg:flex lg:flex-none lg:w-[480px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
+        className="hidden lg:flex lg:flex-none lg:w-[320px] xl:w-[400px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
       >
-        <div className="p-3 shrink-0">
-          <div className="flex items-center justify-between">
+        <div className="p-3 shrink-0 flex items-center" style={{ height: '56px' }}>
+          <div className="flex items-center justify-between w-full">
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4" />
@@ -5721,7 +6006,7 @@ function TableDetailContent() {
                                   ) : (
                                     <span className="font-bold text-sm text-white ml-2">
                                       ₺
-                                      {(item.menuPrice * item.quantity)
+                                      {item.subtotal
                                         .toFixed(2)
                                         .replace(".", ",")}
                                     </span>
@@ -5847,13 +6132,28 @@ function TableDetailContent() {
                                       itemsByDate.set(dateKey, []);
                                     }
 
-                                    // Aynı menuId'ye sahip ürünleri birleştir (aynı tarih grubu içinde)
+                                    // Aynı menuId ve aynı ekstra malzemelere sahip ürünleri birleştir (aynı tarih grubu içinde)
+                                    // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+                                    const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                      if (!extras || extras.length === 0) return "";
+                                      // ID'lere göre sırala ve string'e çevir
+                                      return extras
+                                        .map((e) => e.id)
+                                        .sort()
+                                        .join(",");
+                                    };
+
                                     const dateGroup = itemsByDate.get(dateKey)!;
+                                    const mergeKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
                                     const existingInGroup = dateGroup.find(
-                                      (g) => g.item.menuId === item.menuId
+                                      (g) => {
+                                        const gKey = `${g.item.menuId}_${getExtrasKey(g.item.selectedExtras)}`;
+                                        return gKey === mergeKey;
+                                      }
                                     );
 
                                     if (existingInGroup) {
+                                      // Aynı ürün + aynı ekstra malzemeler → birleştir
                                       existingInGroup.item.quantity +=
                                         item.quantity;
                                       existingInGroup.item.subtotal +=
@@ -5877,6 +6177,7 @@ function TableDetailContent() {
                                           item.addedAt;
                                       }
                                     } else {
+                                      // Farklı ürün veya farklı ekstra malzemeler → ayrı item
                                       dateGroup.push({
                                         item: { ...item },
                                         indices: [index],
@@ -5943,24 +6244,36 @@ function TableDetailContent() {
 
                                                       // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
                                                       if (showPaymentModal) {
-                                                        // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
+                                                        // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+                                                        const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                                          if (!extras || extras.length === 0) return "";
+                                                          // ID'lere göre sırala ve string'e çevir
+                                                          return extras
+                                                            .map((e) => e.id)
+                                                            .sort()
+                                                            .join(",");
+                                                        };
+                                                        
+                                                        const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                                                        
+                                                        // Önce pendingPaymentItems içinde bu uniqueKey'e sahip ürün var mı kontrol et
                                                         let existingInPending =
                                                           pendingPaymentItems.find(
                                                             (p) =>
-                                                              p.menuId ===
-                                                              item.menuId
+                                                              p.uniqueKey === itemUniqueKey
                                                           );
 
                                                         // Eğer yoksa, pendingPaymentItems'a ekle
                                                         if (
                                                           !existingInPending
                                                         ) {
-                                                          // Aynı menuId'ye sahip tüm item'ları bul ve topla
+                                                          // Aynı uniqueKey'e sahip tüm item'ları bul ve topla
                                                           const allSameItems =
                                                             order.items.filter(
-                                                              (o) =>
-                                                                o.menuId ===
-                                                                item.menuId
+                                                              (o) => {
+                                                                const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
+                                                                return oUniqueKey === itemUniqueKey;
+                                                              }
                                                             );
                                                           const totalQty =
                                                             allSameItems.reduce(
@@ -5971,12 +6284,10 @@ function TableDetailContent() {
                                                             );
                                                           const indices =
                                                             order.items
-                                                              .map((o, idx) =>
-                                                                o.menuId ===
-                                                                item.menuId
-                                                                  ? idx
-                                                                  : -1
-                                                              )
+                                                              .map((o, idx) => {
+                                                                const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
+                                                                return oUniqueKey === itemUniqueKey ? idx : -1;
+                                                              })
                                                               .filter(
                                                                 (idx) =>
                                                                   idx !== -1
@@ -5993,6 +6304,8 @@ function TableDetailContent() {
                                                               menuPrice:
                                                                 item.menuPrice,
                                                               indices: indices,
+                                                              uniqueKey: itemUniqueKey,
+                                                              selectedExtras: item.selectedExtras || undefined,
                                                             };
 
                                                           setPendingPaymentItems(
@@ -6011,10 +6324,10 @@ function TableDetailContent() {
                                                             newPendingItem;
                                                         }
 
-                                                        // selectedQuantities'yi güncelle
+                                                        // selectedQuantities'yi güncelle (uniqueKey ile)
                                                         const currentQty =
                                                           selectedQuantities.get(
-                                                            item.menuId
+                                                            itemUniqueKey
                                                           ) || 0;
                                                         const newQty = Math.min(
                                                           existingInPending.totalQuantity,
@@ -6025,7 +6338,7 @@ function TableDetailContent() {
                                                             const newMap =
                                                               new Map(prev);
                                                             newMap.set(
-                                                              item.menuId,
+                                                              itemUniqueKey,
                                                               newQty
                                                             );
                                                             return newMap;
@@ -6055,9 +6368,10 @@ function TableDetailContent() {
                                                     } ${
                                                       isSelected ||
                                                       (showPaymentModal &&
-                                                        (selectedQuantities.get(
-                                                          item.menuId
-                                                        ) || 0) > 0)
+                                                        (() => {
+                                                          const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                                                          return (selectedQuantities.get(itemUniqueKey) || 0) > 0;
+                                                        })())
                                                         ? "bg-blue-50 dark:bg-blue-900/20"
                                                         : ""
                                                     }`}
@@ -6070,6 +6384,12 @@ function TableDetailContent() {
                                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                                           {item.menuName}
                                                         </p>
+                                                        {item.selectedExtras &&
+                                                          item.selectedExtras.length > 0 && (
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                              + {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                                                            </p>
+                                                          )}
                                                         {item.addedAt &&
                                                           currentTable.area ===
                                                             "Cari" && (
@@ -6182,17 +6502,28 @@ function TableDetailContent() {
                                   );
                                 });
                               } else {
-                                // Normal masalarda aynı menuId'ye sahip ürünleri birleştir
+                                // Normal masalarda aynı menuId ve aynı ekstra malzemelere sahip ürünleri birleştir
+                                // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
+                                const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                  if (!extras || extras.length === 0) return "";
+                                  // ID'lere göre sırala ve string'e çevir
+                                  return extras
+                                    .map((e) => e.id)
+                                    .sort()
+                                    .join(",");
+                                };
+
                                 const mergedItems = new Map<
                                   string,
                                   { item: OrderItem; indices: number[] }
                                 >();
                                 order.items.forEach((item, index) => {
                                   if (!item.canceledAt) {
-                                    const existing = mergedItems.get(
-                                      item.menuId
-                                    );
+                                    // Birleştirme anahtarı: menuId + ekstra malzemeler
+                                    const mergeKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                                    const existing = mergedItems.get(mergeKey);
                                     if (existing) {
+                                      // Aynı ürün + aynı ekstra malzemeler → birleştir
                                       existing.item.quantity += item.quantity;
                                       existing.item.subtotal += item.subtotal;
                                       existing.indices.push(index);
@@ -6212,7 +6543,8 @@ function TableDetailContent() {
                                         existing.item.addedAt = item.addedAt;
                                       }
                                     } else {
-                                      mergedItems.set(item.menuId, {
+                                      // Farklı ürün veya farklı ekstra malzemeler → ayrı item
+                                      mergedItems.set(mergeKey, {
                                         item: { ...item },
                                         indices: [index],
                                       });
@@ -6246,20 +6578,24 @@ function TableDetailContent() {
 
                                             // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
                                             if (showPaymentModal) {
-                                              // Önce pendingPaymentItems içinde bu ürün var mı kontrol et
+                                              const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                                              
+                                              // Önce pendingPaymentItems içinde bu uniqueKey'e sahip ürün var mı kontrol et
                                               let existingInPending =
                                                 pendingPaymentItems.find(
                                                   (p) =>
-                                                    p.menuId === item.menuId
+                                                    p.uniqueKey === itemUniqueKey
                                                 );
 
                                               // Eğer yoksa, pendingPaymentItems'a ekle
                                               if (!existingInPending) {
-                                                // Aynı menuId'ye sahip tüm item'ları bul ve topla
+                                                // Aynı uniqueKey'e sahip tüm item'ları bul ve topla
                                                 const allSameItems =
                                                   order.items.filter(
-                                                    (o) =>
-                                                      o.menuId === item.menuId
+                                                    (o) => {
+                                                      const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
+                                                      return oUniqueKey === itemUniqueKey;
+                                                    }
                                                   );
                                                 const totalQty =
                                                   allSameItems.reduce(
@@ -6268,11 +6604,10 @@ function TableDetailContent() {
                                                     0
                                                   );
                                                 const indices = order.items
-                                                  .map((o, idx) =>
-                                                    o.menuId === item.menuId
-                                                      ? idx
-                                                      : -1
-                                                  )
+                                                  .map((o, idx) => {
+                                                    const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
+                                                    return oUniqueKey === itemUniqueKey ? idx : -1;
+                                                  })
                                                   .filter((idx) => idx !== -1);
 
                                                 const newPendingItem = {
@@ -6281,6 +6616,8 @@ function TableDetailContent() {
                                                   totalQuantity: totalQty,
                                                   menuPrice: item.menuPrice,
                                                   indices: indices,
+                                                  uniqueKey: itemUniqueKey,
+                                                  selectedExtras: item.selectedExtras || undefined,
                                                 };
 
                                                 setPendingPaymentItems(
@@ -6297,10 +6634,10 @@ function TableDetailContent() {
                                                   newPendingItem;
                                               }
 
-                                              // selectedQuantities'yi güncelle
+                                              // selectedQuantities'yi güncelle (uniqueKey ile)
                                               const currentQty =
                                                 selectedQuantities.get(
-                                                  item.menuId
+                                                  itemUniqueKey
                                                 ) || 0;
                                               const newQty = Math.min(
                                                 existingInPending.totalQuantity,
@@ -6308,7 +6645,7 @@ function TableDetailContent() {
                                               );
                                               setSelectedQuantities((prev) => {
                                                 const newMap = new Map(prev);
-                                                newMap.set(item.menuId, newQty);
+                                                newMap.set(itemUniqueKey, newQty);
                                                 return newMap;
                                               });
                                               return;
@@ -6403,6 +6740,12 @@ function TableDetailContent() {
                                               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                                 {item.menuName}
                                               </p>
+                                              {item.selectedExtras &&
+                                                item.selectedExtras.length > 0 && (
+                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    + {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                                                  </p>
+                                                )}
                                               {item.addedAt &&
                                                 currentTable.area ===
                                                   "Cari" && (
@@ -6466,7 +6809,7 @@ function TableDetailContent() {
                                           ) : (
                                             <span className="text-sm font-semibold text-white ml-2 shrink-0">
                                               ₺
-                                              {(item.menuPrice * item.quantity)
+                                              {item.subtotal
                                                 .toFixed(2)
                                                 .replace(".", ",")}
                                             </span>
@@ -6653,6 +6996,10 @@ function TableDetailContent() {
                     const isSelected = cartItemIds.some((id) =>
                       selectedCartItems.has(id)
                     );
+                    // Ürünün ekstra malzemesi var mı kontrol et
+                    const menuItem = menus.find((m) => m.id === item.menuId);
+                    const hasExtras = menuItem?.extras && menuItem.extras.length > 0;
+                    
                     return (
                       <div
                         key={item.menuId}
@@ -6691,6 +7038,22 @@ function TableDetailContent() {
                             className="flex items-center gap-3 ml-2"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            {hasExtras && (
+                              <button
+                                onClick={() => {
+                                  setSelectedMenuForExtra(menuItem || null);
+                                  setSelectedCartItemForExtra(item);
+                                  // Mevcut seçili ekstra malzemeleri yükle
+                                  const currentExtras = item.selectedExtras || [];
+                                  setSelectedExtras(new Set(currentExtras.map((e: SelectedExtra) => e.id)));
+                                  setShowExtraModal(true);
+                                }}
+                                className="p-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                title="Ekstra Malzeme Ekle"
+                              >
+                                <Utensils className="h-5 w-5" />
+                              </button>
+                            )}
                             <button
                               onClick={() =>
                                 decreaseCartItemQuantity(item.menuId)
@@ -7034,7 +7397,7 @@ function TableDetailContent() {
                     <span className="text-sm text-white">TOPLAM</span>
                     <div className="flex flex-col items-end">
                       <span className="text-xl font-bold text-white">
-                        ₺{unpaidOriginalAmount.toFixed(2).replace(".", ",")}
+                        ₺{unpaidTotalAmount.toFixed(2).replace(".", ",")}
                       </span>
                     </div>
                   </div>
@@ -7098,7 +7461,10 @@ function TableDetailContent() {
       </div>
 
       {/* Main Content - Products */}
-      <div className="flex-1 flex flex-col">
+      <div
+        ref={productGridContainerRef}
+        className="flex-1 flex flex-col min-h-0 min-w-0"
+      >
         {/* Categories - Mobile (Horizontal Scroll) */}
         <div className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 overflow-x-auto shrink-0">
           <div className="flex gap-2 min-w-max">
@@ -7125,20 +7491,30 @@ function TableDetailContent() {
         </div>
 
         {/* Products Grid */}
-        <div className="flex-1 p-3 lg:p-4 overflow-y-auto relative">
+        <div
+          ref={productGridRef}
+          className="flex-1 p-3 lg:p-4 relative min-h-0 overflow-hidden"
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${productGridConfig.cols}, ${productGridConfig.cardSize}px)`,
+            gap: `${productGridConfig.gap}px`,
+            alignContent: "start",
+            justifyContent: "start",
+            overflow: "hidden",
+          }}
+        >
           {filteredMenus.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-12 col-span-full">
               <p className="text-gray-500 dark:text-gray-400">
                 Bu kategoride ürün bulunmuyor
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
-              {filteredMenus.map((menu) => {
+            filteredMenus.map((menu) => {
                 return (
                   <div
                     key={menu.id}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer flex flex-col items-center justify-center aspect-square p-1 sm:p-1.5 md:p-2"
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer flex flex-col items-center justify-center"
                     onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
                     onMouseDown={() =>
                       !isRefreshingOrder && handleLongPressStart(menu)
@@ -7151,20 +7527,33 @@ function TableDetailContent() {
                     onTouchEnd={handleLongPressEnd}
                     onTouchCancel={handleLongPressEnd}
                     style={{
+                    width: `${productGridConfig.cardSize}px`,
+                    height: `${productGridConfig.cardSize}px`,
+                    padding: `${productGridConfig.cardSize * 0.05}px`,
                       pointerEvents: isRefreshingOrder ? "none" : "auto",
                       opacity: isRefreshingOrder ? 0.5 : 1,
                     }}
                   >
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1 sm:mb-1.5 text-[10px] sm:text-xs md:text-sm text-center line-clamp-2 leading-tight">
-                      {menu.name}
-                    </h3>
-                    <span className="text-xs sm:text-sm md:text-base font-bold text-blue-600 dark:text-blue-400">
-                      ₺{menu.price.toFixed(2)}
-                    </span>
+                  <h3
+                    className="font-semibold text-gray-900 dark:text-white text-center line-clamp-2 leading-tight"
+                    style={{
+                      fontSize: `${productGridConfig.cardSize * 0.1}px`,
+                      marginBottom: `${productGridConfig.cardSize * 0.015}px`,
+                    }}
+                  >
+                        {menu.name}
+                      </h3>
+                  <span
+                    className="font-bold text-blue-600 dark:text-blue-400"
+                    style={{
+                      fontSize: `${productGridConfig.cardSize * 0.08}px`,
+                    }}
+                  >
+                          ₺{menu.price.toFixed(2)}
+                        </span>
                   </div>
                 );
-              })}
-            </div>
+            })
           )}
         </div>
       </div>
@@ -7199,12 +7588,18 @@ function TableDetailContent() {
 
           let discount = 0;
           if (hasSelectedItems) {
-            // Seçili ürünlerin toplam fiyatını hesapla (orijinal fiyat)
+            // Seçili ürünlerin toplam fiyatını hesapla (orijinal fiyat - ekstra malzemeler dahil)
             originalTotal = pendingPaymentItems.reduce((sum, paymentItem) => {
               const selectedQty =
-                selectedQuantities.get(paymentItem.menuId) || 0;
+                selectedQuantities.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
-                return sum + selectedQty * paymentItem.menuPrice;
+                // Ekstra malzemelerin fiyatını hesapla
+                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                  (sum, extra) => sum + extra.price,
+                  0
+                );
+                const itemPrice = paymentItem.menuPrice + extrasTotal;
+                return sum + selectedQty * itemPrice;
               }
               return sum;
             }, 0);
@@ -7261,7 +7656,7 @@ function TableDetailContent() {
             <>
               {/* Overlay */}
               <div
-                className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[480px] lg:right-0"
+                className="fixed top-[80px] bottom-0 left-0 right-0 bg-black/50 z-40 lg:left-[320px] xl:left-[400px] lg:right-0"
                 onClick={async () => {
                   setShowPaymentModal(false);
                   setPaymentAmount("");
@@ -7300,13 +7695,13 @@ function TableDetailContent() {
                 }}
               />
               {/* Ödeme Paneli */}
-              <div className="fixed top-[80px] bottom-0 left-0 right-0 lg:left-[480px] lg:right-0 bg-white dark:bg-gray-800 z-50 flex transform transition-transform duration-300 ease-in-out">
+              <div className="fixed top-[80px] bottom-0 left-0 right-0 lg:left-[320px] xl:left-[400px] lg:right-0 bg-white dark:bg-gray-800 z-50 flex transform transition-transform duration-300 ease-in-out">
                 {/* Sol Sidebar - Seçili Ürünler */}
                 <div
                   className="hidden lg:flex lg:flex-none lg:w-96 flex-col overflow-hidden"
                   style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
                 >
-                  <div className="p-3 shrink-0 border-b border-gray-700">
+                  <div className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 flex items-center" style={{ height: '56px' }}>
                     <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4" />
                       Seçili Ürünler
@@ -7315,15 +7710,21 @@ function TableDetailContent() {
                   <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     {(() => {
                       const selectedItemsList = pendingPaymentItems.filter(
-                        (item) => (selectedQuantities.get(item.menuId) || 0) > 0
+                        (item) => (selectedQuantities.get(item.uniqueKey) || 0) > 0
                       );
 
-                      // Seçili ürünlerin toplam fiyatını hesapla (orijinal)
+                      // Seçili ürünlerin toplam fiyatını hesapla (orijinal - ekstra malzemeler dahil)
                       const selectedItemsOriginalTotal =
                         selectedItemsList.reduce((sum, paymentItem) => {
                           const selectedQty =
-                            selectedQuantities.get(paymentItem.menuId) || 0;
-                          return sum + selectedQty * paymentItem.menuPrice;
+                            selectedQuantities.get(paymentItem.uniqueKey) || 0;
+                          // Ekstra malzemelerin fiyatını hesapla
+                          const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                            (sum, extra) => sum + extra.price,
+                            0
+                          );
+                          const itemPrice = paymentItem.menuPrice + extrasTotal;
+                          return sum + selectedQty * itemPrice;
                         }, 0);
 
                       // İndirim hesapla
@@ -7380,15 +7781,21 @@ function TableDetailContent() {
                             <div className="space-y-2 p-3">
                               {selectedItemsList.map((paymentItem) => {
                                 const selectedQty =
-                                  selectedQuantities.get(paymentItem.menuId) ||
+                                  selectedQuantities.get(paymentItem.uniqueKey) ||
                                   0;
+                                // Ekstra malzemelerin fiyatını hesapla
+                                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                                  (sum, extra) => sum + extra.price,
+                                  0
+                                );
+                                const itemPrice = paymentItem.menuPrice + extrasTotal;
                                 const itemOriginalTotal =
-                                  selectedQty * paymentItem.menuPrice;
+                                  selectedQty * itemPrice;
                                 const itemDiscountedTotal =
                                   itemOriginalTotal * (1 - discountRatio);
                                 return (
                                   <div
-                                    key={paymentItem.menuId}
+                                    key={paymentItem.uniqueKey}
                                     className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
                                   >
                                     <div className="flex-1 min-w-0">
@@ -7436,10 +7843,10 @@ function TableDetailContent() {
                                           setSelectedQuantities((prev) => {
                                             const newMap = new Map(prev);
                                             if (newQty === 0) {
-                                              newMap.delete(paymentItem.menuId);
+                                              newMap.delete(paymentItem.uniqueKey);
                                             } else {
                                               newMap.set(
-                                                paymentItem.menuId,
+                                                paymentItem.uniqueKey,
                                                 newQty
                                               );
                                             }
@@ -7463,7 +7870,7 @@ function TableDetailContent() {
                                           setSelectedQuantities((prev) => {
                                             const newMap = new Map(prev);
                                             newMap.set(
-                                              paymentItem.menuId,
+                                              paymentItem.uniqueKey,
                                               newQty
                                             );
                                             return newMap;
@@ -7529,12 +7936,13 @@ function TableDetailContent() {
 
                 {/* Ana Ödeme Alanı */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="p-5 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
-                    <div className="flex items-center justify-between">
+                  <div className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center" style={{ height: '56px' }}>
+                    <div className="flex items-center justify-between w-full">
                       <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                         Ödeme Al
                       </h2>
-                      <button
+                      <Button
+                        type="button"
                         onClick={async () => {
                           setShowPaymentModal(false);
                           setPaymentAmount("");
@@ -7572,15 +7980,15 @@ function TableDetailContent() {
                             }
                           }
                         }}
-                        className="p-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all active:scale-95"
+                        className="h-10 w-10 p-0 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
                       >
-                        <X className="h-7 w-7 text-gray-600 dark:text-gray-400" />
-                      </button>
+                        <X className="h-7 w-7" />
+                      </Button>
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {/* Üst Sabit Alan - Numerik Tuşlarla Yazılan Tutarların Tag'ları */}
-                    <div className="px-8 pt-4 pb-4 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0 min-h-[200px]">
+                    <div className="px-8 pt-3 pb-3 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0 min-h-[140px]">
                       {/* Uygulanan Ödemeler */}
                       {appliedPayments.length > 0 ? (
                         <div className="flex items-center gap-3 mb-0 flex-wrap">
@@ -7919,14 +8327,78 @@ function TableDetailContent() {
                       )}
                     </div>
 
-                    {/* Ödeme Bilgileri - Toplam Ödeme, Kalan Tutar ve Buton - CRITICAL FIX: ÖDENEN TUTAR kaldırıldı, boyutlar küçültüldü, boşluklar eşit ve küçük */}
-                    <div className="w-full px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0">
-                      <div className="flex items-center justify-between w-full gap-3 sm:gap-4 md:gap-6">
+                    {/* Alt Kısım - Butonlar */}
+                    <div className="flex-1 flex items-stretch overflow-hidden px-0 pb-0 min-h-0 shrink-0">
+                      {/* Ödeme Yöntemi Butonları, İşlem Butonları, Numerik Ekran ve Numerik Tuşlar */}
+                      <div className="flex-1 flex items-stretch overflow-hidden">
+                        {/* Sol Sütun - Ödeme Yöntemleri - İşlemler butonunun altına kadar uzatıldı */}
+                        <div
+                          className="w-28 sm:w-36 md:w-40 lg:w-48 pl-0.5 sm:pl-1 pr-1 sm:pr-2 pt-0 pb-0 flex flex-col relative shrink-0"
+                          style={{ height: "100%" }}
+                        >
+                          {paymentMethods.length === 0 ? (
+                            <div className="text-center py-2 sm:py-4 text-gray-500 dark:text-gray-400 text-[10px] sm:text-sm">
+                              Bulunamadı
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-hidden justify-start pt-2 pb-2">
+                              {paymentMethods.map((pm) => {
+                                // Gap değerini hesapla (gap-0.5 = 2px)
+                                const gapValue = 2;
+                                const totalGaps =
+                                  (paymentMethods.length - 1) * gapValue;
+                                const buttonHeight = `calc((100% - ${totalGaps}px) / ${paymentMethods.length})`;
+
+                                return (
+                                  <Button
+                                    key={pm.id}
+                                    type="button"
+                                    onClick={() => {
+                                      // Eğer zaten seçiliyse, seçimi kaldır (toggle)
+                                      if (paymentMethod === pm.code) {
+                                        setPaymentMethod("");
+                                      } else {
+                                        setPaymentMethod(pm.code);
+                                      }
+                                    }}
+                                    className={`w-full py-1 sm:py-1.5 text-[9px] sm:text-[10px] md:text-xs font-bold rounded-md sm:rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 ${
+                                      paymentMethod === pm.code
+                                        ? "text-white"
+                                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600"
+                                    }`}
+                                    style={{
+                                      ...(paymentMethod === pm.code
+                                        ? {
+                                            backgroundColor:
+                                              pm.color || "#16a34a",
+                                          }
+                                        : {}),
+                                      height: buttonHeight,
+                                      minHeight: "24px",
+                                      flexShrink: 0,
+                                      flexGrow: 0,
+                                    }}
+                                  >
+                                    {pm.name}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {/* Border'ı alta tam temas ettirmek için absolute positioned border */}
+                          <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 pointer-events-none"></div>
+                        </div>
+
+                        {/* Orta Sütun - Ödeme Bilgileri, İşlem Butonları ve Numerik Keypad */}
+                        <div className="flex-1 flex flex-col pt-0 px-0 pb-0 min-h-0 h-full">
+                          {/* Ödeme Bilgileri - Numerik keypad genişliğinde */}
+                          <div className="px-2 py-2 sm:py-3 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0">
+                            <div className="flex items-center justify-evenly w-full gap-2 sm:gap-3">
                         <div className="text-right flex-1">
                           <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
                             ALINAN ÖDEME
                           </div>
-                          <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-green-600 dark:text-green-400">
+                                <div className="text-base sm:text-lg md:text-xl font-extrabold text-green-600 dark:text-green-400">
                             ₺
                             {(
                               (order.payments || []).reduce(
@@ -7946,38 +8418,21 @@ function TableDetailContent() {
                           <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
                             KALAN TUTAR
                           </div>
-                          <div className="flex items-center justify-end gap-2">
-                            {(() => {
-                              // İndirim var mı kontrol et: originalTotal ile remaining arasında fark varsa veya order.discount varsa indirim var
-                              // Ayrıca modal içindeki discount değişkenini de kontrol et (yeni indirim uygulanıyorsa)
-                              const hasDiscount =
-                                discount > 0 ||
-                                originalTotal > remaining ||
-                                (order.discount && order.discount > 0);
-                              return hasDiscount ? (
-                                <>
-                                  <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
-                                    ₺
-                                    {originalTotal
-                                      // İndirim öncesi toplam (orijinal fiyat)
-                                      .toFixed(2)
-                                      .replace(".", ",")}
-                                  </span>
-                                  <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-red-600 dark:text-red-400">
-                                    ₺
-                                    {(
-                                      remaining -
-                                      appliedPayments.reduce(
-                                        (sum, p) => sum + p.amount,
-                                        0
-                                      )
-                                    )
-                                      .toFixed(2)
-                                      .replace(".", ",")}
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-lg sm:text-xl md:text-2xl font-extrabold text-red-600 dark:text-red-400">
+                                <div className="flex items-center justify-end gap-2">
+                                  {(() => {
+                                    const hasDiscount =
+                                      discount > 0 ||
+                                      originalTotal > remaining ||
+                                      (order.discount && order.discount > 0);
+                                    return hasDiscount ? (
+                                      <>
+                                        <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
+                                  ₺
+                                  {originalTotal
+                                    .toFixed(2)
+                                    .replace(".", ",")}
+                                </span>
+                                        <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
                                   ₺
                                   {(
                                     remaining -
@@ -7989,45 +8444,51 @@ function TableDetailContent() {
                                     .toFixed(2)
                                     .replace(".", ",")}
                                 </div>
-                              );
-                            })()}
+                              </>
+                            ) : (
+                                      <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
+                                ₺
+                                {(
+                                  remaining -
+                                  appliedPayments.reduce(
+                                    (sum, p) => sum + p.amount,
+                                    0
+                                  )
+                                )
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                              </div>
+                                    );
+                                  })()}
                           </div>
                         </div>
-                        <div className="flex-none flex justify-end">
+                              <div className="flex-1 flex justify-center">
                           <Button
                             type="button"
                             onClick={async () => {
                               setIsProcessingPayment(true);
                               try {
-                                // Tag'ların toplam tutarını hesapla
-                                const totalTagAmount = appliedPayments.reduce(
+                                      const totalTagAmount =
+                                        appliedPayments.reduce(
                                   (sum, p) => sum + p.amount,
                                   0
                                 );
 
-                                // Eğer tag'lar varsa, sadece tag'ları işle (kısmi ödeme)
                                 if (appliedPayments.length > 0) {
-                                  // Tüm tag'ları tek bir ödeme olarak işle (masanın toplam ücretinden düş)
-                                  // handlePayment içinde zaten refresh yapılıyor
                                   await handlePayment(
                                     totalTagAmount.toString(),
-                                    undefined, // Ürün bazlı değil, masanın toplam ücretinden düş
                                     undefined,
                                     undefined,
-                                    appliedPayments[0].method // İlk tag'ın ödeme yöntemini kullan
+                                          undefined,
+                                          appliedPayments[0].method
                                   );
-
-                                  // Tag'ları temizle
                                   setAppliedPayments([]);
                                   setPaymentAmount("0");
                                   setPaymentMethod("");
-
-                                  // Modal'ı kapatma, kullanıcı kalan tutarı da alabilir
                                   setIsProcessingPayment(false);
                                   return;
                                 }
 
-                                // Tag'lar yoksa, kalan tutarı işle
                                 const remainingAmount =
                                   remaining -
                                   appliedPayments.reduce(
@@ -8035,7 +8496,6 @@ function TableDetailContent() {
                                     0
                                   );
 
-                                // Eğer ödeme yöntemi seçilmediyse uyarı göster
                                 if (!paymentMethod) {
                                   customAlert(
                                     "Lütfen bir ödeme yöntemi seçin",
@@ -8046,19 +8506,14 @@ function TableDetailContent() {
                                   return;
                                 }
 
-                                // Eğer seçili ürün varsa (selectedQuantities veya pendingPaymentItems), sadece seçili ürünlerin ödemesini al
-                                // Eğer seçili ürün yoksa, tüm masanın ödemesini al
                                 const hasSelectedItems =
                                   (selectedQuantities.size > 0 &&
                                     pendingPaymentItems.length > 0) ||
                                   pendingPaymentItems.length > 0;
 
-                                // Kalan tutarı seçilen ödeme yöntemi ile al
-                                // Eğer selectedQuantities ile ürün seçildiyse, onları kullan
-                                // handlePayment içinde zaten refresh yapılıyor, burada sadece çağırıyoruz
                                 await handlePayment(
                                   remainingAmount.toString(),
-                                  undefined, // itemsToUse handlePayment içinde selectedQuantities'den oluşturulacak
+                                        undefined,
                                   hasSelectedItems &&
                                     pendingPaymentItems.length > 0
                                     ? pendingPaymentItems
@@ -8070,12 +8525,10 @@ function TableDetailContent() {
                                   paymentMethod
                                 );
 
-                                // Tüm işlemler tamamlandı, modal'ı kapat
                                 setPaymentAmount("0");
                                 setPaymentMethod("");
                                 setAppliedPayments([]);
                                 setShowPaymentModal(false);
-                                // URL'den payment parametresini kaldır
                                 navigate({
                                   to: "/table/$tableId",
                                   params: { tableId: tableId },
@@ -8098,7 +8551,7 @@ function TableDetailContent() {
                                 setIsProcessingPayment(false);
                               }
                             }}
-                            className="h-11 sm:h-12 md:h-14 flex-none max-w-xs px-2 sm:px-3 text-sm sm:text-base md:text-lg font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 disabled:bg-gray-400 disabled:hover:bg-gray-400 whitespace-nowrap"
+                                  className="h-10 sm:h-11 md:h-12 w-full px-2 sm:px-3 text-xs sm:text-sm md:text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 disabled:bg-gray-400 disabled:hover:bg-gray-400 whitespace-nowrap"
                             disabled={isProcessingPayment}
                           >
                             {appliedPayments.length > 0 ? (
@@ -8127,62 +8580,9 @@ function TableDetailContent() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Alt Kısım - Butonlar */}
-                    <div className="flex-1 flex items-stretch overflow-hidden px-3 pb-0 min-h-0 shrink-0">
-                      {/* Ödeme Yöntemi Butonları, İşlem Butonları, Numerik Ekran ve Numerik Tuşlar */}
-                      <div className="flex-1 flex items-stretch overflow-hidden">
-                        {/* Sol Sütun - Ödeme Yöntemleri */}
-                        <div className="w-28 sm:w-36 md:w-40 lg:w-48 pl-0 pr-1 sm:pr-2 pt-0 pb-0 flex flex-col gap-1 sm:gap-1.5 h-full relative shrink-0">
-                          <label className="text-[10px] sm:text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 sm:mb-2 uppercase tracking-wider pt-2 sm:pt-4 leading-tight shrink-0">
-                            Ödeme Yöntemi
-                          </label>
-                          {paymentMethods.length === 0 ? (
-                            <div className="text-center py-2 sm:py-4 text-gray-500 dark:text-gray-400 text-[10px] sm:text-sm">
-                              Bulunamadı
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-1 sm:gap-1.5 flex-1 min-h-0 overflow-y-auto">
-                              {paymentMethods.map((pm) => (
-                                <Button
-                                  key={pm.id}
-                                  type="button"
-                                  onClick={() => {
-                                    // Eğer zaten seçiliyse, seçimi kaldır (toggle)
-                                    if (paymentMethod === pm.code) {
-                                      setPaymentMethod("");
-                                    } else {
-                                      setPaymentMethod(pm.code);
-                                    }
-                                  }}
-                                  className={`w-full h-8 sm:h-9 md:h-10 text-[10px] sm:text-xs md:text-sm font-bold rounded-lg sm:rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 ${
-                                    paymentMethod === pm.code
-                                      ? "text-white"
-                                      : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white border-2 border-gray-300 dark:border-gray-600"
-                                  }`}
-                                  style={
-                                    paymentMethod === pm.code
-                                      ? {
-                                          backgroundColor:
-                                            pm.color || "#16a34a",
-                                        }
-                                      : {}
-                                  }
-                                >
-                                  {pm.name}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                          {/* Border'ı alta tam temas ettirmek için absolute positioned border */}
-                          <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 pointer-events-none"></div>
-                        </div>
-
-                        {/* Orta Sütun - İşlem Butonları ve Numerik Keypad */}
-                        <div className="flex-1 flex flex-col pt-0 px-2 pb-0 min-h-0 h-full">
                           {/* Numerik Keypad - Kalan Alana Sığdırılmış */}
                           <div className="flex flex-col flex-1 min-h-0">
-                            <div className="flex flex-col px-0 pb-0 flex-1 min-h-0">
+                            <div className="flex flex-col px-[10px] pb-0 flex-1 min-h-0">
                               {/* Numerik Giriş Gösterimi - 7,8,9 tuşlarının hemen üzerinde */}
                               <div className="w-full mb-2 sm:mb-3 pt-2 sm:pt-3 md:pt-4 shrink-0">
                                 <div className="rounded-lg sm:rounded-xl p-1.5 sm:p-2 md:p-3 lg:p-4 border-2 shadow-lg bg-linear-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700">
@@ -8451,12 +8851,18 @@ function TableDetailContent() {
           // Seçili miktarlara göre kalan tutarı hesapla
           let remaining: number;
           if (pendingPaymentItems.length > 0) {
-            // Seçili miktarlara göre hesapla (sadece seçili miktar > 0 olanlar)
+            // Seçili miktarlara göre hesapla (sadece seçili miktar > 0 olanlar - ekstra malzemeler dahil)
             remaining = pendingPaymentItems.reduce((sum, paymentItem) => {
               const selectedQty =
-                selectedQuantities.get(paymentItem.menuId) || 0;
+                selectedQuantities.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
-                return sum + selectedQty * paymentItem.menuPrice;
+                // Ekstra malzemelerin fiyatını hesapla
+                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                  (sum, extra) => sum + extra.price,
+                  0
+                );
+                const itemPrice = paymentItem.menuPrice + extrasTotal;
+                return sum + selectedQty * itemPrice;
               }
               return sum;
             }, 0);
@@ -8481,16 +8887,22 @@ function TableDetailContent() {
           let selectedItemsIndices: Set<number> = new Set();
 
           if (pendingPaymentItems.length > 0) {
-            // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
+            // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan - ekstra malzemeler dahil)
             orderSubtotal = pendingPaymentItems.reduce((sum, paymentItem) => {
               const selectedQty =
-                selectedQuantities.get(paymentItem.menuId) || 0;
+                selectedQuantities.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
                 // Seçili ürünlerin index'lerini topla
                 paymentItem.indices.forEach((idx) => {
                   selectedItemsIndices.add(idx);
                 });
-                return sum + selectedQty * paymentItem.menuPrice;
+                // Ekstra malzemelerin fiyatını hesapla
+                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                  (sum, extra) => sum + extra.price,
+                  0
+                );
+                const itemPrice = paymentItem.menuPrice + extrasTotal;
+                return sum + selectedQty * itemPrice;
               }
               return sum;
             }, 0);
@@ -9011,7 +9423,7 @@ function TableDetailContent() {
                               // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
                               pendingPaymentItems.forEach((paymentItem) => {
                                 const selectedQty =
-                                  selectedQuantities.get(paymentItem.menuId) ||
+                                  selectedQuantities.get(paymentItem.uniqueKey) ||
                                   0;
                                 if (selectedQty > 0) {
                                   paymentItem.indices.forEach((idx) =>
@@ -9066,12 +9478,12 @@ function TableDetailContent() {
                               hasSelectedItems = false;
                             }
 
-                            // Orijinal subtotal'ı al (eğer yoksa items'tan hesapla)
+                            // Orijinal subtotal'ı al (eğer yoksa items'tan hesapla - ekstra malzemeler dahil)
                             const originalSubtotal =
                               order.subtotal ||
                               (order.items || []).reduce(
                                 (sum, item) =>
-                                  sum + item.menuPrice * item.quantity,
+                                  sum + item.subtotal,
                                 0
                               );
 
@@ -9330,8 +9742,15 @@ function TableDetailContent() {
 
       {/* Right Sidebar - Categories (Desktop) */}
       <div
-        className="hidden lg:flex lg:w-64 flex-col h-full overflow-hidden backdrop-blur-sm"
-        style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
+        className="hidden lg:flex lg:flex-none lg:w-64 flex-col h-full overflow-hidden backdrop-blur-sm"
+        style={{
+          backgroundColor: "rgba(0, 0, 0, 0.2)",
+          flexShrink: 0,
+          flexGrow: 0,
+          width: "256px",
+          minWidth: "256px",
+          maxWidth: "256px",
+        }}
       >
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden p-3">
           <h2 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide shrink-0">
@@ -9723,6 +10142,140 @@ function TableDetailContent() {
                     )}
                   </>
                 )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Ekstra Malzeme Modal */}
+      {showExtraModal && selectedMenuForExtra && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() => {
+              setShowExtraModal(false);
+              setSelectedMenuForExtra(null);
+              setSelectedCartItemForExtra(null);
+              setSelectedExtras(new Set());
+            }}
+          />
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {selectedCartItemForExtra ? "Ekstra Malzeme Ekle" : "Ekstra Malzeme Seç"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowExtraModal(false);
+                    setSelectedMenuForExtra(null);
+                    setSelectedCartItemForExtra(null);
+                    setSelectedExtras(new Set());
+                  }}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  {selectedMenuForExtra.name}
+                </p>
+                {selectedMenuForExtra.extras && selectedMenuForExtra.extras.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedMenuForExtra.extras.map((extra) => {
+                      const isSelected = selectedExtras.has(extra.id);
+                      const isRequired = extra.isRequired;
+                      return (
+                        <div
+                          key={extra.id}
+                          className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                          } ${isRequired ? "bg-yellow-50 dark:bg-yellow-900/10" : ""}`}
+                          onClick={() => {
+                            if (isRequired) return; // Zorunlu ekstralar seçilemez
+                            const newSet = new Set(selectedExtras);
+                            if (isSelected) {
+                              newSet.delete(extra.id);
+                            } else {
+                              newSet.add(extra.id);
+                            }
+                            setSelectedExtras(newSet);
+                          }}
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <div
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                isSelected
+                                  ? "border-blue-500 bg-blue-500"
+                                  : "border-gray-300 dark:border-gray-600"
+                              } ${isRequired ? "border-yellow-500 bg-yellow-500" : ""}`}
+                            >
+                              {isSelected && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                {extra.name}
+                                {isRequired && (
+                                  <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">
+                                    (Zorunlu)
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                +₺{extra.price.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                    Bu ürün için ekstra malzeme bulunmuyor
+                  </p>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <Button
+                  onClick={() => {
+                    setShowExtraModal(false);
+                    setSelectedMenuForExtra(null);
+                    setSelectedCartItemForExtra(null);
+                    setSelectedExtras(new Set());
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  İptal
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedCartItemForExtra) {
+                      // Mevcut ürüne ekstra malzeme ekle
+                      handleAddExtrasToCartItem();
+                    } else {
+                      // Yeni ürün ekle
+                      handleAddToCartWithExtras();
+                    }
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {selectedCartItemForExtra ? "Güncelle" : "Ekle"}
+                </Button>
               </div>
             </div>
           </div>

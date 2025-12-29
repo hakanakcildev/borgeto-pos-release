@@ -38,6 +38,8 @@ const convertTimestamp = (data: any) => ({
     movedFromTableNumber: item.movedFromTableNumber,
     movedToTableId: item.movedToTableId,
     movedToTableNumber: item.movedToTableNumber,
+    // selectedExtras alanını koru
+    selectedExtras: item.selectedExtras || undefined,
   })),
   canceledItems: (data.canceledItems || []).map((item: any) => ({
     ...item,
@@ -140,6 +142,10 @@ const convertToFirestore = (data: Partial<Order>) => {
       if (item.movedToTableNumber) {
         cleanedItem.movedToTableNumber = item.movedToTableNumber;
       }
+      // selectedExtras varsa ekle
+      if (item.selectedExtras && Array.isArray(item.selectedExtras) && item.selectedExtras.length > 0) {
+        cleanedItem.selectedExtras = item.selectedExtras;
+      }
       return cleanedItem;
     });
   }
@@ -169,6 +175,10 @@ const convertToFirestore = (data: Partial<Order>) => {
         cleanedItem.canceledAt = Timestamp.fromDate(item.canceledAt);
       } else if (item.canceledAt) {
         cleanedItem.canceledAt = Timestamp.fromDate(new Date(item.canceledAt));
+      }
+      // selectedExtras varsa ekle
+      if (item.selectedExtras && Array.isArray(item.selectedExtras) && item.selectedExtras.length > 0) {
+        cleanedItem.selectedExtras = item.selectedExtras;
       }
       return cleanedItem;
     });

@@ -20,11 +20,26 @@ const MENU_CATEGORIES_COLLECTION = "menuCategories";
 const MENU_ITEMS_COLLECTION = "menuItems";
 
 // Convert Firestore timestamp to Date
-const convertTimestamp = (data: any) => ({
-  ...data,
-  createdAt: data.createdAt?.toDate() || new Date(),
-  updatedAt: data.updatedAt?.toDate() || new Date(),
-});
+const convertTimestamp = (data: any) => {
+  const converted = {
+    ...data,
+    createdAt: data.createdAt?.toDate() || new Date(),
+    updatedAt: data.updatedAt?.toDate() || new Date(),
+  };
+  
+  // Ensure extras is always an array (even if undefined or null in Firestore)
+  if (converted.extras !== undefined && converted.extras !== null) {
+    // If extras exists, ensure it's an array
+    if (!Array.isArray(converted.extras)) {
+      converted.extras = [];
+    }
+  } else {
+    // If extras is undefined or null, set it to empty array
+    converted.extras = [];
+  }
+  
+  return converted;
+};
 
 // Convert Date to Firestore timestamp
 const convertToFirestore = (data: any) => {
@@ -343,6 +358,16 @@ export const getAllMenusByCompany = async (
             const categoryName =
               categoryMap.get(categoryId) || data.categoryName || "";
 
+            // Ensure extras is always an array
+            let extras: any[] = [];
+            if (data.extras) {
+              if (Array.isArray(data.extras)) {
+                extras = data.extras;
+              } else {
+                extras = [data.extras];
+              }
+            }
+
             return {
               id: doc.id,
               name: data.name || "",
@@ -352,7 +377,7 @@ export const getAllMenusByCompany = async (
               isAvailable: data.isAvailable !== false,
               companyId: companyId,
               branchId: branchId || managerUserId,
-              extras: data.extras || [],
+              extras: extras,
               createdAt: data.createdAt?.toDate() || new Date(),
               updatedAt: data.updatedAt?.toDate() || new Date(),
             } as Menu;
@@ -442,7 +467,21 @@ export const updateMenu = async (
   updates: Partial<Menu>
 ): Promise<void> => {
   try {
-    const docRef = doc(db, MENUS_COLLECTION, id);
+    // First, check if document exists in menuItems collection (QR menu)
+    let docRef = doc(db, MENU_ITEMS_COLLECTION, id);
+    let docSnap = await getDoc(docRef);
+    let collectionName = MENU_ITEMS_COLLECTION;
+
+    // If not found in menuItems, check in menus collection
+    if (!docSnap.exists()) {
+      docRef = doc(db, MENUS_COLLECTION, id);
+      docSnap = await getDoc(docRef);
+      collectionName = MENUS_COLLECTION;
+
+      if (!docSnap.exists()) {
+        throw new Error(`Menu with id ${id} does not exist`);
+      }
+    }
 
     // Filter out undefined values before converting
     const cleanUpdates = Object.fromEntries(

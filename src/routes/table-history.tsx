@@ -543,29 +543,29 @@ function TableHistoryContent() {
                     const hasDiscount = paidTotal < originalTotal;
 
                     return (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {item.menuName}
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {item.menuName}
+                        </p>
+                        {item.notes && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Not: {item.notes}
                           </p>
-                          {item.notes && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              Not: {item.notes}
-                            </p>
-                          )}
+                        )}
                           {allPaymentMethods && (
                             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
                               Ödeme: {allPaymentMethods}
                             </p>
                           )}
-                        </div>
-                        <div className="text-right ml-4">
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {item.quantity} adet
-                          </p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {item.quantity} adet
+                        </p>
                           {hasDiscount ? (
                             <div className="flex flex-col items-end gap-1">
                               <span className="font-semibold text-gray-900 dark:text-white line-through text-sm">
@@ -576,9 +576,9 @@ function TableHistoryContent() {
                               </span>
                             </div>
                           ) : (
-                            <p className="font-semibold text-gray-900 dark:text-white">
+                        <p className="font-semibold text-gray-900 dark:text-white">
                               ₺{paidTotal.toFixed(2)}
-                            </p>
+                        </p>
                           )}
                         </div>
                       </div>

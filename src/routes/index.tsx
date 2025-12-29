@@ -61,16 +61,15 @@ const calculateOptimalGrid = (
   height: number
 ) => {
   if (tableCount === 0 || width === 0 || height === 0)
-    return { cols: 2, gap: 12, cardSize: 100 };
+    return { cols: 2, gap: 8, cardSize: 100 };
 
-  // Padding için alan hesapla
-  const paddingX = 32; // px-4 lg:px-6 için (16px * 2)
-  const paddingY = 48; // py-6 için (24px * 2)
-  const availableWidth = width - paddingX;
+  // Padding için alan hesapla (padding CSS'de uygulanıyor, hesaplamalara dahil etmiyoruz)
+  const paddingY = 10; // paddingTop: 10px için
+  const availableWidth = width; // Padding'i hesaplamalardan çıkardık
   const availableHeight = height - paddingY;
 
-  // Gap değeri (12px)
-  const gap = 12;
+  // Gap değeri (8px - daha az aralık)
+  const gap = 8;
 
   // Minimum kart boyutu (çok küçük olmasın)
   const minCardSize = 80;
@@ -874,11 +873,10 @@ function TablesView() {
       // Header yüksekliğini ve sidebar genişliğini hesaba kat
       const headerHeight = 80;
       const sidebarWidth = 192; // w-48 = 12rem = 192px
-      const paddingX = 32; // px-4 lg:px-6 için
-      const paddingY = 48; // py-6 için (24px * 2)
+      const paddingY = 40; // py-5 için (20px * 2)
 
       const availableHeight = window.innerHeight - headerHeight - paddingY;
-      const availableWidth = window.innerWidth - sidebarWidth - paddingX;
+      const availableWidth = window.innerWidth - sidebarWidth; // Padding'i hesaplamalardan çıkardık
 
       setContainerSize({ width: availableWidth, height: availableHeight });
     };
@@ -914,7 +912,7 @@ function TablesView() {
         return previousGridConfigRef.current;
       }
       // İlk render için default değerler
-      return { cols: 2, gap: 12, cardSize: 100 };
+      return { cols: 2, gap: 8, cardSize: 100 };
     }
 
     // Grid hesaplaması için TOPLAM masa sayısını kullan (filtrelenmiş değil)
@@ -1027,13 +1025,17 @@ function TablesView() {
           ) : (
             <div
               ref={gridContainerRef}
-              className="flex-1 px-4 lg:px-6 py-6 min-h-0 overflow-hidden flex items-center justify-center"
+              className="flex-1 min-h-0 overflow-hidden flex items-center justify-center"
               style={{
+                paddingTop: '10px',
+                paddingLeft: '10px',
+                paddingRight: '10px',
                 display: "grid",
                 gridTemplateColumns: `repeat(${optimalColumns}, ${cardSize}px)`,
                 gap: `${gap}px`,
                 alignContent: "center",
-                justifyContent: "center",
+                justifyContent: "start",
+                width: "100%",
                 maxHeight: containerSize ? `${containerSize.height}px` : "100%",
               }}
             >
@@ -1155,7 +1157,7 @@ function TablesView() {
                     >
                       <div className="text-center space-y-1 xl:space-y-2">
                         <div
-                          className={`text-lg xl:text-xl sm:text-2xl font-bold ${
+                          className={`font-bold ${
                             isSelectedForMove ||
                             (table.status === "occupied" &&
                               order &&
@@ -1163,13 +1165,14 @@ function TablesView() {
                               ? "text-white"
                               : "text-gray-900 dark:text-white"
                           }`}
+                          style={{ fontSize: `${cardSize * 0.16}px` }}
                         >
                           {table.tableNumber}
                         </div>
 
                         <div className="flex flex-col items-center gap-0.5 xl:gap-1">
                           <span
-                            className={`text-[10px] xl:text-xs font-medium ${
+                            className={`font-medium ${
                               isSelectedForMove ||
                               (table.status === "occupied" &&
                                 order &&
@@ -1177,19 +1180,21 @@ function TablesView() {
                                 ? "text-white"
                                 : "text-gray-700 dark:text-gray-300"
                             }`}
+                            style={{ fontSize: `${cardSize * 0.10}px` }}
                           >
                             Toplam
                           </span>
                           <span
-                            className={`text-xs xl:text-sm sm:text-base font-bold ${
+                            className={`font-bold ${
                               isSelectedForMove
-                                ? "text-white text-base xl:text-lg sm:text-xl"
+                                ? "text-white"
                                 : order && order.total > 0
                                   ? table.status === "occupied"
-                                    ? "text-white text-base xl:text-lg sm:text-xl"
+                                    ? "text-white"
                                     : "text-blue-600 dark:text-blue-400"
                                   : "text-gray-400 dark:text-gray-500"
                             }`}
+                            style={{ fontSize: `${cardSize * 0.12}px` }}
                           >
                             {order && order.total > 0
                               ? `₺${order.total.toFixed(2)}`
@@ -1201,7 +1206,7 @@ function TablesView() {
                           const firstItem = getFirstAddedItem(order);
                           return firstItem?.addedAt ? (
                             <div
-                              className={`flex items-center justify-center gap-1 text-[10px] xl:text-xs mt-0.5 xl:mt-1 ${
+                              className={`flex items-center justify-center gap-1 mt-0.5 xl:mt-1 ${
                                 isSelectedForMove ||
                                 (table.status === "occupied" &&
                                   order &&
@@ -1209,9 +1214,10 @@ function TablesView() {
                                   ? "text-white font-medium"
                                   : "text-gray-500 dark:text-gray-400"
                               }`}
+                              style={{ fontSize: `${cardSize * 0.08}px` }}
                             >
                               <Clock
-                                className={`h-2.5 w-2.5 xl:h-3 xl:w-3 ${
+                                className={`${
                                   isSelectedForMove ||
                                   (table.status === "occupied" &&
                                     order &&
@@ -1219,6 +1225,7 @@ function TablesView() {
                                     ? "text-white"
                                     : ""
                                 }`}
+                                style={{ width: `${cardSize * 0.08}px`, height: `${cardSize * 0.08}px` }}
                               />
                               <span className="truncate">
                                 {getTimeAgo(firstItem.addedAt)}

@@ -467,11 +467,28 @@ function StatisticsContent() {
 
     // Toplam indirim: Ödemesi alınan siparişlerdeki indirimlerin toplamı
     let totalDiscount = 0;
+    
+    // Önce bills'dan indirimleri topla (bills ödenmiş siparişlerin kesin kayıtlarıdır)
+    const billOrderIds = new Set<string>();
+    bills.forEach((bill) => {
+      if (bill.discount) {
+        totalDiscount += bill.discount;
+        if (bill.orderId) {
+          billOrderIds.add(bill.orderId);
+        }
+      }
+    });
+    
+    // Orders'dan sadece bill'ı olmayan siparişlerin indirimlerini topla
+    // (kısmi ödeme durumları için)
     orders.forEach((order) => {
-      const paidItems = getPaidItemsForOrder(order);
-      // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
-      if (paidItems.length > 0 && order.discount) {
-        totalDiscount += order.discount;
+      // Eğer bu sipariş için bill yoksa, order'dan indirimi say
+      if (!billOrderIds.has(order.id || "")) {
+        const paidItems = getPaidItemsForOrder(order);
+        // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
+        if (paidItems.length > 0 && order.discount) {
+          totalDiscount += order.discount;
+        }
       }
     });
 

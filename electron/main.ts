@@ -553,7 +553,7 @@ $printers | ConvertTo-Json -Depth 10
           writeFileSync(scriptPath, powershellScript, "utf8");
 
           try {
-            const { stdout } = await execAsync(
+          const { stdout } = await execAsync(
               `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
             );
 
@@ -564,10 +564,10 @@ $printers | ConvertTo-Json -Depth 10
               // Dosya silme hatası - önemli değil
             }
 
-            const printers = JSON.parse(stdout);
-            const printerArray = Array.isArray(printers) ? printers : [printers];
+          const printers = JSON.parse(stdout);
+          const printerArray = Array.isArray(printers) ? printers : [printers];
 
-            printerArray.forEach((printer: any, index: number) => {
+          printerArray.forEach((printer: any, index: number) => {
             if (printer && printer.Name) {
               // Kağıt boyutunu tespit et
               let paperWidth = 56; // Varsayılan: 80mm termal yazıcı (56 karakter - küçük font)

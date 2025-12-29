@@ -28,6 +28,8 @@ const convertTimestamp = (data: any) => ({
     addedAt: item.addedAt?.toDate() || new Date(),
     movedAt: item.movedAt?.toDate(),
     canceledAt: item.canceledAt?.toDate(),
+    // selectedExtras alanını koru
+    selectedExtras: item.selectedExtras || undefined,
   })),
 });
 
@@ -151,6 +153,10 @@ const convertToFirestore = (data: Partial<Bill>) => {
       }
       if (item.movedToTableNumber !== undefined && item.movedToTableNumber !== null) {
         cleanedItem.movedToTableNumber = item.movedToTableNumber;
+      }
+      // selectedExtras varsa ekle
+      if (item.selectedExtras && Array.isArray(item.selectedExtras) && item.selectedExtras.length > 0) {
+        cleanedItem.selectedExtras = item.selectedExtras;
       }
       return cleanedItem;
     });
