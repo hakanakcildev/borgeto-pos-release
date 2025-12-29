@@ -12,6 +12,7 @@ import {
 import { db } from "./firebase";
 import type { SalesStats, Order } from "./types";
 import { getOrdersByCompany } from "./orders";
+import { clearAllBills } from "./bills";
 
 const COLLECTION_NAME = "sales_stats";
 
@@ -40,29 +41,118 @@ const convertToFirestore = (data: Partial<SalesStats>) => {
 
 // Siparişten istatistik hesapla
 const calculateStatsFromOrders = (orders: Order[]) => {
-  const totalOrders = orders.length;
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
-  const totalDiscount = orders.reduce((sum, order) => sum + (order.discount || 0), 0);
-  const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  // Yardımcı: Bir siparişte gerçekten ödenmiş tüm ürünleri (kısmi ve tam) topla (ikramlar ve iptaller hariç)
+  const getPaidItemsForOrder = (order: Order) => {
+    const paidItems: Array<{
+      menuId: string;
+      menuName: string;
+      quantity: number;
+      subtotal: number;
+    }> = [];
 
-  // En çok satılan ürünleri hesapla
-  const productMap = new Map<string, { menuId: string; menuName: string; quantity: number; revenue: number }>();
-  
-  orders.forEach((order) => {
-    order.items.forEach((item) => {
-      const existing = productMap.get(item.menuId);
-      if (existing) {
-        existing.quantity += item.quantity;
-        existing.revenue += item.subtotal;
-      } else {
-        productMap.set(item.menuId, {
-          menuId: item.menuId,
-          menuName: item.menuName,
-          quantity: item.quantity,
-          revenue: item.subtotal,
+    // Kısmi ödemelerde paidItems'ları ekle (ikramlar hariç)
+    const paymentsWithItems =
+      order.payments?.filter(
+        (p) => p.paidItems && p.paidItems.length > 0 && !p.isGift
+      ) ?? [];
+
+    if (paymentsWithItems.length > 0) {
+      paymentsWithItems.forEach((payment) => {
+        payment.paidItems!.forEach((pi) => {
+          paidItems.push({
+            menuId: pi.menuId,
+            menuName: pi.menuName,
+            quantity: pi.quantity,
+            subtotal: pi.subtotal,
+          });
+        });
+      });
+    }
+
+    // Sipariş kapandıysa, kapanış anında kalan ürünler de artık tamamen ödenmiş demektir
+    // (İkram ödemeleri hariç ve iptal edilen ürünler hariç)
+    if (order.status === "closed" && order.items && order.items.length > 0) {
+      // Son ödemenin ikram olup olmadığını kontrol et
+      const lastPayment =
+        order.payments && order.payments.length > 0
+          ? order.payments[order.payments.length - 1]
+          : null;
+      const isLastPaymentGift = lastPayment?.isGift || false;
+
+      if (!isLastPaymentGift) {
+        // İptal edilen ürünleri hariç tut
+        order.items.forEach((item) => {
+          if (!item.canceledAt) {
+            paidItems.push({
+              menuId: item.menuId,
+              menuName: item.menuName,
+              quantity: item.quantity,
+              subtotal: item.subtotal,
+            });
+          }
         });
       }
-    });
+    }
+
+    return paidItems;
+  };
+
+  // Ödemesi alınan tüm ürünleri topla
+  const allPaidItems = orders.flatMap(getPaidItemsForOrder);
+
+  // Toplam ürün sayısı: Ödemesi alınan tüm ürünler
+  const totalOrders = allPaidItems.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
+
+  // Toplam satışlar: Ödemesi alınan tüm ödemelerin toplamı (ikramlar hariç)
+  let totalRevenue = 0;
+  orders.forEach((order) => {
+    if (order.payments && order.payments.length > 0) {
+      order.payments.forEach((payment) => {
+        // İkram ödemelerini toplam ciraya dahil etme
+        if (!payment.isGift) {
+          totalRevenue += payment.amount;
+        }
+      });
+    }
+  });
+
+  // Ödemesi alınan sipariş sayısı (ortalama hesaplamak için)
+  const paidOrderCount = orders.filter(
+    (order) => getPaidItemsForOrder(order).length > 0
+  ).length;
+
+  const averageOrderValue =
+    paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
+
+  // Toplam indirim: Ödemesi alınan siparişlerdeki indirimlerin toplamı
+  let totalDiscount = 0;
+  orders.forEach((order) => {
+    const paidItems = getPaidItemsForOrder(order);
+    // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
+    if (paidItems.length > 0 && order.discount) {
+      totalDiscount += order.discount;
+    }
+  });
+
+  // En çok satılan ürünleri hesapla (ödenmiş ürünlerden)
+  const productMap = new Map<string, { menuId: string; menuName: string; quantity: number; revenue: number }>();
+  
+  allPaidItems.forEach((item) => {
+    const existing = productMap.get(item.menuId);
+    if (existing) {
+      existing.quantity += item.quantity;
+      existing.revenue += item.subtotal;
+    } else {
+      productMap.set(item.menuId, {
+        menuId: item.menuId,
+        menuName: item.menuName,
+        quantity: item.quantity,
+        revenue: item.subtotal,
+      });
+    }
   });
 
   const topProducts = Array.from(productMap.values())
@@ -332,6 +422,9 @@ export const clearAllStatistics = async (companyId: string, branchId?: string): 
     const statsSnapshot = await getDocs(statsQuery);
     const deleteStatsPromises = statsSnapshot.docs.map((doc) => deleteDoc(doc.ref));
     await Promise.all(deleteStatsPromises);
+
+    // Adisyonları temizle (en çok satılan ürünler bills'dan alınıyor)
+    await clearAllBills(companyId, branchId);
 
     // Sonra tüm kapalı siparişleri temizle
     const orders = await getOrdersByCompany(companyId, {

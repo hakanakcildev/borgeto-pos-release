@@ -2246,7 +2246,7 @@ function TableDetailContent() {
         // Sadece seçilen miktar kadar index ekle (tüm indices'leri değil)
         itemsToUse = new Set<number>();
         pendingItemsToUse.forEach((paymentItem) => {
-          const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+          const selectedQty = quantitiesToUse.get(paymentItem.uniqueKey) || 0;
           if (selectedQty > 0) {
             // Bu ürün için seçilen miktar varsa, sadece seçilen miktar kadar index ekle
             let remainingQty = selectedQty;
@@ -2254,7 +2254,13 @@ function TableDetailContent() {
               if (remainingQty <= 0) break;
               if (!order) continue;
               const item = order.items[index];
-              if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
+              // uniqueKey kontrolü: menuId + selectedExtras
+              const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                if (!extras || extras.length === 0) return "";
+                return extras.map((e) => e.id).sort().join(",");
+              };
+              const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+              if (!item || itemUniqueKey !== paymentItem.uniqueKey) continue;
 
               itemsToUse.add(index);
 
@@ -2282,24 +2288,28 @@ function TableDetailContent() {
         itemsToUse = selectedItems;
       }
 
+      // İkram durumunda seçili ürünler varsa amount kontrolünü atla
+      const hasSelectedItemsForGift = isGift && itemsToUse.size > 0;
+
       if (
         !order ||
         !order.items ||
-        !amountToUse ||
-        parseFloat(amountToUse) <= 0 ||
-        isNaN(parseFloat(amountToUse))
+        (!hasSelectedItemsForGift && (!amountToUse || parseFloat(amountToUse) <= 0 || isNaN(parseFloat(amountToUse))))
       ) {
-        customAlert(
-          "Lütfen geçerli bir ödeme tutarı girin",
-          "Uyarı",
-          "warning"
-        );
+        if (!hasSelectedItemsForGift) {
+          customAlert(
+            "Lütfen geçerli bir ödeme tutarı girin",
+            "Uyarı",
+            "warning"
+          );
+        }
         return;
       }
 
       setIsProcessingPayment(true);
       try {
-        const amount = parseFloat(amountToUse);
+        // İkram durumunda seçili ürünler varsa amount'u 0 olarak kabul et
+        const amount = hasSelectedItemsForGift ? 0 : parseFloat(amountToUse);
 
         // Önce kalan tutarı hesapla (seçili ürün varsa onların toplamı, yoksa tüm masanın toplamı)
         // İndirim dikkate alınmalı
@@ -2318,16 +2328,29 @@ function TableDetailContent() {
           // Eğer quantitiesToUse ile miktar seçildiyse, sadece seçilen miktar kadar hesapla
           if (quantitiesToUse.size > 0 && pendingItemsToUse.length > 0) {
             pendingItemsToUse.forEach((paymentItem) => {
-              const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+              const selectedQty = quantitiesToUse.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
                 let remainingQty = selectedQty;
                 for (const index of paymentItem.indices) {
                   if (remainingQty <= 0) break;
                   const item = order.items[index];
                   if (!item) continue;
+                  // uniqueKey kontrolü
+                  const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                    if (!extras || extras.length === 0) return "";
+                    return extras.map((e) => e.id).sort().join(",");
+                  };
+                  const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                  if (itemUniqueKey !== paymentItem.uniqueKey) continue;
 
                   const qtyToUse = Math.min(item.quantity, remainingQty);
-                  selectedSubtotal += qtyToUse * item.menuPrice;
+                  // Ekstra malzemeler dahil fiyat hesapla
+                  const extrasTotal = (item.selectedExtras || []).reduce(
+                    (sum, extra) => sum + extra.price,
+                    0
+                  );
+                  const itemPrice = item.menuPrice + extrasTotal;
+                  selectedSubtotal += qtyToUse * itemPrice;
                   remainingQty -= qtyToUse;
                 }
               }
@@ -2388,7 +2411,11 @@ function TableDetailContent() {
           // Kısmi ödeme: Seçili ürünlerin toplamı
           const selectedItemsArray = Array.from(itemsToUse);
 
-          // Seçili ürünleri menuId'ye göre birleştir
+          // Seçili ürünleri uniqueKey'e göre birleştir (menuId + selectedExtras)
+          const getExtrasKey = (extras?: SelectedExtra[]): string => {
+            if (!extras || extras.length === 0) return "";
+            return extras.map((e) => e.id).sort().join(",");
+          };
           const mergedSelectedItems = new Map<
             string,
             { item: OrderItem; quantity: number; subtotal: number }
@@ -2400,7 +2427,7 @@ function TableDetailContent() {
             pendingItemsToUse.forEach((paymentItem) => {
               // Eğer bu ürün için miktar seçildiyse kullan, yoksa tüm miktarı kullan
               const selectedQty =
-                quantitiesToUse.get(paymentItem.menuId) ||
+                quantitiesToUse.get(paymentItem.uniqueKey) ||
                 paymentItem.totalQuantity;
               let remainingQuantity = selectedQty;
 
@@ -2410,20 +2437,29 @@ function TableDetailContent() {
                 if (!itemsToUse.has(index)) continue;
 
                 const item = order.items[index];
-                if (!item || item.menuId !== paymentItem.menuId) continue; // menuId kontrolü ekle
+                if (!item) continue;
+                // uniqueKey kontrolü
+                const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                if (itemUniqueKey !== paymentItem.uniqueKey) continue;
 
                 const paidQuantity =
                   item.quantity <= remainingQuantity
                     ? item.quantity
                     : remainingQuantity;
-                const paidSubtotal = paidQuantity * item.menuPrice;
+                // Ekstra malzemeler dahil fiyat hesapla
+                const extrasTotal = (item.selectedExtras || []).reduce(
+                  (sum, extra) => sum + extra.price,
+                  0
+                );
+                const itemPrice = item.menuPrice + extrasTotal;
+                const paidSubtotal = paidQuantity * itemPrice;
 
-                const existing = mergedSelectedItems.get(item.menuId);
+                const existing = mergedSelectedItems.get(itemUniqueKey);
                 if (existing) {
                   existing.quantity += paidQuantity;
                   existing.subtotal += paidSubtotal;
                 } else {
-                  mergedSelectedItems.set(item.menuId, {
+                  mergedSelectedItems.set(itemUniqueKey, {
                     item,
                     quantity: paidQuantity,
                     subtotal: paidSubtotal,
@@ -2514,13 +2550,15 @@ function TableDetailContent() {
           // Ödenen ürünler listesi - mergedSelectedItems zaten doğru miktarları içeriyor
           // NOT: paidItems burada oluşturuluyor ama indirim henüz uygulanmadı
           // İndirim uygulandıktan sonra paidItems'ı güncellemek gerekecek
-          paidItems = Array.from(mergedSelectedItems.values()).map(
-            ({ item, quantity, subtotal }) => ({
+          paidItems = Array.from(mergedSelectedItems.entries()).map(
+            ([uniqueKey, { item, quantity, subtotal }]) => ({
               menuId: item.menuId,
               menuName: item.menuName,
               quantity,
               menuPrice: item.menuPrice, // Orijinal birim fiyat (indirimsiz)
               subtotal, // Bu indirim uygulanmadan önceki subtotal, indirim uygulandıktan sonra güncellenecek
+              uniqueKey: uniqueKey,
+              selectedExtras: item.selectedExtras || undefined,
             })
           );
         } else {
@@ -2547,15 +2585,26 @@ function TableDetailContent() {
           pendingItemsToUse.forEach((paymentItem) => {
             // Eğer quantitiesToUse varsa, sadece seçilen miktar kadar hesapla
             if (quantitiesToUse.size > 0) {
-              const selectedQty = quantitiesToUse.get(paymentItem.menuId) || 0;
+              const selectedQty = quantitiesToUse.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
-                // Seçilen miktar * birim fiyat
-                discountBaseAmount += selectedQty * paymentItem.menuPrice;
+                // Ekstra malzemeler dahil fiyat hesapla
+                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                  (sum, extra) => sum + extra.price,
+                  0
+                );
+                const itemPrice = paymentItem.menuPrice + extrasTotal;
+                // Seçilen miktar * birim fiyat (ekstra malzemeler dahil)
+                discountBaseAmount += selectedQty * itemPrice;
               }
             } else {
               // Miktar seçimi yoksa, tüm seçili ürünün fiyatını ekle
+              const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                (sum, extra) => sum + extra.price,
+                0
+              );
+              const itemPrice = paymentItem.menuPrice + extrasTotal;
               discountBaseAmount +=
-                paymentItem.totalQuantity * paymentItem.menuPrice;
+                paymentItem.totalQuantity * itemPrice;
             }
           });
         } else {
@@ -2598,10 +2647,16 @@ function TableDetailContent() {
               // Miktar seçimi yapılmışsa, sadece seçilen miktarlara indirim uygula
               pendingItemsToUse.forEach((paymentItem) => {
                 const selectedQty =
-                  quantitiesToUse.get(paymentItem.menuId) || 0;
+                  quantitiesToUse.get(paymentItem.uniqueKey) || 0;
                 if (selectedQty > 0) {
-                  // Bu ürün için seçilen miktarın toplam fiyatı
-                  const selectedTotal = selectedQty * paymentItem.menuPrice;
+                  // Ekstra malzemeler dahil fiyat hesapla
+                  const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                    (sum, extra) => sum + extra.price,
+                    0
+                  );
+                  const itemPrice = paymentItem.menuPrice + extrasTotal;
+                  // Bu ürün için seçilen miktarın toplam fiyatı (ekstra malzemeler dahil)
+                  const selectedTotal = selectedQty * itemPrice;
                   // Bu ürün için indirim miktarı (orantılı)
                   const itemDiscount = selectedTotal * discountRatio;
 
@@ -2611,7 +2666,13 @@ function TableDetailContent() {
                     if (remainingQty <= 0) break;
                     if (!itemsToUse.has(index)) continue;
                     const item = updatedItems[index];
-                    if (!item || item.menuId !== paymentItem.menuId) continue;
+                    // uniqueKey kontrolü
+                    const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                      if (!extras || extras.length === 0) return "";
+                      return extras.map((e) => e.id).sort().join(",");
+                    };
+                    const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                    if (!item || itemUniqueKey !== paymentItem.uniqueKey) continue;
 
                     const qtyToUse = Math.min(item.quantity, remainingQty);
                     // Bu index'teki ürün için indirim miktarı (orantılı)
@@ -2747,14 +2808,19 @@ function TableDetailContent() {
             if (paidItems && paidItems.length > 0 && updatedItems.length > 0) {
               paidItems = paidItems.map((paidItem) => {
                 // Bu paidItem için updatedItems içindeki güncellenmiş item'ı bul
-                // Birden fazla item aynı menuId'ye sahip olabilir, hepsini topla
-                const matchingItems = updatedItems.filter(
-                  (item) => item.menuId === paidItem.menuId
-                );
+                // uniqueKey kullanarak eşleştir
+                const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                  if (!extras || extras.length === 0) return "";
+                  return extras.map((e) => e.id).sort().join(",");
+                };
+                const matchingItems = updatedItems.filter((item) => {
+                  const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+                  return itemUniqueKey === paidItem.uniqueKey;
+                });
                 if (matchingItems.length > 0) {
                   // Seçilen miktar
                   const selectedQty =
-                    quantitiesToUse.get(paidItem.menuId) || paidItem.quantity;
+                    quantitiesToUse.get(paidItem.uniqueKey) || paidItem.quantity;
 
                   // Eğer miktar seçimi yapıldıysa, seçilen miktar kadar subtotal hesapla
                   // updatedItems içindeki item'ların subtotal'larını topla ve orantılı olarak seçilen miktara göre hesapla
@@ -2843,7 +2909,7 @@ function TableDetailContent() {
             pendingItemsToUse.forEach((paymentItem) => {
               // Eğer bu ürün için miktar seçildiyse kullan, yoksa tüm miktarı kullan
               const selectedQty =
-                quantitiesToUse.get(paymentItem.menuId) ||
+                quantitiesToUse.get(paymentItem.uniqueKey) ||
                 paymentItem.totalQuantity;
               let remainingQuantity = selectedQty;
 
@@ -5676,6 +5742,14 @@ function TableDetailContent() {
                   // İkram edilen ürünleri ayrı map'e ekle
                   if (payment.isGift) {
                     payment.paidItems.forEach((paidItem) => {
+                      // Ekstra malzemelerin fiyatını hesapla
+                      const extrasTotal = (paidItem.selectedExtras || []).reduce(
+                        (sum, extra) => sum + extra.price,
+                        0
+                      );
+                      const itemPrice = (paidItem.menuPrice || 0) + extrasTotal;
+                      const originalTotal = itemPrice * paidItem.quantity;
+                      
                       const existing = giftItemsMap.get(paidItem.menuId);
                       if (existing) {
                         existing.quantity += paidItem.quantity;
@@ -5683,12 +5757,10 @@ function TableDetailContent() {
                         existing.originalTotal =
                           existing.menuPrice * existing.quantity;
                       } else {
-                        const menuPrice = paidItem.menuPrice || 0;
-                        const originalTotal = menuPrice * paidItem.quantity;
                         giftItemsMap.set(paidItem.menuId, {
                           menuName: paidItem.menuName,
                           quantity: paidItem.quantity,
-                          menuPrice: menuPrice,
+                          menuPrice: itemPrice, // Ekstra malzemeler dahil fiyat
                           subtotal: paidItem.subtotal,
                           originalTotal: originalTotal,
                         });
@@ -5709,7 +5781,13 @@ function TableDetailContent() {
 
                   payment.paidItems.forEach((paidItem) => {
                     const menuPrice = paidItem.menuPrice || 0;
-                    const originalTotal = menuPrice * paidItem.quantity;
+                    // Ekstra malzemelerin fiyatını hesapla
+                    const extrasTotal = (paidItem.selectedExtras || []).reduce(
+                      (sum, extra) => sum + extra.price,
+                      0
+                    );
+                    const itemPrice = menuPrice + extrasTotal;
+                    const originalTotal = itemPrice * paidItem.quantity;
                     const hasDiscount = originalTotal > paidItem.subtotal;
 
                     if (hasDiscount) {
@@ -5717,7 +5795,7 @@ function TableDetailContent() {
                       groupItems.push({
                         menuName: paidItem.menuName,
                         quantity: paidItem.quantity,
-                        menuPrice: menuPrice,
+                        menuPrice: itemPrice, // Ekstra malzemeler dahil fiyat
                         subtotal: paidItem.subtotal,
                         originalTotal: originalTotal,
                       });
@@ -5728,13 +5806,14 @@ function TableDetailContent() {
                       if (existing) {
                         existing.quantity += paidItem.quantity;
                         existing.subtotal += paidItem.subtotal;
+                        // existing.menuPrice zaten ekstra malzemeler dahil (ilk eklerken itemPrice olarak set ediliyor)
                         existing.originalTotal =
                           existing.menuPrice * existing.quantity;
                       } else {
                         paidItemsMap.set(paidItem.menuId, {
                           menuName: paidItem.menuName,
                           quantity: paidItem.quantity,
-                          menuPrice: menuPrice,
+                          menuPrice: itemPrice, // Ekstra malzemeler dahil fiyat
                           subtotal: paidItem.subtotal,
                           originalTotal: originalTotal,
                         });
@@ -5869,7 +5948,7 @@ function TableDetailContent() {
                     {/* İkram Edilen Ürünler */}
                     {Array.from(giftItemsMap.values()).length > 0 && (
                       <div className="mb-0">
-                        <div className="text-sm font-bold text-white mb-0 px-4 py-2 bg-orange-600 dark:bg-orange-700 flex items-center gap-2">
+                        <div className="text-sm font-bold text-white mb-0 px-4 py-2 bg-orange-500 dark:bg-orange-600 flex items-center gap-2">
                           <Utensils className="h-4 w-4" />
                           İkram Edilen Ürünler
                         </div>
@@ -5880,7 +5959,7 @@ function TableDetailContent() {
                             return (
                               <div
                                 key={item.menuName}
-                                className="flex items-center justify-between py-2 px-4 bg-orange-600 dark:bg-orange-700"
+                                className="flex items-center justify-between py-2 px-4 bg-orange-500 dark:bg-orange-600"
                               >
                                 <div className="flex items-center gap-3 flex-1 min-w-0">
                                   <span className="text-sm font-bold text-white shrink-0">
@@ -8247,11 +8326,17 @@ function TableDetailContent() {
                                       (paymentItem) => {
                                         const selectedQty =
                                           selectedQuantities.get(
-                                            paymentItem.menuId
+                                            paymentItem.uniqueKey
                                           ) || 0;
                                         if (selectedQty > 0) {
+                                          // Ekstra malzemeler dahil fiyat hesapla
+                                          const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                                            (sum, extra) => sum + extra.price,
+                                            0
+                                          );
+                                          const itemPrice = paymentItem.menuPrice + extrasTotal;
                                           giftAmount +=
-                                            selectedQty * paymentItem.menuPrice;
+                                            selectedQty * itemPrice;
                                         }
                                       }
                                     );
