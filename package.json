@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "2.0.73",
+  "version": "2.0.76",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -130,7 +130,6 @@
         }
       ],
       "publisherName": "Borgeto",
-      "icon": "public/borgeto-logo.ico",
       "artifactName": "${productName}.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "verifyUpdateCodeSignature": false
@@ -154,9 +153,9 @@
       "shortcutName": "${productName}",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": true,
-      "installerIcon": "public/borgeto-logo.ico",
-      "uninstallerIcon": "public/borgeto-logo.ico",
-      "installerHeaderIcon": "public/borgeto-logo.ico",
+      "installerIcon": "public/borgeto.ico",
+      "uninstallerIcon": "public/borgeto.ico",
+      "installerHeaderIcon": "public/borgeto.ico",
       "warningsAsErrors": false,
       "perMachine": false,
       "differentialPackage": false,

@@ -154,7 +154,19 @@ function Settings() {
 
         {/* Main Content */}
         <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto h-full">
+          {/* Header - Sabit */}
+          <div className="shrink-0 bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 border-b border-gray-200 dark:border-gray-700">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <SettingsIcon className="h-8 w-8" />
+              Ayarlar
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+              Sistem ayarlarını yönetin
+            </p>
+          </div>
+          
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto">
             <SettingsContent
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -301,17 +313,7 @@ function SettingsContent({
   }, []);
 
   return (
-    <div className="h-full bg-gray-50 dark:bg-gray-900 p-3 lg:p-4 overflow-y-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <SettingsIcon className="h-8 w-8" />
-          Ayarlar
-        </h1>
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
-          Sistem ayarlarını yönetin
-        </p>
-      </div>
+    <div className="bg-gray-50 dark:bg-gray-900 p-3 lg:p-4">
 
       {/* Genel Sekme İçeriği */}
       {activeTab === "general" && (
