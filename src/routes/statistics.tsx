@@ -39,7 +39,7 @@ export const Route = createFileRoute("/statistics")({
 
 function Statistics() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="İstatistikler">
       <StatisticsContent />
     </POSLayout>
   );
@@ -318,7 +318,10 @@ function StatisticsContent() {
       }
       
       bill.items.forEach((item) => {
-        totalProductCount += item.quantity;
+        // İptal edilen ürünleri hariç tut
+        if (!item.canceledAt) {
+          totalProductCount += item.quantity;
+        }
       });
     });
     
@@ -363,19 +366,22 @@ function StatisticsContent() {
       }
       
       bill.items.forEach((item) => {
-        const existing = productMap.get(item.menuId);
-        if (existing) {
-          existing.quantity += item.quantity;
-          existing.revenue += item.subtotal;
-        } else {
-          productMap.set(item.menuId, {
-            menuId: item.menuId,
-            menuName: item.menuName,
-            quantity: item.quantity,
-            revenue: item.subtotal,
-          });
+        // İptal edilen ürünleri hariç tut
+        if (!item.canceledAt) {
+      const existing = productMap.get(item.menuId);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.revenue += item.subtotal;
+      } else {
+        productMap.set(item.menuId, {
+          menuId: item.menuId,
+          menuName: item.menuName,
+          quantity: item.quantity,
+          revenue: item.subtotal,
+        });
+      }
         }
-      });
+    });
     });
     
     // Sırala ve standart olarak 10 ürün al (kullanıcı daha fazlasını görebilir)
@@ -521,33 +527,73 @@ function StatisticsContent() {
         billOrderIds.add(bill.orderId);
       }
       
-      // bill.discount varsa onu kullan
-      if (bill.discount !== undefined && bill.discount !== null && bill.discount > 0) {
-        totalDiscount += bill.discount;
-      } else {
-        // bill.discount yoksa veya 0 ise, bill.items'dan hesapla
-        // bill.items içindeki item.subtotal'ları topla (indirimli toplam)
-        const billItemsSubtotalTotal = bill.items.reduce(
-          (sum, item) => sum + (item.subtotal || 0),
+      // İptal edilmemiş ürünleri filtrele
+      const nonCanceledItems = bill.items.filter((item) => !item.canceledAt);
+      
+      // Ödenen ürünleri bul (payment'lardaki paidItems'lardan)
+      const paidItemsSet = new Set<string>();
+      if (bill.payments) {
+        bill.payments.forEach((payment) => {
+          if (payment.paidItems) {
+            payment.paidItems.forEach((paidItem) => {
+              // uniqueKey oluştur (menuId + selectedExtras)
+              const getPaidItemUniqueKey = (): string => {
+                if (paidItem.uniqueKey) {
+                  return paidItem.uniqueKey;
+                }
+                const extrasKey = (paidItem.selectedExtras || [])
+                  .map((e) => e.id)
+                  .sort()
+                  .join(",");
+                return `${paidItem.menuId}_${extrasKey}`;
+              };
+              paidItemsSet.add(getPaidItemUniqueKey());
+            });
+          }
+        });
+      }
+      
+      // Eğer paidItems yoksa, tüm ürünler ödenmiş demektir (tam ödeme)
+      const isFullPayment = paidItemsSet.size === 0;
+      
+      // Sadece ödenen ve iptal edilmemiş ürünler için indirim hesapla
+      const getItemUniqueKey = (item: OrderItem): string => {
+        const extrasKey = (item.selectedExtras || [])
+          .map((e) => e.id)
+          .sort()
+          .join(",");
+        return `${item.menuId}_${extrasKey}`;
+      };
+      
+      // Ödenen ve iptal edilmemiş ürünleri filtrele
+      const paidNonCanceledItems = nonCanceledItems.filter((item) => {
+        if (isFullPayment) {
+          return true; // Tam ödeme ise tüm ürünler ödenmiş
+        }
+        return paidItemsSet.has(getItemUniqueKey(item));
+      });
+      
+      // Ödenen ve iptal edilmemiş ürünlerin indirimli subtotal toplamı
+      const paidItemsSubtotalTotal = paidNonCanceledItems.reduce(
+        (sum, item) => sum + (item.subtotal || 0),
+        0
+      );
+      
+      // Ödenen ve iptal edilmemiş ürünlerin orijinal toplamı (ekstra malzemeler dahil)
+      let paidItemsOriginalTotal = 0;
+      paidNonCanceledItems.forEach((item) => {
+        const extrasTotal = (item.selectedExtras || []).reduce(
+          (sum, extra) => sum + extra.price,
           0
         );
-        
-        // Orijinal toplamı hesapla (ekstra malzemeler dahil)
-        let billItemsOriginalTotal = 0;
-        bill.items.forEach((item) => {
-          const extrasTotal = (item.selectedExtras || []).reduce(
-            (sum, extra) => sum + extra.price,
-            0
-          );
-          const itemOriginalPrice = ((item.menuPrice || 0) + extrasTotal) * item.quantity;
-          billItemsOriginalTotal += itemOriginalPrice;
-        });
-        
-        // İndirim = Orijinal toplam - İndirimli toplam (item.subtotal toplamı)
-        const calculatedDiscount = billItemsOriginalTotal - billItemsSubtotalTotal;
-        if (calculatedDiscount > 0) {
-          totalDiscount += calculatedDiscount;
-        }
+        const itemOriginalPrice = ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+        paidItemsOriginalTotal += itemOriginalPrice;
+      });
+      
+      // İndirim = Orijinal toplam - İndirimli toplam (sadece ödenen ve iptal edilmemiş ürünler)
+      const calculatedDiscount = paidItemsOriginalTotal - paidItemsSubtotalTotal;
+      if (calculatedDiscount > 0.01) {
+        totalDiscount += calculatedDiscount;
       }
     });
     
@@ -556,8 +602,8 @@ function StatisticsContent() {
     orders.forEach((order) => {
       // Eğer bu sipariş için bill yoksa, payment'lardan indirimi hesapla
       if (!billOrderIds.has(order.id || "")) {
-        const paidItems = getPaidItemsForOrder(order);
-        // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
+      const paidItems = getPaidItemsForOrder(order);
+      // Eğer bu siparişte ödenmiş ürün varsa, indirimini say
         if (paidItems.length > 0) {
           // Payment'lar yoksa veya paidItems yoksa, order.discount'u kullan (eski siparişler için)
           // Ama dikkat: order.discount tüm sipariş için, sadece ödenen kısım için değil
@@ -1117,8 +1163,8 @@ function StatisticsContent() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              En Çok Satılan Ürünler
-            </h2>
+            En Çok Satılan Ürünler
+          </h2>
             {stats.allProductsCount > 10 && (
               <Button
                 onClick={() => setShowAllProducts(!showAllProducts)}

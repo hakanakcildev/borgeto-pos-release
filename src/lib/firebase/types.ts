@@ -205,6 +205,8 @@ export interface Payment {
     quantity: number;
     menuPrice: number; // Orijinal birim fiyat (indirimsiz)
     subtotal: number; // İndirimli toplam fiyat
+    uniqueKey?: string; // uniqueKey (menuId + selectedExtras) - bill oluştururken kullanılacak
+    selectedExtras?: SelectedExtra[]; // Ekstra malzemeler
   }>; // Ödenen ürünler (kısmi ödeme için)
 }
 

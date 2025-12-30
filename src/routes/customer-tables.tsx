@@ -20,7 +20,7 @@ export const Route = createFileRoute("/customer-tables")({
 function CustomerTablesManagement() {
   try {
     return (
-      <POSLayout>
+      <POSLayout headerTitle="Cari Masalar">
         <CustomerTablesManagementContent />
       </POSLayout>
     );

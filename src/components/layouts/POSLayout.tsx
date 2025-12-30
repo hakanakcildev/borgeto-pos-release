@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   X,
   WifiOff,
+  Minimize2,
 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
@@ -161,22 +162,16 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
 
               <div className="flex items-center gap-3">
                 <img
-                  src="/images/borgeto-logo.png"
+                  src="/logo.png"
                   alt="Logo"
                   className="h-10 w-10 object-contain"
                 />
                 <div className="flex items-center gap-4">
-                  <h1 className="text-2xl font-bold text-white">Borgeto Pos</h1>
-                  {headerTitle ? (
+                  <h1 className="text-2xl font-bold text-white">Borgeto POS</h1>
+                  {headerTitle && (
                     <span className="text-white/80 font-normal text-sm">
                       {headerTitle}
                     </span>
-                  ) : (
-                    companyData?.name && (
-                      <span className="text-white/80 font-normal text-sm">
-                        {companyData.name}
-                      </span>
-                    )
                   )}
                 </div>
               </div>
@@ -200,6 +195,22 @@ export function POSLayout({ children, backTo, headerTitle }: POSLayoutProps) {
                     {userData?.branchName || branchData?.name || ""}
                   </p>
                 </div>
+                {/* Masaüstüne Dön Butonu */}
+                <button
+                  onClick={async () => {
+                    if (window.electronAPI?.minimizeWindow) {
+                      try {
+                        await window.electronAPI.minimizeWindow();
+                      } catch (error) {
+                        console.error("Minimize error:", error);
+                      }
+                    }
+                  }}
+                  className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Masaüstüne Dön"
+                >
+                  <Minimize2 className="h-5 w-5 text-white" />
+                </button>
               </div>
             </div>
           </header>

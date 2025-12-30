@@ -42,7 +42,7 @@ export const Route = createFileRoute("/stocks")({
 
 function StockManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Stok Yönetimi">
       <StockManagementContent />
     </POSLayout>
   );

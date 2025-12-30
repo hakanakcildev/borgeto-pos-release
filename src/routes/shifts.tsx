@@ -49,7 +49,7 @@ export const Route = createFileRoute("/shifts")({
 
 function ShiftManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Vardiya Kontrol">
       <ShiftManagementContent />
     </POSLayout>
   );

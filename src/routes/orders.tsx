@@ -13,7 +13,7 @@ export const Route = createFileRoute("/orders")({
 
 function ActiveTables() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Aktif Siparişler">
       <ActiveTablesContent />
     </POSLayout>
   );

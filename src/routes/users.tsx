@@ -30,7 +30,7 @@ export const Route = createFileRoute("/users")({
 
 function UsersManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Kullanıcı Yönetimi">
       <UsersManagementContent />
     </POSLayout>
   );

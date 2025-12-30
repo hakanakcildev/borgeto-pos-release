@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     console.log("Preload: quitApp called, invoking quit-app IPC");
     return ipcRenderer.invoke("quit-app");
   },
+  minimizeWindow: () => {
+    console.log("Preload: minimizeWindow called, invoking minimize-window IPC");
+    return ipcRenderer.invoke("minimize-window");
+  },
   quitAndInstall: () => {
     console.log(
       "Preload: quitAndInstall called, invoking quit-and-install IPC"

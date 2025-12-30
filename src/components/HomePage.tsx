@@ -12,6 +12,8 @@ import {
   Calendar,
   History,
   LogOut,
+  X,
+  Minimize2,
 } from "lucide-react";
 import { signOutUser } from "@/lib/firebase/auth";
 
@@ -170,6 +172,16 @@ export function HomePage() {
     }
   };
 
+  const handleQuit = async () => {
+    if (window.electronAPI?.quitApp) {
+      try {
+        await window.electronAPI.quitApp();
+      } catch (error) {
+        console.error("Quit error:", error);
+      }
+    }
+  };
+
   // Sidebar'daki tüm menü öğeleri (Ayarlar sidebar'ına taşınanlar hariç)
   const menuItems = [
     {
@@ -247,13 +259,13 @@ export function HomePage() {
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <img
-                src="/images/borgeto-logo.png"
+                src="/logo.png"
                 alt="Logo"
                 className="h-8 w-8 sm:h-10 sm:w-10 object-contain shrink-0"
               />
               <div className="flex items-center gap-2 sm:gap-4 min-w-0">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white truncate">
-                  Borgeto Pos
+                  Borgeto POS
                 </h1>
                 {companyData?.name && (
                   <span className="text-white/80 font-normal text-xs sm:text-sm truncate hidden sm:inline">
@@ -272,6 +284,22 @@ export function HomePage() {
                   {userData?.branchName || branchData?.name || ""}
                 </p>
               </div>
+              {/* Masaüstüne Dön Butonu */}
+              <button
+                onClick={async () => {
+                  if (window.electronAPI?.minimizeWindow) {
+                    try {
+                      await window.electronAPI.minimizeWindow();
+                    } catch (error) {
+                      console.error("Minimize error:", error);
+                    }
+                  }
+                }}
+                className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg hover:bg-white/10 transition-colors"
+                title="Masaüstüne Dön"
+              >
+                <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              </button>
             </div>
           </div>
         </header>
@@ -368,7 +396,7 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* Footer - Sabit yükseklik, Oturumu Kapat butonu sağda */}
+        {/* Footer - Sabit yükseklik, Oturumu Kapat ve Kapat butonları sağda */}
         <footer className="h-[60px] shrink-0 px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between bg-black/20 backdrop-blur-sm">
           <button
             onClick={() => navigate({ to: "/support" })}
@@ -377,13 +405,22 @@ export function HomePage() {
             <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="text-xs sm:text-sm">Müşteri Hizmetleri</span>
           </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors text-white text-[10px] sm:text-xs md:text-sm font-medium"
-          >
-            <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
-            Oturumu Kapat
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors text-white text-[10px] sm:text-xs md:text-sm font-medium"
+            >
+              <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
+              Oturumu Kapat
+            </button>
+            <button
+              onClick={handleQuit}
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors text-white text-[10px] sm:text-xs md:text-sm font-medium"
+            >
+              <X className="h-3 w-3 sm:h-4 sm:w-4" />
+              Kapat
+            </button>
+          </div>
         </footer>
       </div>
     </div>

@@ -8,6 +8,7 @@ declare global {
         electron: string;
       };
       quitApp: () => Promise<void>;
+      minimizeWindow: () => Promise<void>;
       quitAndInstall: () => Promise<void>;
       checkForUpdates: () => Promise<{
         success: boolean;

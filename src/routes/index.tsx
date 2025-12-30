@@ -962,17 +962,15 @@ function TablesView() {
 
           <div className="flex items-center gap-3">
             <img
-              src="/images/borgeto-logo.png"
+              src="/logo.png"
               alt="Logo"
               className="h-10 w-10 object-contain"
             />
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-white">Borgeto Pos</h1>
-              {companyData?.name && (
-                <span className="text-white/80 font-normal text-sm">
-                  {companyData.name}
-                </span>
-              )}
+              <h1 className="text-2xl font-bold text-white">Borgeto POS</h1>
+              <span className="text-white/80 font-normal text-sm">
+                Masalar
+              </span>
             </div>
           </div>
         </div>

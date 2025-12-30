@@ -103,9 +103,11 @@ export const Route = createFileRoute("/table/$tableId")({
 
 function TableDetail() {
   const search = Route.useSearch();
+  const { table } = Route.useLoaderData();
 
   return (
     <POSLayout
+      headerTitle={table?.tableNumber || "Masa Detayı"}
       backTo={{
         path: "/",
         search: {
@@ -414,11 +416,46 @@ function TableDetailContent() {
     originalOrderItemsRef.current = [];
   }, [table?.id]);
 
-  // Order değiştiğinde prevOrderRef ve originalOrderItemsRef'i güncelle
+  // Order değiştiğinde prevOrderRef'i güncelle
+  // originalOrderItemsRef'i sadece order ilk oluşturulduğunda veya yeni ürün eklendiğinde güncelle
+  // Kısmi ödeme yapıldığında güncelleme (çünkü order.items'dan ödenen ürünler kaldırılıyor)
   useEffect(() => {
     prevOrderRef.current = order;
     if (order) {
-      originalOrderItemsRef.current = [...order.items];
+      // Eğer originalOrderItemsRef boşsa veya order.items'ın toplam quantity'si daha fazlaysa,
+      // yeni ürün eklenmiş demektir, o zaman güncelle
+      const currentTotalQuantity = originalOrderItemsRef.current.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+      const newTotalQuantity = order.items.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+      
+      // Eğer yeni ürün eklendiyse (quantity arttıysa) veya originalOrderItemsRef boşsa güncelle
+      if (originalOrderItemsRef.current.length === 0 || newTotalQuantity > currentTotalQuantity) {
+        // Tüm ürünleri topla (aynı uniqueKey'li ürünleri birleştir)
+        const itemsMap = new Map<string, OrderItem>();
+        order.items.forEach((item) => {
+          const getUniqueKey = (item: OrderItem): string => {
+            const extrasKey = (item.selectedExtras || [])
+              .map((e) => e.id)
+              .sort()
+              .join(",");
+            return `${item.menuId}_${extrasKey}`;
+          };
+          const uniqueKey = getUniqueKey(item);
+          const existing = itemsMap.get(uniqueKey);
+          if (existing) {
+            existing.quantity += item.quantity;
+            existing.subtotal = (existing.subtotal || 0) + (item.subtotal || 0);
+          } else {
+            itemsMap.set(uniqueKey, { ...item });
+          }
+        });
+        originalOrderItemsRef.current = Array.from(itemsMap.values());
+      }
     } else {
       originalOrderItemsRef.current = [];
     }
@@ -1541,7 +1578,7 @@ function TableDetailContent() {
             ...item,
         quantity: item.quantity + 1,
         subtotal: (item.quantity + 1) * item.menuPrice,
-      };
+          };
       return updated;
     });
   }, []);
@@ -1936,6 +1973,59 @@ function TableDetailContent() {
         await updateOrder(currentOrder.id!, updateData);
         // Order'ı yükle ve items'ın doğru yüklendiğinden emin ol
         updatedOrder = await getOrder(currentOrder.id!);
+        
+        // Mevcut order güncellendiğinde originalOrderItemsRef'i güncelle
+        // Ama sadece yeni ürünler eklendiyse (finalItems'ın length'i arttıysa veya yeni uniqueKey'li ürünler varsa)
+        const getUniqueKey = (item: OrderItem): string => {
+          const extrasKey = (item.selectedExtras || [])
+            .map((e) => e.id)
+            .sort()
+            .join(",");
+          return `${item.menuId}_${extrasKey}`;
+        };
+        
+        const currentUniqueKeys = new Set(
+          originalOrderItemsRef.current.map((item) => getUniqueKey(item))
+        );
+        const finalUniqueKeys = new Set(
+          finalItems.map((item) => getUniqueKey(item))
+        );
+        
+        // Eğer yeni uniqueKey'li ürünler varsa, originalOrderItemsRef'i güncelle
+        let hasNewItems = false;
+        finalUniqueKeys.forEach((key) => {
+          if (!currentUniqueKeys.has(key)) {
+            hasNewItems = true;
+          }
+        });
+        
+        if (hasNewItems || originalOrderItemsRef.current.length === 0) {
+          // Yeni ürünler eklendi, originalOrderItemsRef'i güncelle
+          // Mevcut ürünleri koru, yeni ürünleri ekle
+          const itemsMap = new Map<string, OrderItem>();
+          
+          // Önce mevcut originalOrderItemsRef'teki ürünleri ekle
+          originalOrderItemsRef.current.forEach((item) => {
+            const uniqueKey = getUniqueKey(item);
+            itemsMap.set(uniqueKey, { ...item });
+          });
+          
+          // Sonra finalItems'taki yeni ürünleri ekle veya güncelle
+          finalItems.forEach((item) => {
+            const uniqueKey = getUniqueKey(item);
+            const existing = itemsMap.get(uniqueKey);
+            if (existing) {
+              // Aynı uniqueKey'li ürün varsa, quantity'yi artır
+              existing.quantity = Math.max(existing.quantity, item.quantity);
+              existing.subtotal = Math.max(existing.subtotal, item.subtotal);
+            } else {
+              // Yeni ürün, ekle
+              itemsMap.set(uniqueKey, { ...item });
+            }
+          });
+          
+          originalOrderItemsRef.current = Array.from(itemsMap.values());
+        }
 
         // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
         if (
@@ -1987,6 +2077,9 @@ function TableDetailContent() {
         // notes alanını ekleme (undefined gönderme)
         const orderId = await addOrder(newOrderData);
         updatedOrder = await getOrder(orderId);
+        
+        // Yeni order oluşturulduğunda originalOrderItemsRef'i güncelle
+        originalOrderItemsRef.current = [...finalItems];
 
         // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
         if (
@@ -2297,11 +2390,11 @@ function TableDetailContent() {
         (!hasSelectedItemsForGift && (!amountToUse || parseFloat(amountToUse) <= 0 || isNaN(parseFloat(amountToUse))))
       ) {
         if (!hasSelectedItemsForGift) {
-          customAlert(
-            "Lütfen geçerli bir ödeme tutarı girin",
-            "Uyarı",
-            "warning"
-          );
+        customAlert(
+          "Lütfen geçerli bir ödeme tutarı girin",
+          "Uyarı",
+          "warning"
+        );
         }
         return;
       }
@@ -2404,6 +2497,8 @@ function TableDetailContent() {
               quantity: number;
               menuPrice: number;
               subtotal: number;
+              uniqueKey?: string;
+              selectedExtras?: SelectedExtra[];
             }>
           | undefined;
 
@@ -2813,14 +2908,27 @@ function TableDetailContent() {
                   if (!extras || extras.length === 0) return "";
                   return extras.map((e) => e.id).sort().join(",");
                 };
+                const getPaidItemUniqueKey = (): string => {
+                  if (paidItem.uniqueKey) {
+                    return paidItem.uniqueKey;
+                  }
+                  // Eski veriler için: menuId + selectedExtras'dan uniqueKey oluştur
+                  const extrasKey = (paidItem.selectedExtras || [])
+                    .map((e: SelectedExtra) => e.id)
+                    .sort()
+                    .join(",");
+                  return `${paidItem.menuId}_${extrasKey}`;
+                };
+                const paidItemUniqueKey = getPaidItemUniqueKey();
+                
                 const matchingItems = updatedItems.filter((item) => {
                   const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                  return itemUniqueKey === paidItem.uniqueKey;
+                  return itemUniqueKey === paidItemUniqueKey;
                 });
                 if (matchingItems.length > 0) {
                   // Seçilen miktar
                   const selectedQty =
-                    quantitiesToUse.get(paidItem.uniqueKey) || paidItem.quantity;
+                    quantitiesToUse.get(paidItemUniqueKey) || paidItem.quantity;
 
                   // Eğer miktar seçimi yapıldıysa, seçilen miktar kadar subtotal hesapla
                   // updatedItems içindeki item'ların subtotal'larını topla ve orantılı olarak seçilen miktara göre hesapla
@@ -3348,35 +3456,52 @@ function TableDetailContent() {
                 const allPayments = updatedOrder.payments || [];
                 const billItemsMap = new Map<string, OrderItem>();
 
-                // Önce payments'lardaki tüm paidItems'ları topla
-                const paidItemsByMenuId = new Map<
+                // Önce payments'lardaki tüm paidItems'ları topla (uniqueKey ile)
+                const paidItemsByUniqueKey = new Map<
                   string,
                   Array<{
                     quantity: number;
                     subtotal: number;
                     menuName: string;
                     menuPrice: number;
+                    selectedExtras?: SelectedExtra[];
                   }>
                 >();
 
                 allPayments.forEach((payment) => {
                   if (payment.paidItems) {
                     payment.paidItems.forEach((paidItem) => {
-                      const existing = paidItemsByMenuId.get(paidItem.menuId);
+                      // uniqueKey hesapla (paidItem içinde uniqueKey varsa onu kullan, yoksa hesapla)
+                      const getPaidItemUniqueKey = (): string => {
+                        if (paidItem.uniqueKey) {
+                          return paidItem.uniqueKey;
+                        }
+                        // Eski veriler için: menuId + selectedExtras'dan uniqueKey oluştur
+                        const extrasKey = (paidItem.selectedExtras || [])
+                          .map((e) => e.id)
+                          .sort()
+                          .join(",");
+                        return `${paidItem.menuId}_${extrasKey}`;
+                      };
+                      
+                      const uniqueKey = getPaidItemUniqueKey();
+                      const existing = paidItemsByUniqueKey.get(uniqueKey);
                       if (existing) {
                         existing.push({
                           quantity: paidItem.quantity,
                           subtotal: paidItem.subtotal,
                           menuName: paidItem.menuName,
                           menuPrice: paidItem.menuPrice,
+                          selectedExtras: paidItem.selectedExtras,
                         });
                       } else {
-                        paidItemsByMenuId.set(paidItem.menuId, [
+                        paidItemsByUniqueKey.set(uniqueKey, [
                           {
                             quantity: paidItem.quantity,
                             subtotal: paidItem.subtotal,
                             menuName: paidItem.menuName,
                             menuPrice: paidItem.menuPrice,
+                            selectedExtras: paidItem.selectedExtras,
                           },
                         ]);
                       }
@@ -3384,62 +3509,196 @@ function TableDetailContent() {
                   }
                 });
 
-                // Önce originalOrderItemsRef'teki tüm ürünleri ekle
-                const sourceItems =
-                  originalOrderItemsRef.current.length > 0
-                    ? originalOrderItemsRef.current
-                    : updatedOrder.items.length > 0
-                      ? updatedOrder.items
-                      : [];
-
-                sourceItems.forEach((item) => {
-                  billItemsMap.set(item.menuId, {
-                    ...item,
-                    subtotal: item.subtotal || item.menuPrice * item.quantity,
+                // Önce originalOrderItemsRef'teki tüm ürünleri ekle (TÜM ÜRÜNLER)
+                // Eğer originalOrderItemsRef boşsa, updatedOrder.items + kalan ürünleri birleştir
+                let sourceItems: OrderItem[] = [];
+                if (originalOrderItemsRef.current.length > 0) {
+                  sourceItems = originalOrderItemsRef.current;
+                } else if (updatedOrder.items.length > 0) {
+                  // updatedOrder.items + paidItems'lardaki ödenen ürünleri birleştir
+                  // (kısmi ödeme sonrası kalan ürünler için)
+                  const sourceItemsMap = new Map<string, OrderItem>();
+                  
+                  // Önce updatedOrder.items'ı ekle (kalan ürünler)
+                  updatedOrder.items.forEach((item) => {
+                    const getUniqueKey = (item: OrderItem): string => {
+                      const extrasKey = (item.selectedExtras || [])
+                        .map((e) => e.id)
+                        .sort()
+                        .join(",");
+                      return `${item.menuId}_${extrasKey}`;
+                    };
+                    const uniqueKey = getUniqueKey(item);
+                    const existing = sourceItemsMap.get(uniqueKey);
+                    if (existing) {
+                      existing.quantity += item.quantity;
+                      existing.subtotal = (existing.subtotal || 0) + (item.subtotal || 0);
+                    } else {
+                      sourceItemsMap.set(uniqueKey, { ...item });
+                    }
                   });
+                  
+                  // Sonra paidItems'lardaki ödenen ürünleri ekle
+                  allPayments.forEach((payment) => {
+                    if (payment.paidItems) {
+                      payment.paidItems.forEach((paidItem) => {
+                        const getPaidItemUniqueKey = (): string => {
+                          if (paidItem.uniqueKey) {
+                            return paidItem.uniqueKey;
+                          }
+                          const extrasKey = (paidItem.selectedExtras || [])
+                            .map((e) => e.id)
+                            .sort()
+                            .join(",");
+                          return `${paidItem.menuId}_${extrasKey}`;
+                        };
+                        const uniqueKey = getPaidItemUniqueKey();
+                        const existing = sourceItemsMap.get(uniqueKey);
+                        if (existing) {
+                          existing.quantity += paidItem.quantity;
+                          existing.subtotal = (existing.subtotal || 0) + (paidItem.subtotal || 0);
+                        } else {
+                          // Ödenen ürünü ekle (OrderItem formatına çevir)
+                          sourceItemsMap.set(uniqueKey, {
+                            menuId: paidItem.menuId,
+                            menuName: paidItem.menuName,
+                            menuPrice: paidItem.menuPrice,
+                            quantity: paidItem.quantity,
+                            subtotal: paidItem.subtotal,
+                            selectedExtras: paidItem.selectedExtras,
+                            addedAt: new Date(),
+                          });
+                        }
+                      });
+                    }
+                  });
+                  
+                  sourceItems = Array.from(sourceItemsMap.values());
+                }
+
+                // uniqueKey hesaplama fonksiyonu
+                const getUniqueKey = (item: OrderItem): string => {
+                  const extrasKey = (item.selectedExtras || [])
+                    .map((e) => e.id)
+                    .sort()
+                    .join(",");
+                  return `${item.menuId}_${extrasKey}`;
+                };
+
+                // Tüm ürünleri billItemsMap'e ekle (uniqueKey ile - ekstra malzemeler dahil)
+                sourceItems.forEach((item) => {
+                  const uniqueKey = getUniqueKey(item);
+                  // Ekstra malzemelerin fiyatını hesapla
+                  const extrasTotal = (item.selectedExtras || []).reduce(
+                    (sum, extra) => sum + extra.price,
+                    0
+                  );
+                  // Orijinal subtotal: (menuPrice + extrasTotal) * quantity
+                  const originalSubtotal = ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+                  
+                  // Eğer aynı uniqueKey'li ürün varsa, quantity ve subtotal'ı topla
+                  const existingItem = billItemsMap.get(uniqueKey);
+                  if (existingItem) {
+                    existingItem.quantity += item.quantity;
+                    existingItem.subtotal = (existingItem.subtotal || 0) + (item.subtotal || originalSubtotal);
+                  } else {
+                    billItemsMap.set(uniqueKey, {
+                      ...item,
+                      subtotal: item.subtotal || originalSubtotal,
+                    });
+                  }
                 });
 
-                // Şimdi paidItems'lardaki ürünleri de ekle veya güncelle
-                paidItemsByMenuId.forEach((paidItemsArray, menuId) => {
-                  const existingItem = billItemsMap.get(menuId);
-                  const totalPaidQuantity = paidItemsArray.reduce(
-                    (sum, pi) => sum + pi.quantity,
-                    0
-                  );
-                  const totalPaidSubtotal = paidItemsArray.reduce(
-                    (sum, pi) => sum + pi.subtotal,
-                    0
-                  );
-                  const firstPaidItem = paidItemsArray[0];
-
+                // Şimdi paidItemsByUniqueKey ile billItemsMap'i eşleştir
+                paidItemsByUniqueKey.forEach((paidItemsArray, uniqueKey) => {
+                  const existingItem = billItemsMap.get(uniqueKey);
                   if (existingItem) {
-                    existingItem.subtotal = totalPaidSubtotal;
-                    existingItem.quantity = Math.max(
-                      existingItem.quantity,
-                      totalPaidQuantity
+                    // Sadece ödenen miktarın subtotal'ını kullan
+                    const totalPaidSubtotal = paidItemsArray.reduce(
+                      (sum, pi) => sum + pi.subtotal,
+                      0
                     );
-                  } else {
-                    billItemsMap.set(menuId, {
-                      menuId: menuId,
-                      menuName: firstPaidItem.menuName,
-                      menuPrice: firstPaidItem.menuPrice,
-                      quantity: totalPaidQuantity,
-                      subtotal: totalPaidSubtotal,
-                      addedAt: new Date(),
-                      selectedExtras: [],
-                    });
+                    // Ödenen miktar
+                    const totalPaidQuantity = paidItemsArray.reduce(
+                      (sum, pi) => sum + pi.quantity,
+                      0
+                    );
+                    
+                    // Eğer tüm ürün ödendiyse, subtotal'ı güncelle
+                    // Eğer kısmen ödendiyse, orantılı olarak güncelle
+                    if (totalPaidQuantity >= existingItem.quantity) {
+                      // Tüm ürün ödendiyse, indirimli subtotal'ı kullan
+                      existingItem.subtotal = totalPaidSubtotal;
+                    } else {
+                      // Kısmen ödendiyse, ödenen kısım için indirimli, kalan kısım için orijinal
+                      const extrasTotal = (existingItem.selectedExtras || []).reduce(
+                        (sum, extra) => sum + extra.price,
+                        0
+                      );
+                      const paidOriginalSubtotal = ((existingItem.menuPrice || 0) + extrasTotal) * totalPaidQuantity;
+                      const unpaidQuantity = existingItem.quantity - totalPaidQuantity;
+                      const unpaidSubtotal = ((existingItem.menuPrice || 0) + extrasTotal) * unpaidQuantity;
+                      // Ödenen kısım için indirimli subtotal + ödenmeyen kısım için orijinal subtotal
+                      existingItem.subtotal = totalPaidSubtotal + unpaidSubtotal;
+                    }
                   }
                 });
 
                 const billItems: OrderItem[] = Array.from(
                   billItemsMap.values()
                 );
-                const billSubtotal = billItems.reduce(
-                  (sum, item) => sum + item.menuPrice * item.quantity,
+                
+                // Bill subtotal: Tüm ürünlerin orijinal fiyatları (ekstra malzemeler dahil)
+                let billSubtotal = 0;
+                billItems.forEach((item) => {
+                  const extrasTotal = (item.selectedExtras || []).reduce(
+                    (sum, extra) => sum + extra.price,
+                    0
+                  );
+                  billSubtotal += ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+                });
+                
+                // Bill total: Tüm ürünlerin indirimli subtotal'ları toplamı
+                const billTotal = billItems.reduce(
+                  (sum, item) => sum + (item.subtotal || 0),
                   0
                 );
-                const billDiscount = updatedOrder.discount || 0;
-                const billTotal = Math.max(0, billSubtotal - billDiscount);
+                
+                // Bill discount: Orijinal toplam - İndirimli toplam
+                // Ama dikkat: İndirim sadece ödenen ürünlere uygulanmış olabilir
+                // Bu yüzden indirimi doğru hesaplamak için paidItems'lardan indirimli subtotal'ları kullan
+                let billDiscount = 0;
+                
+                // Önce tüm ödenen ürünlerin orijinal ve indirimli subtotal'larını hesapla
+                paidItemsByUniqueKey.forEach((paidItemsArray, uniqueKey) => {
+                  const billItem = billItemsMap.get(uniqueKey);
+                  if (billItem) {
+                    // Ödenen miktarın toplam indirimli subtotal'ı
+                    const totalPaidSubtotal = paidItemsArray.reduce(
+                      (sum, pi) => sum + pi.subtotal,
+                      0
+                    );
+                    // Ödenen miktarın toplam orijinal subtotal'ı (ekstra malzemeler dahil)
+                    const totalPaidQuantity = paidItemsArray.reduce(
+                      (sum, pi) => sum + pi.quantity,
+                      0
+                    );
+                    const extrasTotal = (billItem.selectedExtras || []).reduce(
+                      (sum, extra) => sum + extra.price,
+                      0
+                    );
+                    const totalPaidOriginalSubtotal = ((billItem.menuPrice || 0) + extrasTotal) * totalPaidQuantity;
+                    
+                    // Bu ürün için indirim = Orijinal - İndirimli
+                    const itemDiscount = totalPaidOriginalSubtotal - totalPaidSubtotal;
+                    billDiscount += itemDiscount;
+                  }
+                });
+                
+                // Eğer billDiscount 0 ise veya çok küçükse, fallback olarak billSubtotal - billTotal kullan
+                if (billDiscount < 0.01) {
+                  billDiscount = Math.max(0, billSubtotal - billTotal);
+                }
 
                 if (billItems.length > 0 && allPayments.length > 0) {
                   await addBill({
@@ -3450,7 +3709,7 @@ function TableDetailContent() {
                     orderId: updatedOrder.id!,
                     items: billItems,
                     subtotal: billSubtotal,
-                    discount: billDiscount > 0 ? billDiscount : undefined,
+                    discount: billDiscount > 0.01 ? billDiscount : undefined, // 0.01'den büyükse göster
                     total: billTotal,
                     payments: allPayments,
                     customerName: updatedOrder.customerName,
@@ -6448,6 +6707,10 @@ function TableDetailContent() {
                                                       isSelected ||
                                                       (showPaymentModal &&
                                                         (() => {
+                                                          const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                                            if (!extras || extras.length === 0) return "";
+                                                            return extras.map((e) => e.id).sort().join(",");
+                                                          };
                                                           const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
                                                           return (selectedQuantities.get(itemUniqueKey) || 0) > 0;
                                                         })())
@@ -8205,11 +8468,11 @@ function TableDetailContent() {
                                     );
                                     
                                     if (quantitiesByMenuId.size > 0 && allIndices.length > 0) {
-                                      await handleCancelSelectedItemsWithQuantities(
+                                    await handleCancelSelectedItemsWithQuantities(
                                         quantitiesByMenuId,
                                         allIndices,
                                         order
-                                      );
+                                    );
                                     }
                                   } else if (selectedItems.size > 0) {
                                     // Ürün seçimi yapılmışsa
@@ -8552,7 +8815,7 @@ function TableDetailContent() {
                                       originalTotal > remaining ||
                                       (order.discount && order.discount > 0);
                                     return hasDiscount ? (
-                                      <>
+                              <>
                                         <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
                                   ₺
                                   {originalTotal
@@ -9774,12 +10037,20 @@ function TableDetailContent() {
                                             )
                                             .filter((idx) => idx !== -1);
 
+                                          const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                            if (!extras || extras.length === 0) return "";
+                                            return extras.map((e) => e.id).sort().join(",");
+                                          };
+                                          const uniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
+
                                           return {
                                             menuId: item.menuId,
                                             menuName: item.menuName,
                                             totalQuantity: totalQty,
                                             menuPrice: item.menuPrice,
                                             indices: indices,
+                                            uniqueKey: uniqueKey,
+                                            selectedExtras: item.selectedExtras,
                                           };
                                         }
                                         return null;
@@ -9791,14 +10062,14 @@ function TableDetailContent() {
                                           item !== null
                                       );
 
-                                    // Aynı menuId'ye sahip item'ları birleştir
+                                    // Aynı uniqueKey'ye sahip item'ları birleştir
                                     const mergedPendingItems = new Map<
                                       string,
                                       (typeof newPendingItems)[0]
                                     >();
                                     newPendingItems.forEach((item) => {
                                       const existing = mergedPendingItems.get(
-                                        item.menuId
+                                        item.uniqueKey
                                       );
                                       if (existing) {
                                         existing.totalQuantity +=
@@ -9810,7 +10081,7 @@ function TableDetailContent() {
                                           ]),
                                         ];
                                       } else {
-                                        mergedPendingItems.set(item.menuId, {
+                                        mergedPendingItems.set(item.uniqueKey, {
                                           ...item,
                                         });
                                       }

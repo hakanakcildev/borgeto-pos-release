@@ -57,9 +57,10 @@ export function formatPrintContent(
   const tableNum = String(tableNumber);
   const isPaid = additionalInfo?.isPaid || type === "payment";
 
-  // 56mm termal yazıcı için karakter genişliği
-  // Font A (12x24) ile 56mm kağıt için yaklaşık 30 karakter
-  const paperWidth = 30;
+  // 80mm termal yazıcı için karakter genişliği
+  // Font A (12x24) ile 80mm kağıt için yaklaşık 48 karakter (tam genişlik)
+  // Kullanıcı tanımlı genişlik varsa onu kullan, yoksa 80mm için 48 karakter
+  const paperWidth = additionalInfo?.paperWidth || 48;
 
   // İçeriği oluştur
   let content = "";
@@ -334,7 +335,7 @@ export function getExamplePrintOutput(
   companyName: string = "Firma Adi",
   tableNumber: string = "5"
 ): string {
-  const paperWidth = 30; // 56mm kağıt için Font A
+  const paperWidth = 48; // 80mm kağıt için Font A (tam genişlik)
 
   let content = "";
 

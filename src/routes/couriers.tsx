@@ -34,7 +34,7 @@ export const Route = createFileRoute("/couriers")({
 
 function CouriersManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Kurye Yönetimi">
       <CouriersManagementContent />
     </POSLayout>
   );

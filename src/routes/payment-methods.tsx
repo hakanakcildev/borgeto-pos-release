@@ -21,7 +21,7 @@ export const Route = createFileRoute("/payment-methods")({
 
 function PaymentMethodsManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Ödeme Yöntemleri">
       <PaymentMethodsManagementContent />
     </POSLayout>
   );

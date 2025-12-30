@@ -20,7 +20,7 @@ export const Route = createFileRoute("/table-history")({
 
 function TableHistory() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Masa Geçmişi">
       <TableHistoryContent />
     </POSLayout>
   );

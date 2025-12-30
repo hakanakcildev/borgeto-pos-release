@@ -20,7 +20,7 @@ export const Route = createFileRoute("/tables")({
 
 function TablesManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Masa Yönetimi">
       <TablesManagementContent />
     </POSLayout>
   );

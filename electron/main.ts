@@ -213,6 +213,14 @@ function registerIpcHandlers() {
     app.quit();
   });
 
+  // Register minimize-window handler
+  ipcMain.handle("minimize-window", async () => {
+    console.log("minimize-window IPC handler called - minimizing window");
+    if (mainWindow) {
+      mainWindow.minimize();
+    }
+  });
+
   // Register check-for-updates handler
   ipcMain.handle("check-for-updates", async () => {
     console.log("🔍 Manual update check requested");
@@ -581,7 +589,7 @@ $printers | ConvertTo-Json -Depth 10
                   widthMM = printer.MaxWidth / 100; // Pixel olabilir
                 }
                 if (widthMM >= 75 && widthMM <= 85) {
-                  paperWidth = 56;
+                  paperWidth = 48; // 80mm için Font A ile 48 karakter (tam genişlik)
                   paperType = "80mm";
                 } else if (widthMM >= 55 && widthMM <= 62) {
                   paperWidth = 40;
@@ -687,7 +695,7 @@ $printers | ConvertTo-Json -Depth 10
                         : 2,
                   isDefault: printer.Default === true,
                   options: {
-                    paperWidth: 56,
+                    paperWidth: 48, // 80mm için Font A ile 48 karakter (tam genişlik)
                     paperType: "80mm",
                     connectionType: connectionType,
                     portName: printer.PortName || "",
@@ -988,12 +996,52 @@ $printers | ConvertTo-Json -Depth 10
                 "    $content | Out-Printer -Name $printerName;\n" +
                 "    Write-Output \"SUCCESS\";\n" +
                 "  }\n" +
-                "} else {\n" +
-                "  # Network veya diğer portlar - Out-Printer kullan ama margin'i minimize etmeye çalış\n" +
-                "  # Yazıcı ayarlarını geçici olarak değiştirmeye çalış (margin = 0)\n" +
+                "} elseif ($portName -like \"*TCP*\" -or $portName -like \"*IP*\" -or $portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\") {\n" +
+                "  # Network yazıcılar için TCP/IP (port 9100 - RAW printing)\n" +
                 "  try {\n" +
-                "    # Yazıcı ayarlarını al\n" +
+                "    $ipAddress = $portName;\n" +
+                "    if ($portName -like \"*TCP*\" -or $portName -like \"*IP*\") {\n" +
+                "      # Port adından IP'yi çıkar (örn: \"IP_192.168.1.100\" -> \"192.168.1.100\")\n" +
+                "      $ipMatch = [regex]::Match($portName, \"([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\");\n" +
+                "      if ($ipMatch.Success) {\n" +
+                "        $ipAddress = $ipMatch.Groups[1].Value;\n" +
+                "      }\n" +
+                "    }\n" +
+                "    \n" +
+                "    # TCP/IP port 9100 (RAW printing) ile yazdır\n" +
+                "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "    $tcpClient = New-Object System.Net.Sockets.TcpClient($ipAddress, 9100);\n" +
+                "    $stream = $tcpClient.GetStream();\n" +
+                "    $stream.Write($bytes, 0, $bytes.Length);\n" +
+                "    $stream.Flush();\n" +
+                "    $stream.Close();\n" +
+                "    $tcpClient.Close();\n" +
+                "    Write-Output \"SUCCESS\";\n" +
+                "  } catch {\n" +
+                "    # TCP/IP başarısız olursa Out-Printer'a fallback yap\n" +
+                "    try {\n" +
+                "      $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "      $content | Out-Printer -Name $printerName;\n" +
+                "      Write-Output \"SUCCESS\";\n" +
+                "    } catch {\n" +
+                "      Write-Output \"ERROR: Network print failed - $($_.Exception.Message)\";\n" +
+                "      exit 1;\n" +
+                "    }\n" +
+                "  }\n" +
+                "} else {\n" +
+                "  # Diğer portlar (Bluetooth, WSD, vs.) - Out-Printer kullan\n" +
+                "  # Yazıcı ayarlarını optimize et - tam genişlik kullanımı için\n" +
+                "  try {\n" +
+                "    # Yazıcı ayarlarını al ve margin'leri minimize et\n" +
                 "    $printerSettings = Get-WmiObject -Class Win32_PrinterConfiguration -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
+                "    if ($printerSettings) {\n" +
+                "      try {\n" +
+                "        $printerSettings.Orientation = 1; # Portrait\n" +
+                "        $printerSettings.Put() | Out-Null;\n" +
+                "      } catch {\n" +
+                "        # Ayarlar güncellenemezse devam et\n" +
+                "      }\n" +
+                "    }\n" +
                 "    \n" +
                 "    # Out-Printer ile yazdır (yazıcı sürücüsü ayarlarına bağlı)\n" +
                 "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
@@ -1004,6 +1052,9 @@ $printers | ConvertTo-Json -Depth 10
                 "    exit 1;\n" +
                 "  }\n" +
                 "}";
+              
+              // Network yazıcılar için TCP/IP desteği ekle
+              // Script'e network yazıcı desteği eklenmiş durumda
 
               const psScriptFile = join(
                 tmpdir(),

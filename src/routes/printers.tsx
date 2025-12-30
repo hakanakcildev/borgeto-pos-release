@@ -23,7 +23,7 @@ export const Route = createFileRoute("/printers")({
 
 function Printers() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Yazıcılar">
       <PrintersContent />
     </POSLayout>
   );

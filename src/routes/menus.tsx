@@ -35,7 +35,7 @@ export const Route = createFileRoute("/menus")({
 
 function MenuManagement() {
   return (
-    <POSLayout>
+    <POSLayout headerTitle="Ürün Yönetimi">
       <MenuManagementContent />
     </POSLayout>
   );
