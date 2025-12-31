@@ -22,9 +22,9 @@ const MENU_ITEMS_COLLECTION = "menuItems";
 // Convert Firestore timestamp to Date
 const convertTimestamp = (data: any) => {
   const converted = {
-    ...data,
-    createdAt: data.createdAt?.toDate() || new Date(),
-    updatedAt: data.updatedAt?.toDate() || new Date(),
+  ...data,
+  createdAt: data.createdAt?.toDate() || new Date(),
+  updatedAt: data.updatedAt?.toDate() || new Date(),
   };
   
   // Ensure extras is always an array (even if undefined or null in Firestore)

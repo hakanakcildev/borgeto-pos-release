@@ -968,9 +968,9 @@ function TablesView() {
             />
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-white">Borgeto POS</h1>
-              <span className="text-white/80 font-normal text-sm">
+                <span className="text-white/80 font-normal text-sm">
                 Masalar
-              </span>
+                </span>
             </div>
           </div>
         </div>
@@ -980,12 +980,12 @@ function TablesView() {
           {!isOnline && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/90 backdrop-blur-sm">
               <WifiOff className="h-4 w-4 text-white" />
-              <span className="text-sm text-white font-medium">
+            <span className="text-sm text-white font-medium">
                 İnternet bağlantısı yok
-              </span>
-            </div>
+            </span>
+          </div>
           )}
-          
+
           {/* Branch Info */}
           <div className="flex items-center gap-3">
             <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">

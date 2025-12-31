@@ -940,9 +940,10 @@ $printers | ConvertTo-Json -Depth 10
           // Bu method Türkçe karakterleri doğru yazdırır
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
 
-          // Düz metin olarak kaydet (UTF-8 with BOM)
+          // ESC/POS komutları için binary olarak kaydet (BOM yok, encoding utf-8)
           try {
-            writeFileSync(tempFile, "\uFEFF" + data.content, "utf-8");
+            // ESC/POS komutları binary olmalı, UTF-8 BOM eklemek komutları bozabilir
+            writeFileSync(tempFile, data.content, "utf-8");
             safeLog(`📁 Temp file created: ${tempFile}`);
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);

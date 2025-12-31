@@ -141,18 +141,18 @@ const calculateStatsFromOrders = (orders: Order[]) => {
   const productMap = new Map<string, { menuId: string; menuName: string; quantity: number; revenue: number }>();
   
   allPaidItems.forEach((item) => {
-    const existing = productMap.get(item.menuId);
-    if (existing) {
-      existing.quantity += item.quantity;
-      existing.revenue += item.subtotal;
-    } else {
-      productMap.set(item.menuId, {
-        menuId: item.menuId,
-        menuName: item.menuName,
-        quantity: item.quantity,
-        revenue: item.subtotal,
-      });
-    }
+      const existing = productMap.get(item.menuId);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.revenue += item.subtotal;
+      } else {
+        productMap.set(item.menuId, {
+          menuId: item.menuId,
+          menuName: item.menuName,
+          quantity: item.quantity,
+          revenue: item.subtotal,
+        });
+      }
   });
 
   const topProducts = Array.from(productMap.values())

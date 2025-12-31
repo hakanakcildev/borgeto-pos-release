@@ -72,9 +72,29 @@ export function formatPrintContent(
   const boldOn = ESC + "E" + String.fromCharCode(0x01); // ESC E 1 - Bold on
   const boldOff = ESC + "E" + String.fromCharCode(0x00); // ESC E 0 - Bold off
   const leftAlign = ESC + "a" + String.fromCharCode(0x00); // ESC a 0 - Left align
+  
+  // Encoding komutu - Türkçe karakterler için code page ayarla
+  // ESC t n - Set code page (17 = PC857 Turkish, 20 = PC1252 Windows Latin-1)
+  const codePage = ESC + "t" + String.fromCharCode(17); // PC857 Turkish (Türkçe karakterler için)
+  
+  // Margin komutları - Tam genişlik için margin'leri sıfırla/kaldır
+  // ESC l n - Left margin (n = 0, sol margin yok)
+  const leftMargin = ESC + "l" + String.fromCharCode(0x00);
+  // ESC Q n - Set print area width (n = maksimum karakter sayısı, paperWidth)
+  // Sağ margin yok için maksimum genişlik kullan
+  const printWidth = ESC + "Q" + String.fromCharCode(Math.min(paperWidth, 255));
+  // ESC SP n - Character spacing (n = 0, karakter arası boşluk yok)
+  const charSpacing = ESC + " " + String.fromCharCode(0x00);
+  // ESC 3 n - Line spacing (n = 0, satır arası minimum - üst margin minimize)
+  const lineSpacing = ESC + "3" + String.fromCharCode(0x00);
 
-  // Yazıcıyı sıfırla ve Font A'ya ayarla (büyük font)
+  // Yazıcıyı sıfırla ve ayarları yap (tam genişlik, margin yok, Türkçe encoding)
   content += resetPrinter;
+  content += codePage; // Türkçe karakterler için code page
+  content += leftMargin; // Sol margin 0
+  content += printWidth; // Print width maksimum (sağ margin yok için tam genişlik)
+  content += charSpacing; // Karakter arası boşluk 0
+  content += lineSpacing; // Satır arası boşluk minimum (üst margin minimize)
   content += fontA;
   content += leftAlign;
 

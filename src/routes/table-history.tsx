@@ -559,8 +559,8 @@ function TableHistoryContent() {
                           {allPaymentMethods && (
                             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
                               Ödeme: {allPaymentMethods}
-                            </p>
-                          )}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right ml-4">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
