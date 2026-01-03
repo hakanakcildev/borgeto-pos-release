@@ -934,11 +934,15 @@ $printers | ConvertTo-Json -Depth 10
         `📄 Content preview (first 100 chars): ${data.content.substring(0, 100).replace(/[\x00-\x1F]/g, ".")}`
       );
 
+      // HTML içeriği kontrolü
+      const isHTML = data.content.trim().toLowerCase().startsWith("<!doctype html") || 
+                     data.content.trim().toLowerCase().startsWith("<html");
+
       try {
         if (process.platform === "win32") {
-          // Windows'ta düz metin yazdırma - notepad /p kullan
-          // Bu method Türkçe karakterleri doğru yazdırır
-          const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
+          // HTML formatında ise HTML dosyası oluştur ve yazdır
+          const fileExtension = isHTML ? "html" : "txt";
+          const tempFile = join(tmpdir(), `print_${Date.now()}.${fileExtension}`);
 
           // ESC/POS komutları için binary olarak kaydet (BOM yok, encoding utf-8)
           try {
@@ -964,6 +968,132 @@ $printers | ConvertTo-Json -Depth 10
             );
 
             try {
+              // HTML formatında ise farklı yazdırma yöntemi kullan
+              if (isHTML) {
+                // HTML içeriğini PowerShell ile yazdır (Out-Printer kullan)
+              const printerNameSafe = data.printerName.replace(/"/g, '`"');
+              const tempFileSafe = tempFile.replace(/\\/g, "\\\\");
+                const psScript = "$printerName = \"" + printerNameSafe + "\";\n" +
+                  "$file = \"" + tempFileSafe + "\";\n\n" +
+                  "# HTML içeriğini oku ve yazdır\n" +
+                  "$htmlContent = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                  "# HTML'i geçici bir metin dosyasına yazdırılabilir formata çevir (basit yaklaşım)\n" +
+                  "# PowerShell ile HTML render edemiyoruz, bu yüzden Out-Printer kullanıyoruz\n" +
+                  "# Ancak bu HTML'i render etmeyecek, sadece metin olarak yazdıracak\n" +
+                  "# Daha iyi çözüm için Microsoft Edge veya Internet Explorer kullanılabilir\n" +
+                  "try {\n" +
+                  "  # Microsoft Edge ile HTML'i PDF'e çevirip yazdır (eğer mümkünse)\n" +
+                  "  $edgePath = \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\";\n" +
+                  "  if (-not (Test-Path $edgePath)) {\n" +
+                  "    $edgePath = \"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe\";\n" +
+                  "  }\n" +
+                  "  if (Test-Path $edgePath) {\n" +
+                  "    # Edge ile yazdır (headless mode)\n" +
+                  "    $printArgs = @(\n" +
+                  "      \"--headless\",\n" +
+                  "      \"--disable-gpu\",\n" +
+                  "      \"--print-to-pdf-no-header\",\n" +
+                  "      \"--no-pdf-header-footer\",\n" +
+                  "      \"--print-to-pdf=$file.pdf\",\n" +
+                  "      \"file:///$($file.Replace('\\\\', '/'))\"\n" +
+                  "    );\n" +
+                  "    Start-Process -FilePath $edgePath -ArgumentList $printArgs -Wait -NoNewWindow;\n" +
+                  "    if (Test-Path \"$file.pdf\") {\n" +
+                  "      # PDF'i yazdır\n" +
+                  "      Start-Process -FilePath \"$file.pdf\" -Verb Print -Wait;\n" +
+                  "      Remove-Item \"$file.pdf\" -Force;\n" +
+                  "      Write-Output \"SUCCESS\";\n" +
+                  "      exit 0;\n" +
+                  "    }\n" +
+                  "  }\n" +
+                  "} catch {\n" +
+                  "  # Edge yöntemi başarısız, Out-Printer'a fallback\n" +
+                  "}\n\n" +
+                  "# Fallback: Out-Printer ile yazdır (HTML render edilmeyecek)\n" +
+                  "try {\n" +
+                  "  $htmlContent | Out-Printer -Name $printerName;\n" +
+                  "  Write-Output \"SUCCESS\";\n" +
+                  "} catch {\n" +
+                  "  Write-Output \"ERROR: Print failed - $($_.Exception.Message)\";\n" +
+                  "  exit 1;\n" +
+                  "}";
+                
+                const psScriptFile = join(tmpdir(), `print_html_script_${Date.now()}.ps1`);
+                try {
+                  writeFileSync(psScriptFile, psScript, "utf-8");
+                } catch (writeError) {
+                  safeError("❌ Error writing PowerShell script:", writeError);
+                  const errorMessage = writeError instanceof Error ? writeError.message : String(writeError);
+                  try {
+                    setTimeout(() => {
+                      try {
+                        unlinkSync(tempFile);
+                      } catch (e) {
+                        // Ignore
+                      }
+                    }, 2000);
+                  } catch (e) {
+                    // Ignore
+                  }
+                  return {
+                    success: false,
+                    error: `Script dosyası yazma hatası: ${errorMessage}`,
+                  };
+                }
+
+                let stdout: string, stderr: string;
+                try {
+                  const result = await execAsync(
+                    `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptFile}"`,
+                    { maxBuffer: 1024 * 1024, timeout: 60000 }
+                  );
+                  stdout = result.stdout;
+                  stderr = result.stderr || "";
+                } catch (execError: any) {
+                  safeError("❌ PowerShell execution error:", execError);
+                  try {
+                    unlinkSync(psScriptFile);
+                    setTimeout(() => {
+                      try {
+                        unlinkSync(tempFile);
+                      } catch (e) {
+                        // Ignore
+                      }
+                    }, 2000);
+                  } catch (e) {
+                    // Ignore
+                  }
+                  return {
+                    success: false,
+                    error: `Yazdırma hatası: ${execError.message || String(execError)}`,
+                  };
+                }
+
+                // Script ve temp dosyayı temizle
+                try {
+                  unlinkSync(psScriptFile);
+                  setTimeout(() => {
+                    try {
+                      unlinkSync(tempFile);
+                    } catch (e) {
+                      // Ignore
+                    }
+                  }, 2000);
+                } catch (e) {
+                  // Ignore
+                }
+
+                if (stdout.includes("ERROR")) {
+                  return {
+                    success: false,
+                    error: stdout || stderr || "Yazdırma hatası",
+                  };
+                }
+
+                return { success: true };
+              }
+              
+              // ESC/POS formatında ise mevcut yöntemi kullan
               // PowerShell ile yazıcı port adını al ve doğrudan port'a yaz
               const printerNameSafe = data.printerName.replace(/"/g, '`"');
               const tempFileSafe = tempFile.replace(/\\/g, "\\\\");

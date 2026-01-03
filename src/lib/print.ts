@@ -350,6 +350,248 @@ export function formatPrintContent(
   return content;
 }
 
+// HTML formatında yazdırma içeriği oluştur - 80mm termal yazıcı için optimize edilmiş
+export function formatPrintHTMLContent(
+  type: "order" | "cancel" | "payment",
+  items: OrderItem[],
+  tableNumber: string | number,
+  _orderNumber?: string,
+  additionalInfo?: {
+    companyName?: string;
+    total?: number;
+    paymentMethod?: string;
+    subtotal?: number;
+    discount?: number;
+    paperWidth?: number;
+    canceledItems?: OrderItem[];
+    isPaid?: boolean;
+  }
+): string {
+  const companyName = additionalInfo?.companyName || "";
+  const tableNum = String(tableNumber);
+  const isPaid = additionalInfo?.isPaid || type === "payment";
+  
+  // 80mm = 226.77px (72 DPI'de), ama yazdırma için daha geniş kullanabiliriz
+  const paperWidthMM = 80;
+  const paperWidthPX = paperWidthMM * 3.779527559; // mm to px (96 DPI)
+  
+  // Ürünleri birleştir
+  const mergedItems = new Map<
+    string,
+    {
+      item: OrderItem;
+      totalQuantity: number;
+      totalSubtotal: number;
+    }
+  >();
+
+  for (const item of items) {
+    const extrasKey =
+      item.selectedExtras && item.selectedExtras.length > 0
+        ? JSON.stringify(
+            item.selectedExtras.map((e) => ({
+              id: e.id,
+              name: e.name,
+              price: e.price,
+            }))
+          )
+        : "";
+    const notesKey = item.notes && item.notes.trim() ? item.notes.trim() : "";
+    const mergeKey = `${item.menuId}|||${extrasKey}|||${notesKey}`;
+
+    if (mergedItems.has(mergeKey)) {
+      const existing = mergedItems.get(mergeKey)!;
+      existing.totalQuantity += item.quantity;
+      existing.totalSubtotal += item.subtotal;
+    } else {
+      mergedItems.set(mergeKey, {
+        item,
+        totalQuantity: item.quantity,
+        totalSubtotal: item.subtotal,
+      });
+    }
+  }
+
+  const total =
+    additionalInfo?.total ||
+    Array.from(mergedItems.values()).reduce(
+      (sum, { totalSubtotal }) => sum + totalSubtotal,
+      0
+    );
+
+  // HTML içeriği oluştur
+  let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: ${paperWidthMM}mm auto;
+      margin: 0;
+      padding: 0;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Courier New', monospace;
+      width: ${paperWidthMM}mm;
+      margin: 0;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    .header {
+      text-align: center;
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 8px;
+      padding: 0;
+    }
+    .table-info {
+      margin-bottom: 8px;
+      padding: 0;
+    }
+    .item-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      padding: 0;
+    }
+    .item-name {
+      flex: 1;
+      font-weight: bold;
+    }
+    .item-price {
+      font-weight: bold;
+    }
+    .extra-item {
+      padding-left: 16px;
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    .note-item {
+      padding-left: 16px;
+      font-size: 10px;
+      font-style: italic;
+      margin-bottom: 2px;
+    }
+    .canceled-header {
+      margin-top: 8px;
+      margin-bottom: 4px;
+      font-weight: bold;
+      text-decoration: underline;
+    }
+    .total-row {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px dashed #000;
+      font-weight: bold;
+      font-size: 13px;
+    }
+    .payment-method {
+      margin-top: 4px;
+    }
+    .discount {
+      margin-top: 4px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>`;
+
+  // Firma adı
+  if (companyName) {
+    html += `<div class="header">${companyName.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+  }
+
+  // Masa bilgisi
+  html += `<div class="table-info">Masa ${tableNum.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+
+  // Ürünler
+  for (const { item, totalQuantity, totalSubtotal } of mergedItems.values()) {
+    const itemName = item.menuName.toUpperCase();
+    const price = item.menuPrice || 0;
+    
+    html += `<div class="item-row">
+      <span class="item-name">${totalQuantity}x ${itemName.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
+      <span class="item-price">${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL</span>
+    </div>`;
+
+    // Ekstra malzemeler
+    if (item.selectedExtras && item.selectedExtras.length > 0) {
+      for (const extra of item.selectedExtras) {
+        html += `<div class="extra-item">+ ${extra.name.replace(/</g, "&lt;").replace(/>/g, "&gt;")} (+${extra.price.toFixed(2)} TL)</div>`;
+      }
+    }
+
+    // Notlar
+    if (item.notes && item.notes.trim()) {
+      html += `<div class="note-item">Not: ${item.notes.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+    }
+  }
+
+  // İptal edilen ürünler
+  if (additionalInfo?.canceledItems && additionalInfo.canceledItems.length > 0) {
+    html += `<div class="canceled-header">IPTAL EDILENLER:</div>`;
+    
+    const canceledMerged = new Map<string, { item: OrderItem; totalQuantity: number; totalSubtotal: number }>();
+    for (const item of additionalInfo.canceledItems) {
+      const extrasKey = item.selectedExtras && item.selectedExtras.length > 0
+        ? JSON.stringify(item.selectedExtras.map((e) => ({ id: e.id, name: e.name, price: e.price })))
+        : "";
+      const notesKey = item.notes && item.notes.trim() ? item.notes.trim() : "";
+      const mergeKey = `${item.menuId}|||${extrasKey}|||${notesKey}`;
+
+      if (canceledMerged.has(mergeKey)) {
+        const existing = canceledMerged.get(mergeKey)!;
+        existing.totalQuantity += item.quantity;
+        existing.totalSubtotal += item.subtotal;
+      } else {
+        canceledMerged.set(mergeKey, {
+          item,
+          totalQuantity: item.quantity,
+          totalSubtotal: item.subtotal,
+        });
+      }
+    }
+
+    for (const { item, totalQuantity, totalSubtotal } of canceledMerged.values()) {
+      const itemName = item.menuName.toUpperCase();
+      const price = item.menuPrice || 0;
+      
+      html += `<div class="item-row">
+        <span class="item-name">${totalQuantity}x ${itemName.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
+        <span class="item-price">${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL</span>
+      </div>`;
+    }
+  }
+
+  // Toplam
+  if (isPaid) {
+    html += `<div class="total-row">Toplam Tutar: ${total.toFixed(2)} TL - Odendi</div>`;
+  } else {
+    html += `<div class="total-row">Toplam Fiyat: ${total.toFixed(2)} TL</div>`;
+  }
+
+  // Ödeme yöntemi
+  if (type === "payment" && additionalInfo?.paymentMethod) {
+    html += `<div class="payment-method">Ödeme Yöntemi: ${additionalInfo.paymentMethod.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+  }
+
+  // İndirim
+  if (additionalInfo?.discount && additionalInfo.discount > 0) {
+    html += `<div class="discount">İskonto: -${additionalInfo.discount.toFixed(2)} TL</div>`;
+  }
+
+  html += `</body>
+</html>`;
+
+  return html;
+}
+
 // Örnek çıktı formatını göster (yazıcı sayfası için)
 export function getExamplePrintOutput(
   companyName: string = "Firma Adi",
