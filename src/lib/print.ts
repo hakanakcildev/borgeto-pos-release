@@ -73,47 +73,50 @@ export function formatPrintContent(
   const boldOff = ESC + "E" + String.fromCharCode(0x00); // ESC E 0 - Bold off
   const leftAlign = ESC + "a" + String.fromCharCode(0x00); // ESC a 0 - Left align
   
-  // Encoding komutu - Türkçe karakterler için code page ayarla
-  // ESC t n - Set code page (17 = PC857 Turkish, 20 = PC1252 Windows Latin-1)
-  const codePage = ESC + "t" + String.fromCharCode(17); // PC857 Turkish (Türkçe karakterler için)
+  // Encoding komutu - ASCII kullan (turkishToAscii zaten kullanılıyor, code page gerekmez)
+  // Code page komutunu kaldırdık çünkü tüm metinler ASCII'ye çevriliyor
   
   // Margin komutları - Tam genişlik için margin'leri tamamen kaldır
   const GS = String.fromCharCode(0x1d); // GS karakteri (Group Separator)
   
   // ESC GS L nL nH - Set left margin (nL = low byte, nH = high byte)
   // 0x00 0x00 = 0 margin (tam genişlik kullanımı için)
-  const leftMarginAdvanced = ESC + GS + "L" + String.fromCharCode(0x00) + String.fromCharCode(0x00);
+  const leftMarginAdvanced = ESC + GS + String.fromCharCode(0x4c) + String.fromCharCode(0x00) + String.fromCharCode(0x00); // GS L (0x4c = 'L')
   
   // ESC l n - Left margin (basit, 1 byte) - bazı yazıcılar için
-  const leftMarginSimple = ESC + "l" + String.fromCharCode(0x00);
+  const leftMarginSimple = ESC + String.fromCharCode(0x6c) + String.fromCharCode(0x00); // ESC l (0x6c = 'l')
   
   // ESC GS W nL nH - Set print area width (nL = low byte, nH = high byte)
   // 80mm kağıt için maksimum genişlik (Font A ile ~48 karakter = 0x30)
-  // 0x30 0x00 = 48 karakter genişlik
-  const printAreaWidth = ESC + GS + "W" + String.fromCharCode(Math.min(paperWidth, 255)) + String.fromCharCode(0x00);
+  const printAreaWidth = ESC + GS + String.fromCharCode(0x57) + String.fromCharCode(Math.min(paperWidth, 255)) + String.fromCharCode(0x00); // GS W (0x57 = 'W')
   
   // ESC Q n - Set print area width (alternatif, bazı yazıcılar için)
-  const printWidth = ESC + "Q" + String.fromCharCode(Math.min(paperWidth, 255));
+  const printWidth = ESC + String.fromCharCode(0x51) + String.fromCharCode(Math.min(paperWidth, 255)); // ESC Q (0x51 = 'Q')
   
   // ESC SP n - Character spacing (n = 0, karakter arası boşluk yok)
-  const charSpacing = ESC + " " + String.fromCharCode(0x00);
+  const charSpacing = ESC + String.fromCharCode(0x20) + String.fromCharCode(0x00); // ESC SP (0x20 = ' ')
   
   // ESC 3 n - Line spacing (n = 0, satır arası minimum - üst margin minimize)
-  const lineSpacing = ESC + "3" + String.fromCharCode(0x00);
+  const lineSpacing = ESC + String.fromCharCode(0x33) + String.fromCharCode(0x00); // ESC 3 (0x33 = '3')
   
   // ESC d n - Print and feed n lines (n = 0, feed yok - üst margin minimize)
-  const feedLines = ESC + "d" + String.fromCharCode(0x00);
+  const feedLines = ESC + String.fromCharCode(0x64) + String.fromCharCode(0x00); // ESC d (0x64 = 'd')
 
-  // Yazıcıyı sıfırla ve ayarları yap (tam genişlik, margin yok, Türkçe encoding)
-  // ÖNEMLİ: Komut sırası kritik - önce reset, sonra encoding, sonra margin'ler
+  // Yazıcıyı sıfırla ve ayarları yap (tam genişlik, margin yok, ASCII encoding)
+  // ÖNEMLİ: Komut sırası kritik - önce reset, sonra font/alignment, sonra margin'ler
+  // Windows USB yazıcı sürücüsü margin ekliyor, bu yüzden komutları tekrar gönderiyoruz
   content += resetPrinter; // Önce yazıcıyı sıfırla (tüm ayarları temizle)
-  content += codePage; // Türkçe karakterler için code page (PC857 Turkish)
-  content += fontA; // Font A seç (margin'lerden önce)
-  content += leftAlign; // Sol hizalama (margin'lerden önce)
+  content += resetPrinter; // Windows sürücüsü için tekrar reset (margin'leri kaldırmak için)
+  content += fontA; // Font A seç
+  content += leftAlign; // Sol hizalama
   content += leftMarginAdvanced; // Gelişmiş sol margin 0 (ESC GS L)
+  content += leftMarginAdvanced; // Tekrar gönder (Windows sürücüsü için)
   content += leftMarginSimple; // Basit sol margin 0 (ESC l) - bazı yazıcılar için
+  content += leftMarginSimple; // Tekrar gönder (Windows sürücüsü için)
   content += printAreaWidth; // Print area width maksimum (ESC GS W)
+  content += printAreaWidth; // Tekrar gönder (Windows sürücüsü için)
   content += printWidth; // Print width maksimum (ESC Q) - alternatif
+  content += printWidth; // Tekrar gönder (Windows sürücüsü için)
   content += charSpacing; // Karakter arası boşluk 0
   content += lineSpacing; // Satır arası boşluk minimum (üst margin minimize)
   content += feedLines; // Feed lines 0 (üst margin minimize)

@@ -1110,9 +1110,7 @@ $printers | ConvertTo-Json -Depth 10
                 "try {\n" +
                 "  $printerConfig = Get-WmiObject -Class Win32_PrinterConfiguration -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
                 "  if ($printerConfig) {\n" +
-                "    # Paper size ve orientation ayarları\n" +
-                "    $printerConfig.Orientation = 1; # Portrait (0=Portrait, 1=Landscape, 2=Reverse Portrait, 3=Reverse Landscape)\n" +
-                "    # Margin ayarlarını minimize et (mümkünse)\n" +
+                "    $printerConfig.Orientation = 0; # Portrait\n" +
                 "    try {\n" +
                 "      $printerConfig.Put() | Out-Null;\n" +
                 "    } catch {\n" +
@@ -1136,13 +1134,15 @@ $printers | ConvertTo-Json -Depth 10
                 "      Write-Output \"SUCCESS\";\n" +
                 "    } else {\n" +
                 "      # Copy başarısız olursa Out-Printer'a fallback yap\n" +
-                "      $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "      $content = [System.Text.Encoding]::Default.GetString($bytes);\n" +
                 "      $content | Out-Printer -Name $printerName;\n" +
                 "      Write-Output \"SUCCESS\";\n" +
                 "    }\n" +
                 "  } catch {\n" +
                 "    # Hata durumunda Out-Printer'a fallback yap\n" +
-                "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "    $content = [System.Text.Encoding]::Default.GetString($bytes);\n" +
                 "    $content | Out-Printer -Name $printerName;\n" +
                 "    Write-Output \"SUCCESS\";\n" +
                 "  }\n" +
