@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "2.0.84",
+  "version": "2.0.86",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -47,6 +47,7 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.1.7",
     "firebase": "^12.1.0",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^0.554.0",
     "node-cron": "^4.2.1",
     "qrcode.react": "^4.2.0",

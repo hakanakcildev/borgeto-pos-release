@@ -690,6 +690,57 @@ export async function printToPrinter(
   }
 }
 
+// Yazıcıya raster image olarak yazdır (HTML'den)
+export async function printToPrinterAsRaster(
+  printerName: string,
+  type: "order" | "cancel" | "payment",
+  items: OrderItem[],
+  tableNumber: string | number,
+  orderNumber?: string,
+  additionalInfo?: {
+    companyName?: string;
+    total?: number;
+    paymentMethod?: string;
+    subtotal?: number;
+    discount?: number;
+    paperWidth?: number;
+    canceledItems?: OrderItem[];
+    isPaid?: boolean;
+  }
+): Promise<boolean> {
+  if (!window.electronAPI?.print) {
+    return false;
+  }
+
+  try {
+    // Raster image içeriğini oluştur
+    const { formatPrintContentAsRaster } = await import("./print-raster");
+    const content = await formatPrintContentAsRaster(
+      type,
+      items,
+      tableNumber,
+      orderNumber,
+      additionalInfo
+    );
+
+    // Yazdır
+    const result = await window.electronAPI.print({
+      printerName,
+      content,
+      type,
+    });
+
+    if (result.success) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (error) {
+    console.error("Raster print error:", error);
+    return false;
+  }
+}
+
 // Kategoriye göre yazıcıları bul
 export function getPrintersForCategories(
   printers: PrinterDevice[],
