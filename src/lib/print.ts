@@ -77,26 +77,45 @@ export function formatPrintContent(
   // ESC t n - Set code page (17 = PC857 Turkish, 20 = PC1252 Windows Latin-1)
   const codePage = ESC + "t" + String.fromCharCode(17); // PC857 Turkish (Türkçe karakterler için)
   
-  // Margin komutları - Tam genişlik için margin'leri sıfırla/kaldır
-  // ESC l n - Left margin (n = 0, sol margin yok)
-  const leftMargin = ESC + "l" + String.fromCharCode(0x00);
-  // ESC Q n - Set print area width (n = maksimum karakter sayısı, paperWidth)
-  // Sağ margin yok için maksimum genişlik kullan
+  // Margin komutları - Tam genişlik için margin'leri tamamen kaldır
+  const GS = String.fromCharCode(0x1d); // GS karakteri (Group Separator)
+  
+  // ESC GS L nL nH - Set left margin (nL = low byte, nH = high byte)
+  // 0x00 0x00 = 0 margin (tam genişlik kullanımı için)
+  const leftMarginAdvanced = ESC + GS + "L" + String.fromCharCode(0x00) + String.fromCharCode(0x00);
+  
+  // ESC l n - Left margin (basit, 1 byte) - bazı yazıcılar için
+  const leftMarginSimple = ESC + "l" + String.fromCharCode(0x00);
+  
+  // ESC GS W nL nH - Set print area width (nL = low byte, nH = high byte)
+  // 80mm kağıt için maksimum genişlik (Font A ile ~48 karakter = 0x30)
+  // 0x30 0x00 = 48 karakter genişlik
+  const printAreaWidth = ESC + GS + "W" + String.fromCharCode(Math.min(paperWidth, 255)) + String.fromCharCode(0x00);
+  
+  // ESC Q n - Set print area width (alternatif, bazı yazıcılar için)
   const printWidth = ESC + "Q" + String.fromCharCode(Math.min(paperWidth, 255));
+  
   // ESC SP n - Character spacing (n = 0, karakter arası boşluk yok)
   const charSpacing = ESC + " " + String.fromCharCode(0x00);
+  
   // ESC 3 n - Line spacing (n = 0, satır arası minimum - üst margin minimize)
   const lineSpacing = ESC + "3" + String.fromCharCode(0x00);
+  
+  // ESC d n - Print and feed n lines (n = 0, feed yok - üst margin minimize)
+  const feedLines = ESC + "d" + String.fromCharCode(0x00);
 
   // Yazıcıyı sıfırla ve ayarları yap (tam genişlik, margin yok, Türkçe encoding)
-  content += resetPrinter;
+  content += resetPrinter; // Önce yazıcıyı sıfırla
   content += codePage; // Türkçe karakterler için code page
-  content += leftMargin; // Sol margin 0
-  content += printWidth; // Print width maksimum (sağ margin yok için tam genişlik)
+  content += leftMarginAdvanced; // Gelişmiş sol margin 0 (ESC GS L)
+  content += leftMarginSimple; // Basit sol margin 0 (ESC l) - bazı yazıcılar için
+  content += printAreaWidth; // Print area width maksimum (ESC GS W)
+  content += printWidth; // Print width maksimum (ESC Q) - alternatif
   content += charSpacing; // Karakter arası boşluk 0
   content += lineSpacing; // Satır arası boşluk minimum (üst margin minimize)
-  content += fontA;
-  content += leftAlign;
+  content += feedLines; // Feed lines 0 (üst margin minimize)
+  content += fontA; // Font A seç
+  content += leftAlign; // Sol hizalama
 
   // 1. Firma Adı (sola yaslı, tam genişlik, kalın)
   if (companyName) {

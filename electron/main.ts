@@ -1105,14 +1105,32 @@ $printers | ConvertTo-Json -Depth 10
                 "  Write-Output \"ERROR: Printer not found\";\n" +
                 "  exit 1;\n" +
                 "}\n\n" +
+                "# Yazıcı ayarlarını optimize et - margin'leri minimize et\n" +
+                "try {\n" +
+                "  $printerConfig = Get-WmiObject -Class Win32_PrinterConfiguration -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
+                "  if ($printerConfig) {\n" +
+                "    # Paper size ve orientation ayarları\n" +
+                "    $printerConfig.Orientation = 1; # Portrait (0=Portrait, 1=Landscape, 2=Reverse Portrait, 3=Reverse Landscape)\n" +
+                "    # Margin ayarlarını minimize et (mümkünse)\n" +
+                "    try {\n" +
+                "      $printerConfig.Put() | Out-Null;\n" +
+                "    } catch {\n" +
+                "      # Ayarlar güncellenemezse devam et\n" +
+                "    }\n" +
+                "  }\n" +
+                "} catch {\n" +
+                "  # Yazıcı ayarları güncellenemezse devam et\n" +
+                "}\n\n" +
                 "$portName = $printer.PortName;\n" +
                 "Write-Host \"Printer Port: $portName\";\n\n" +
                 "# Port tipine göre yazdır\n" +
                 "if ($portName -like \"LPT*\" -or $portName -like \"USB*\" -or $portName -like \"COM*\") {\n" +
                 "  # LPT, USB veya COM portu - doğrudan copy /b komutu ile raw printing (margin yok)\n" +
                 "  # USB portları genellikle \"USB001\", \"USB002\" formatındadır\n" +
+                "  # /b flag'i binary mode için - ESC/POS komutlarını doğru gönderir\n" +
                 "  try {\n" +
-                "    cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1 | Out-Null;\n" +
+                "    # copy /b komutu ile doğrudan port'a yaz (raw printing, margin yok)\n" +
+                "    $copyResult = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
                 "    if ($LASTEXITCODE -eq 0) {\n" +
                 "      Write-Output \"SUCCESS\";\n" +
                 "    } else {\n" +
@@ -1163,18 +1181,8 @@ $printers | ConvertTo-Json -Depth 10
                 "  # Diğer portlar (Bluetooth, WSD, vs.) - Out-Printer kullan\n" +
                 "  # Yazıcı ayarlarını optimize et - tam genişlik kullanımı için\n" +
                 "  try {\n" +
-                "    # Yazıcı ayarlarını al ve margin'leri minimize et\n" +
-                "    $printerSettings = Get-WmiObject -Class Win32_PrinterConfiguration -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
-                "    if ($printerSettings) {\n" +
-                "      try {\n" +
-                "        $printerSettings.Orientation = 1; # Portrait\n" +
-                "        $printerSettings.Put() | Out-Null;\n" +
-                "      } catch {\n" +
-                "        # Ayarlar güncellenemezse devam et\n" +
-                "      }\n" +
-                "    }\n" +
-                "    \n" +
                 "    # Out-Printer ile yazdır (yazıcı sürücüsü ayarlarına bağlı)\n" +
+                "    # ESC/POS komutları zaten margin'leri kaldırıyor, bu yüzden doğrudan yazdır\n" +
                 "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
                 "    $content | Out-Printer -Name $printerName;\n" +
                 "    Write-Output \"SUCCESS\";\n" +
