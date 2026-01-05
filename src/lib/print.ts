@@ -105,8 +105,11 @@ export function formatPrintContent(
   const feedLines = ESC + "d" + String.fromCharCode(0x00);
 
   // Yazıcıyı sıfırla ve ayarları yap (tam genişlik, margin yok, Türkçe encoding)
-  content += resetPrinter; // Önce yazıcıyı sıfırla
-  content += codePage; // Türkçe karakterler için code page
+  // ÖNEMLİ: Komut sırası kritik - önce reset, sonra encoding, sonra margin'ler
+  content += resetPrinter; // Önce yazıcıyı sıfırla (tüm ayarları temizle)
+  content += codePage; // Türkçe karakterler için code page (PC857 Turkish)
+  content += fontA; // Font A seç (margin'lerden önce)
+  content += leftAlign; // Sol hizalama (margin'lerden önce)
   content += leftMarginAdvanced; // Gelişmiş sol margin 0 (ESC GS L)
   content += leftMarginSimple; // Basit sol margin 0 (ESC l) - bazı yazıcılar için
   content += printAreaWidth; // Print area width maksimum (ESC GS W)
@@ -114,8 +117,6 @@ export function formatPrintContent(
   content += charSpacing; // Karakter arası boşluk 0
   content += lineSpacing; // Satır arası boşluk minimum (üst margin minimize)
   content += feedLines; // Feed lines 0 (üst margin minimize)
-  content += fontA; // Font A seç
-  content += leftAlign; // Sol hizalama
 
   // 1. Firma Adı (sola yaslı, tam genişlik, kalın)
   if (companyName) {
@@ -127,7 +128,7 @@ export function formatPrintContent(
     // Satırı tam genişliğe tamamla (sola yaslı)
     content += nameToPrint.padEnd(paperWidth);
     content += boldOff;
-    content += "\n";
+    content += "\r\n"; // ESC/POS için \r\n kullan
   }
 
   // 2. Masa bilgisi (sola yaslı, tam genişlik)
@@ -138,7 +139,7 @@ export function formatPrintContent(
       : tableInfo;
   // Satırı tam genişliğe tamamla (sola yaslı)
   content += tableToPrint.padEnd(paperWidth);
-  content += "\n";
+  content += "\r\n"; // ESC/POS için \r\n kullan
 
   // 3. Ürünler listesi - Aynı ürünleri birleştir
   const mergedItems = new Map<
@@ -223,7 +224,7 @@ export function formatPrintContent(
     content += boldOn;
     content += finalLine;
     content += boldOff;
-    content += "\n";
+    content += "\r\n"; // ESC/POS için \r\n kullan
 
     // Ekstra malzemeler varsa göster
     if (item.selectedExtras && item.selectedExtras.length > 0) {
@@ -235,7 +236,7 @@ export function formatPrintContent(
             ? extraLine.substring(0, paperWidth)
             : extraLine;
         content += extraLineToPrint.padEnd(paperWidth);
-        content += "\n";
+        content += "\r\n";
       }
     }
 
@@ -364,7 +365,7 @@ export function formatPrintContent(
   }
 
   // Boş satır (yazıcı için)
-  content += "\n";
+  content += "\r\n";
 
   return content;
 }

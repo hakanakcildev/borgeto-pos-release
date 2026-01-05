@@ -944,10 +944,11 @@ $printers | ConvertTo-Json -Depth 10
           const fileExtension = isHTML ? "html" : "txt";
           const tempFile = join(tmpdir(), `print_${Date.now()}.${fileExtension}`);
 
-          // ESC/POS komutları için binary olarak kaydet (BOM yok, encoding utf-8)
+          // ESC/POS komutları için binary olarak kaydet (BOM yok, latin1 encoding)
           try {
-            // ESC/POS komutları binary olmalı, UTF-8 BOM eklemek komutları bozabilir
-            writeFileSync(tempFile, data.content, "utf-8");
+            // ESC/POS komutları binary olmalı, latin1 encoding kullan (UTF-8 BOM eklemek komutları bozabilir)
+            // latin1 encoding, byte'ları olduğu gibi korur (0-255 arası değerler)
+            writeFileSync(tempFile, data.content, "latin1");
             safeLog(`📁 Temp file created: ${tempFile}`);
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
@@ -1441,7 +1442,7 @@ try {
           // macOS için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
           try {
-            writeFileSync(tempFile, data.content, "utf-8");
+            writeFileSync(tempFile, data.content, "latin1");
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
@@ -1480,7 +1481,7 @@ try {
           // Linux için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
           try {
-            writeFileSync(tempFile, data.content, "utf-8");
+            writeFileSync(tempFile, data.content, "latin1");
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
