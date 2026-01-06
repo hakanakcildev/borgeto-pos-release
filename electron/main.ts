@@ -1124,45 +1124,38 @@ $printers | ConvertTo-Json -Depth 10
                 "Write-Host \"Printer Port: $portName\";\n\n" +
                 "# Port tipine göre yazdır\n" +
                 "if ($portName -like \"LPT*\" -or $portName -like \"USB*\" -or $portName -like \"COM*\") {\n" +
-                "  # LPT, USB veya COM portu - .NET ile doğrudan binary yazma (margin yok)\n" +
+                "  # LPT, USB veya COM portu - copy /b komutu ile raw printing\n" +
                 "  try {\n" +
-                "    # Dosyayı binary olarak oku\n" +
-                "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "    \n" +
-                "    # Doğrudan port'a binary yaz - FileStream kullan\n" +
-                "    try {\n" +
-                "      $portStream = [System.IO.File]::OpenWrite(\"\\\\.\\$portName\");\n" +
-                "      $portStream.Write($bytes, 0, $bytes.Length);\n" +
-                "      $portStream.Close();\n" +
+                "    # Önce normal port adıyla dene\n" +
+                "    $copyResult = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
+                "    if ($LASTEXITCODE -eq 0) {\n" +
                 "      Write-Output \"SUCCESS\";\n" +
-                "    } catch {\n" +
-                "      # FileStream başarısız olursa copy /b dene\n" +
-                "      $copyResult = cmd /c \"copy /b \\\"$file\\\" \\\"\\\\.\\$portName\\\"\" 2>&1;\n" +
+                "    } else {\n" +
+                "      # USB/LPT portları için \\\\.\\ prefix'i ile dene\n" +
+                "      $portPath = \"\\\\.\\$portName\";\n" +
+                "      $copyResult2 = cmd /c \"copy /b \\\"$file\\\" \\\"$portPath\\\"\" 2>&1;\n" +
                 "      if ($LASTEXITCODE -eq 0) {\n" +
                 "        Write-Output \"SUCCESS\";\n" +
                 "      } else {\n" +
-                "        # Son çare: Out-Printer (encoding dönüşümü olmadan)\n" +
-                "        # Binary data'yı doğrudan gönder\n" +
+                "        # Son çare: Out-Printer (Latin1 encoding)\n" +
+                "        Write-Host \"Copy failed, trying Out-Printer...\";\n" +
+                "        $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
                 "        $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
-                "        $content | Out-Printer -Name $printerName -Raw;\n" +
+                "        $content | Out-Printer -Name $printerName;\n" +
                 "        Write-Output \"SUCCESS\";\n" +
                 "      }\n" +
                 "    }\n" +
                 "  } catch {\n" +
-                "    # Hata durumunda copy /b dene\n" +
+                "    # Hata durumunda Out-Printer'a fallback yap\n" +
+                "    Write-Host \"Exception occurred: $($_.Exception.Message)\";\n" +
                 "    try {\n" +
-                "      $copyResult = cmd /c \"copy /b \\\"$file\\\" \\\"\\\\.\\$portName\\\"\" 2>&1;\n" +
-                "      if ($LASTEXITCODE -eq 0) {\n" +
-                "        Write-Output \"SUCCESS\";\n" +
-                "      } else {\n" +
-                "        throw;\n" +
-                "      }\n" +
-                "    } catch {\n" +
-                "      # Son çare: Out-Printer\n" +
                 "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
                 "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
-                "      $content | Out-Printer -Name $printerName -Raw;\n" +
+                "      $content | Out-Printer -Name $printerName;\n" +
                 "      Write-Output \"SUCCESS\";\n" +
+                "    } catch {\n" +
+                "      Write-Output \"ERROR: Print failed: $($_.Exception.Message)\";\n" +
+                "      exit 1;\n" +
                 "    }\n" +
                 "  }\n" +
                 "} elseif ($portName -like \"*TCP*\" -or $portName -like \"*IP*\" -or $portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\") {\n" +
