@@ -34,7 +34,7 @@ function turkishToAscii(text: string): string {
     .replace(/Ü/g, "U");
 }
 
-// Basit ve temiz ESC/POS yazdırma içeriği oluştur
+// ESC/POS yazdırma içeriği oluştur - Agresif margin ve encoding düzeltmeleri
 export function formatPrintContent(
   type: "order" | "cancel" | "payment",
   items: OrderItem[],
@@ -60,77 +60,83 @@ export function formatPrintContent(
 
   let content = "";
 
-  // ESC/POS komutları - Tüm gerekli komutlar
+  // ESC/POS komutları
   const ESC = String.fromCharCode(0x1b);
   const GS = String.fromCharCode(0x1d);
+  const LF = String.fromCharCode(0x0a);
+  const CR = String.fromCharCode(0x0d);
+  const CRLF = CR + LF;
   
-  // Reset ve temel ayarlar
+  // Reset - Her şeyi sıfırla
   const resetPrinter = ESC + "@";
   
-  // Font ayarları - Büyük font için
-  const fontA = ESC + "M" + String.fromCharCode(0x00); // Font A
-  const doubleWidth = ESC + "!" + String.fromCharCode(0x20); // Double width
-  const doubleHeight = ESC + "!" + String.fromCharCode(0x10); // Double height
-  const doubleWidthHeight = ESC + "!" + String.fromCharCode(0x30); // Double width + height
-  const normalSize = ESC + "!" + String.fromCharCode(0x00); // Normal size
-  
-  // Bold
-  const boldOn = ESC + "E" + String.fromCharCode(0x01);
-  const boldOff = ESC + "E" + String.fromCharCode(0x00);
-  
-  // Alignment
-  const leftAlign = ESC + "a" + String.fromCharCode(0x00);
-  
-  // Margin komutları - Tüm margin'leri sıfırla
-  const leftMargin0 = ESC + GS + String.fromCharCode(0x4c) + String.fromCharCode(0x00) + String.fromCharCode(0x00); // GS L 0 0
-  const leftMarginSimple = ESC + String.fromCharCode(0x6c) + String.fromCharCode(0x00); // ESC l 0
-  const printAreaWidth = ESC + GS + String.fromCharCode(0x57) + String.fromCharCode(0x30) + String.fromCharCode(0x00); // GS W 48 (0x30)
-  const printWidth = ESC + String.fromCharCode(0x51) + String.fromCharCode(0x30); // ESC Q 48
-  const charSpacing = ESC + String.fromCharCode(0x20) + String.fromCharCode(0x00); // ESC SP 0
-  const lineSpacing = ESC + String.fromCharCode(0x33) + String.fromCharCode(0x00); // ESC 3 0 (minimum line spacing)
-  const topMargin = ESC + String.fromCharCode(0x64) + String.fromCharCode(0x00); // ESC d 0 (no feed)
-  
-  // Code page - ASCII (0)
+  // Code page - ASCII (0) - ÖNEMLİ: Her satırdan önce gönder
   const codePageASCII = ESC + String.fromCharCode(0x74) + String.fromCharCode(0x00);
   
-  const lineFeed = "\r\n";
-
-  // Yazıcıyı sıfırla ve tüm ayarları yap
-  content += resetPrinter; // Reset
-  content += resetPrinter; // Reset tekrar (Windows driver için)
+  // Alignment - Left
+  const leftAlign = ESC + String.fromCharCode(0x61) + String.fromCharCode(0x00);
+  
+  // Font size - Normal (başlangıç)
+  const normalSize = ESC + String.fromCharCode(0x21) + String.fromCharCode(0x00);
+  const doubleWidthHeight = ESC + String.fromCharCode(0x21) + String.fromCharCode(0x30);
+  
+  // Bold
+  const boldOn = ESC + String.fromCharCode(0x45) + String.fromCharCode(0x01);
+  const boldOff = ESC + String.fromCharCode(0x45) + String.fromCharCode(0x00);
+  
+  // Margin komutları - Agresif şekilde sıfırla
+  const leftMargin0 = GS + String.fromCharCode(0x4c) + String.fromCharCode(0x00) + String.fromCharCode(0x00); // GS L 0 0
+  const leftMarginSimple = ESC + String.fromCharCode(0x6c) + String.fromCharCode(0x00); // ESC l 0
+  const printAreaWidth = GS + String.fromCharCode(0x57) + String.fromCharCode(0x30) + String.fromCharCode(0x00); // GS W 48
+  const charSpacing = ESC + String.fromCharCode(0x20) + String.fromCharCode(0x00); // ESC SP 0
+  const lineSpacing = ESC + String.fromCharCode(0x33) + String.fromCharCode(0x00); // ESC 3 0
+  
+  // Başlangıç komutları - Yazıcıyı tamamen sıfırla
+  content += resetPrinter;
+  content += resetPrinter; // Tekrar reset
   content += codePageASCII; // ASCII code page
   content += leftAlign; // Left align
-  content += normalSize; // Normal size (başlangıç)
+  content += normalSize; // Normal size
   
-  // Margin'leri sıfırla - agresif şekilde
+  // Margin'leri agresif şekilde sıfırla
   content += leftMargin0;
   content += leftMargin0; // Tekrar
   content += leftMarginSimple;
-  content += leftMarginSimple; // Tekrar
   content += printAreaWidth;
-  content += printWidth;
   content += charSpacing;
   content += lineSpacing;
-  content += topMargin;
+  content += CRLF; // İlk satır için feed
+
+  // Yardımcı fonksiyon: Her satırdan önce margin ve encoding komutlarını gönder
+  const addLineWithMargin = (text: string) => {
+    let line = "";
+    line += codePageASCII; // Her satırdan önce code page
+    line += leftMargin0; // Her satırdan önce margin sıfırla
+    line += leftAlign; // Her satırdan önce left align
+    line += text;
+    line += CRLF;
+    return line;
+  };
 
   // Firma Adı - Büyük ve kalın
   if (companyName) {
     const nameToPrint = companyName.length > paperWidth 
       ? companyName.substring(0, paperWidth) 
       : companyName;
-    content += doubleWidthHeight; // Büyük font
+    content += codePageASCII;
+    content += leftMargin0;
+    content += leftAlign;
+    content += doubleWidthHeight;
     content += boldOn;
     content += nameToPrint;
     content += boldOff;
-    content += normalSize; // Normal size'a dön
-    content += lineFeed;
+    content += normalSize;
+    content += CRLF;
   }
 
-  // Masa bilgisi - Normal boyut
-  content += normalSize;
-  content += `Masa ${tableNum}`;
-  content += lineFeed;
-  content += lineFeed;
+  // Masa bilgisi
+  content += addLineWithMargin(`Masa ${tableNum}`);
+  content += addLineWithMargin(""); // Boş satır
 
   // Ürünleri birleştir
   const mergedItems = new Map<
@@ -175,53 +181,51 @@ export function formatPrintContent(
     const itemName = turkishToAscii(item.menuName).toUpperCase();
     const price = item.menuPrice || 0;
 
-    // Ürün satırı: "Adetx ÜRÜN ADI" - Normal boyut, kalın
+    // Ürün satırı - Normal boyut, kalın
+    content += codePageASCII;
+    content += leftMargin0;
+    content += leftAlign;
     content += normalSize;
     content += boldOn;
     content += `${totalQuantity}x ${itemName}`;
     content += boldOff;
-    content += lineFeed;
+    content += CRLF;
 
-    // Fiyat satırı: "Fiyat TL xAdet = Toplam TL" - Normal boyut
+    // Fiyat satırı - Normal boyut
+    content += codePageASCII;
+    content += leftMargin0;
+    content += leftAlign;
     content += normalSize;
     const priceText = `${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL`;
     content += priceText;
-    content += lineFeed;
+    content += CRLF;
 
-    // Ekstra malzemeler - Normal boyut
+    // Ekstra malzemeler
     if (item.selectedExtras && item.selectedExtras.length > 0) {
-      content += normalSize;
       for (const extra of item.selectedExtras) {
         const extraName = turkishToAscii(extra.name);
-        content += `  + ${extraName} +${extra.price.toFixed(2)} TL`;
-        content += lineFeed;
+        content += addLineWithMargin(`  + ${extraName} +${extra.price.toFixed(2)} TL`);
       }
     }
 
-    // Notlar - Normal boyut
+    // Notlar
     if (item.notes && item.notes.trim()) {
-      content += normalSize;
       const noteText = turkishToAscii(item.notes);
-      content += `  Not: ${noteText}`;
-      content += lineFeed;
+      content += addLineWithMargin(`  Not: ${noteText}`);
     }
 
-    content += lineFeed;
+    content += addLineWithMargin(""); // Boş satır
   }
 
-  // İptal edilen ürünler - Normal boyut
+  // İptal edilen ürünler
   if (additionalInfo?.canceledItems && additionalInfo.canceledItems.length > 0) {
-    content += normalSize;
-    content += "IPTAL EDILEN URUNLER";
-    content += lineFeed;
+    content += addLineWithMargin("IPTAL EDILEN URUNLER");
     for (const item of additionalInfo.canceledItems) {
       const itemName = turkishToAscii(item.menuName).toUpperCase();
-      content += `${item.quantity}x ${itemName} (IPTAL)`;
-      content += lineFeed;
-      content += `${item.subtotal.toFixed(2)} TL`;
-      content += lineFeed;
+      content += addLineWithMargin(`${item.quantity}x ${itemName} (IPTAL)`);
+      content += addLineWithMargin(`${item.subtotal.toFixed(2)} TL`);
     }
-    content += lineFeed;
+    content += addLineWithMargin("");
   }
 
   // Toplam - Büyük ve kalın
@@ -232,8 +236,11 @@ export function formatPrintContent(
       0
     );
 
-  content += lineFeed;
-  content += doubleWidthHeight; // Büyük font
+  content += addLineWithMargin("");
+  content += codePageASCII;
+  content += leftMargin0;
+  content += leftAlign;
+  content += doubleWidthHeight;
   content += boldOn;
   if (isPaid) {
     content += `Toplam Tutar: ${total.toFixed(2)} TL - Odendi`;
@@ -241,31 +248,25 @@ export function formatPrintContent(
     content += `Toplam Fiyat: ${total.toFixed(2)} TL`;
   }
   content += boldOff;
-  content += normalSize; // Normal size'a dön
-  content += lineFeed;
+  content += normalSize;
+  content += CRLF;
 
-  // Ödeme yöntemi - Normal boyut
+  // Ödeme yöntemi
   if (type === "payment" && additionalInfo?.paymentMethod) {
-    content += normalSize;
     const paymentMethodText = turkishToAscii(additionalInfo.paymentMethod);
-    content += `Odeme Yontemi: ${paymentMethodText}`;
-    content += lineFeed;
+    content += addLineWithMargin(`Odeme Yontemi: ${paymentMethodText}`);
   }
 
-  // İndirim - Normal boyut
+  // İndirim
   if (additionalInfo?.discount && additionalInfo.discount > 0) {
-    content += normalSize;
-    content += `Iskonto: -${additionalInfo.discount.toFixed(2)} TL`;
-    content += lineFeed;
+    content += addLineWithMargin(`Iskonto: -${additionalInfo.discount.toFixed(2)} TL`);
   }
 
   // Boş satırlar
-  content += lineFeed;
-  content += lineFeed;
-  content += "Tesekkur ederiz!";
-  content += lineFeed;
-  content += lineFeed;
-  content += lineFeed;
+  content += addLineWithMargin("");
+  content += addLineWithMargin("Tesekkur ederiz!");
+  content += addLineWithMargin("");
+  content += addLineWithMargin("");
 
   return content;
 }
@@ -543,7 +544,3 @@ export function getDefaultPrinter(
   // Hiçbiri yoksa ilk yazıcıyı döndür
   return printers[0] || null;
 }
-
-
-
-
