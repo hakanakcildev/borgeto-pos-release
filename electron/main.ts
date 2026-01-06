@@ -1307,7 +1307,11 @@ if ($printer) {
                 "  # Yazıcı ayarları güncellenemezse devam et\n" +
                 "}\n\n" +
                 "$portName = $printer.PortName;\n" +
-                "Write-Host \"Printer Port: $portName\";\n\n" +
+                "$connectionType = \"unknown\";\n" +
+                "if ($portName -like \"*TCP*\" -or $portName -like \"*IP*\" -or $portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\" -or $printer.Network -eq $true) {\n" +
+                "  $connectionType = \"network\";\n" +
+                "}\n" +
+                "Write-Host \"Printer Port: $portName, Connection Type: $connectionType\";\n\n" +
                 "# Yazıcı türünü belirle (thermal printer için özel işlem)\n" +
                 "$printerType = \"unknown\";\n" +
                 "$driverName = $null;\n" +
@@ -1333,39 +1337,48 @@ if ($printer) {
                 "if ($portName -like \"LPT*\" -or $portName -like \"USB*\" -or $portName -like \"COM*\") {\n" +
                 "  # Thermal printer ise raw printing (ESC/POS komutları için)\n" +
                 "  if ($printerType -eq \"thermal\") {\n" +
-                "    # Thermal printer için copy /b ile raw printing\n" +
+                "    # Thermal printer için copy /b ile raw printing - Binary mode\n" +
+                "    # Önce normal port adıyla dene\n" +
+                "    $success = $false;\n" +
                 "    try {\n" +
-                "      $copyResult = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
+                "      $result = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
                 "      if ($LASTEXITCODE -eq 0) {\n" +
                 "        Write-Output \"SUCCESS\";\n" +
-                "      } else {\n" +
+                "        $success = $true;\n" +
+                "      }\n" +
+                "    } catch {}\n" +
+                "    \n" +
+                "    # Başarısız olursa \\\\.\\ prefix'i ile dene\n" +
+                "    if (-not $success) {\n" +
+                "      try {\n" +
                 "        $portPath = \"\\\\.\\$portName\";\n" +
-                "        $copyResult2 = cmd /c \"copy /b \\\"$file\\\" \\\"$portPath\\\"\" 2>&1;\n" +
+                "        $result = cmd /c \"copy /b \\\"$file\\\" \\\"$portPath\\\"\" 2>&1;\n" +
                 "        if ($LASTEXITCODE -eq 0) {\n" +
                 "          Write-Output \"SUCCESS\";\n" +
-                "        } else {\n" +
-                "          # Fallback: Out-Printer (Latin1 encoding)\n" +
-                "          $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "          $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
-                "          $content | Out-Printer -Name $printerName;\n" +
-                "          Write-Output \"SUCCESS\";\n" +
+                "          $success = $true;\n" +
                 "        }\n" +
+                "      } catch {}\n" +
+                "    }\n" +
+                "    \n" +
+                "    # Hala başarısızsa Out-Printer kullan (son çare)\n" +
+                "    if (-not $success) {\n" +
+                "      try {\n" +
+                "        $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "        $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
+                "        $content | Out-Printer -Name $printerName;\n" +
+                "        Write-Output \"SUCCESS\";\n" +
+                "      } catch {\n" +
+                "        Write-Output \"ERROR: Print failed: $($_.Exception.Message)\";\n" +
+                "        exit 1;\n" +
                 "      }\n" +
-                "    } catch {\n" +
-                "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
-                "      $content | Out-Printer -Name $printerName;\n" +
-                "      Write-Output \"SUCCESS\";\n" +
                 "    }\n" +
                 "  } else {\n" +
                 "    # Normal yazıcılar için Out-Printer kullan\n" +
                 "    try {\n" +
                 "      if ($isHTML) {\n" +
-                "        # HTML içeriği için özel işlem\n" +
                 "        $htmlContent = Get-Content -Path $file -Raw -Encoding UTF8;\n" +
                 "        $htmlContent | Out-Printer -Name $printerName;\n" +
                 "      } else {\n" +
-                "        # Text içeriği için\n" +
                 "        $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
                 "        $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
                 "        $content | Out-Printer -Name $printerName;\n" +
@@ -1376,35 +1389,102 @@ if ($printer) {
                 "      exit 1;\n" +
                 "    }\n" +
                 "  }\n" +
-                "} elseif ($portName -like \"*TCP*\" -or $portName -like \"*IP*\" -or $portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\") {\n" +
+                "} elseif ($portName -like \"*TCP*\" -or $portName -like \"*IP*\" -or $portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\" -or $connectionType -eq \"network\") {\n" +
                 "  # Network yazıcılar için TCP/IP (port 9100 - RAW printing)\n" +
-                "  try {\n" +
+                "  $ipAddress = $null;\n" +
+                "  $port = 9100; # Default RAW printing port\n" +
+                "  \n" +
+                "  # IP adresini ve port'u çıkar\n" +
+                "  if ($portName -match \"^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$\") {\n" +
+                "    # Direkt IP adresi\n" +
                 "    $ipAddress = $portName;\n" +
-                "    if ($portName -like \"*TCP*\" -or $portName -like \"*IP*\") {\n" +
-                "      # Port adından IP'yi çıkar (örn: \"IP_192.168.1.100\" -> \"192.168.1.100\")\n" +
-                "      $ipMatch = [regex]::Match($portName, \"([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\");\n" +
-                "      if ($ipMatch.Success) {\n" +
-                "        $ipAddress = $ipMatch.Groups[1].Value;\n" +
+                "  } elseif ($portName -like \"*TCP*\" -or $portName -like \"*IP*\") {\n" +
+                "    # Port adından IP'yi çıkar (örn: \"IP_192.168.1.100\", \"TCP_192.168.1.100:9100\")\n" +
+                "    $ipMatch = [regex]::Match($portName, \"([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\");\n" +
+                "    if ($ipMatch.Success) {\n" +
+                "      $ipAddress = $ipMatch.Groups[1].Value;\n" +
+                "      # Port numarası var mı kontrol et (örn: \"TCP_192.168.1.100:9100\")\n" +
+                "      $portMatch = [regex]::Match($portName, \":([0-9]+)\");\n" +
+                "      if ($portMatch.Success) {\n" +
+                "        $port = [int]$portMatch.Groups[1].Value;\n" +
                 "      }\n" +
                 "    }\n" +
-                "    \n" +
-                "    # TCP/IP port 9100 (RAW printing) ile yazdır\n" +
-                "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "    $tcpClient = New-Object System.Net.Sockets.TcpClient($ipAddress, 9100);\n" +
-                "    $stream = $tcpClient.GetStream();\n" +
-                "    $stream.Write($bytes, 0, $bytes.Length);\n" +
-                "    $stream.Flush();\n" +
-                "    $stream.Close();\n" +
-                "    $tcpClient.Close();\n" +
-                "    Write-Output \"SUCCESS\";\n" +
-                "  } catch {\n" +
-                "    # TCP/IP başarısız olursa Out-Printer'a fallback yap\n" +
+                "  }\n" +
+                "  \n" +
+                "  # Eğer IP adresi bulunamadıysa, yazıcı port bilgisinden IP'yi almaya çalış\n" +
+                "  if (-not $ipAddress) {\n" +
                 "    try {\n" +
-                "      $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "      $printerPort = Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue;\n" +
+                "      if ($printerPort -and $printerPort.PrinterHostAddress) {\n" +
+                "        $ipAddress = $printerPort.PrinterHostAddress;\n" +
+                "      }\n" +
+                "    } catch {}\n" +
+                "  }\n" +
+                "  \n" +
+                "  if ($ipAddress) {\n" +
+                "    # TCP/IP ile RAW printing (ESC/POS komutları için)\n" +
+                "    # Network yazıcılar için her zaman TCP/IP kullan (thermal printer olsun ya da olmasın)\n" +
+                "    try {\n" +
+                "      Write-Host \"Connecting to $ipAddress:$port (Network printer)...\";\n" +
+                "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "      $tcpClient = New-Object System.Net.Sockets.TcpClient;\n" +
+                "      $tcpClient.ReceiveTimeout = 5000; # 5 saniye timeout\n" +
+                "      $tcpClient.SendTimeout = 5000; # 5 saniye timeout\n" +
+                "      $tcpClient.Connect($ipAddress, $port);\n" +
+                "      $stream = $tcpClient.GetStream();\n" +
+                "      $stream.Write($bytes, 0, $bytes.Length);\n" +
+                "      $stream.Flush();\n" +
+                "      Start-Sleep -Milliseconds 200; # Yazıcının işlemesi için bekle\n" +
+                "      $stream.Close();\n" +
+                "      $tcpClient.Close();\n" +
+                "      Write-Output \"SUCCESS\";\n" +
+                "    } catch {\n" +
+                "      Write-Host \"TCP/IP failed: $($_.Exception.Message), trying alternative ports...\";\n" +
+                "      # Port 9100 başarısız olursa 9101, 9102 dene\n" +
+                "      $alternativePorts = @(9101, 9102, 515);\n" +
+                "      $success = $false;\n" +
+                "      foreach ($altPort in $alternativePorts) {\n" +
+                "        try {\n" +
+                "          $tcpClient2 = New-Object System.Net.Sockets.TcpClient;\n" +
+                "          $tcpClient2.ReceiveTimeout = 3000;\n" +
+                "          $tcpClient2.SendTimeout = 3000;\n" +
+                "          $tcpClient2.Connect($ipAddress, $altPort);\n" +
+                "          $stream2 = $tcpClient2.GetStream();\n" +
+                "          $stream2.Write($bytes, 0, $bytes.Length);\n" +
+                "          $stream2.Flush();\n" +
+                "          Start-Sleep -Milliseconds 200;\n" +
+                "          $stream2.Close();\n" +
+                "          $tcpClient2.Close();\n" +
+                "          Write-Output \"SUCCESS\";\n" +
+                "          $success = $true;\n" +
+                "          break;\n" +
+                "        } catch {\n" +
+                "          # Bu port başarısız, bir sonrakini dene\n" +
+                "        }\n" +
+                "      }\n" +
+                "      \n" +
+                "      if (-not $success) {\n" +
+                "        # Tüm TCP/IP portları başarısız, Out-Printer'a fallback yap\n" +
+                "        try {\n" +
+                "          $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "          $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
+                "          $content | Out-Printer -Name $printerName;\n" +
+                "          Write-Output \"SUCCESS\";\n" +
+                "        } catch {\n" +
+                "          Write-Output \"ERROR: Network print failed - $($_.Exception.Message)\";\n" +
+                "          exit 1;\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  } else {\n" +
+                "    # IP adresi bulunamadı, Out-Printer kullan\n" +
+                "    try {\n" +
+                "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
                 "      $content | Out-Printer -Name $printerName;\n" +
                 "      Write-Output \"SUCCESS\";\n" +
                 "    } catch {\n" +
-                "      Write-Output \"ERROR: Network print failed - $($_.Exception.Message)\";\n" +
+                "      Write-Output \"ERROR: Print failed - $($_.Exception.Message)\";\n" +
                 "      exit 1;\n" +
                 "    }\n" +
                 "  }\n" +
