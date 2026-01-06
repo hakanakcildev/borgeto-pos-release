@@ -178,7 +178,8 @@ function TableDetailContent() {
     null
   );
   const [selectedExtras, setSelectedExtras] = useState<Set<string>>(new Set());
-  const [selectedCartItemForExtra, setSelectedCartItemForExtra] = useState<OrderItem | null>(null);
+  const [selectedCartItemForExtra, setSelectedCartItemForExtra] =
+    useState<OrderItem | null>(null);
 
   // Sipariş yönetimi state'leri
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -432,9 +433,12 @@ function TableDetailContent() {
         (sum, item) => sum + item.quantity,
         0
       );
-      
+
       // Eğer yeni ürün eklendiyse (quantity arttıysa) veya originalOrderItemsRef boşsa güncelle
-      if (originalOrderItemsRef.current.length === 0 || newTotalQuantity > currentTotalQuantity) {
+      if (
+        originalOrderItemsRef.current.length === 0 ||
+        newTotalQuantity > currentTotalQuantity
+      ) {
         // Tüm ürünleri topla (aynı uniqueKey'li ürünleri birleştir)
         const itemsMap = new Map<string, OrderItem>();
         order.items.forEach((item) => {
@@ -1364,13 +1368,13 @@ function TableDetailContent() {
         const itemsToAdd = Array.from({ length: finalQuantity }, (_, index) => {
           const cartItemId = `${menu.id}-${Date.now()}-${Math.random()}-${index}`;
           return {
-              cartItemId,
-              menuId: menu.id!,
-              menuName: menu.name,
-              menuPrice: menu.price,
-              quantity: 1,
-              subtotal: menu.price,
-              addedAt: new Date(),
+            cartItemId,
+            menuId: menu.id!,
+            menuName: menu.name,
+            menuPrice: menu.price,
+            quantity: 1,
+            subtotal: menu.price,
+            addedAt: new Date(),
           };
         });
 
@@ -1575,10 +1579,10 @@ function TableDetailContent() {
       const updated = [...prev];
       const item = updated[index];
       updated[index] = {
-            ...item,
+        ...item,
         quantity: item.quantity + 1,
         subtotal: (item.quantity + 1) * item.menuPrice,
-          };
+      };
       return updated;
     });
   }, []);
@@ -1601,10 +1605,10 @@ function TableDetailContent() {
       // Sadece ilk bulunan item'ın quantity'sini azalt
       const updated = [...prev];
       updated[index] = {
-              ...item,
-              quantity: newQuantity,
-              subtotal: newQuantity * item.menuPrice,
-            };
+        ...item,
+        quantity: newQuantity,
+        subtotal: newQuantity * item.menuPrice,
+      };
       return updated;
     });
   }, []);
@@ -1641,12 +1645,16 @@ function TableDetailContent() {
     // Cart'taki ürünü güncelle
     setCart((prev) => {
       return prev.map((item) => {
-        if (item.menuId === selectedCartItemForExtra.menuId && 
-            item.cartItemId === selectedCartItemForExtra.cartItemId) {
-          const newSubtotal = (selectedMenuForExtra.price + extrasTotal) * item.quantity;
+        if (
+          item.menuId === selectedCartItemForExtra.menuId &&
+          item.cartItemId === selectedCartItemForExtra.cartItemId
+        ) {
+          const newSubtotal =
+            (selectedMenuForExtra.price + extrasTotal) * item.quantity;
           return {
             ...item,
-            selectedExtras: selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
+            selectedExtras:
+              selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
             subtotal: newSubtotal,
           };
         }
@@ -1914,7 +1922,8 @@ function TableDetailContent() {
             (sum, extra) => sum + extra.price,
             0
           );
-          existing.subtotal = existing.quantity * (existing.menuPrice + extrasTotal);
+          existing.subtotal =
+            existing.quantity * (existing.menuPrice + extrasTotal);
           // Notları birleştir (varsa)
           if (item.notes) {
             existing.notes = existing.notes
@@ -1973,7 +1982,7 @@ function TableDetailContent() {
         await updateOrder(currentOrder.id!, updateData);
         // Order'ı yükle ve items'ın doğru yüklendiğinden emin ol
         updatedOrder = await getOrder(currentOrder.id!);
-        
+
         // Mevcut order güncellendiğinde originalOrderItemsRef'i güncelle
         // Ama sadece yeni ürünler eklendiyse (finalItems'ın length'i arttıysa veya yeni uniqueKey'li ürünler varsa)
         const getUniqueKey = (item: OrderItem): string => {
@@ -1983,14 +1992,14 @@ function TableDetailContent() {
             .join(",");
           return `${item.menuId}_${extrasKey}`;
         };
-        
+
         const currentUniqueKeys = new Set(
           originalOrderItemsRef.current.map((item) => getUniqueKey(item))
         );
         const finalUniqueKeys = new Set(
           finalItems.map((item) => getUniqueKey(item))
         );
-        
+
         // Eğer yeni uniqueKey'li ürünler varsa, originalOrderItemsRef'i güncelle
         let hasNewItems = false;
         finalUniqueKeys.forEach((key) => {
@@ -1998,18 +2007,18 @@ function TableDetailContent() {
             hasNewItems = true;
           }
         });
-        
+
         if (hasNewItems || originalOrderItemsRef.current.length === 0) {
           // Yeni ürünler eklendi, originalOrderItemsRef'i güncelle
           // Mevcut ürünleri koru, yeni ürünleri ekle
           const itemsMap = new Map<string, OrderItem>();
-          
+
           // Önce mevcut originalOrderItemsRef'teki ürünleri ekle
           originalOrderItemsRef.current.forEach((item) => {
             const uniqueKey = getUniqueKey(item);
             itemsMap.set(uniqueKey, { ...item });
           });
-          
+
           // Sonra finalItems'taki yeni ürünleri ekle veya güncelle
           finalItems.forEach((item) => {
             const uniqueKey = getUniqueKey(item);
@@ -2023,7 +2032,7 @@ function TableDetailContent() {
               itemsMap.set(uniqueKey, { ...item });
             }
           });
-          
+
           originalOrderItemsRef.current = Array.from(itemsMap.values());
         }
 
@@ -2077,7 +2086,7 @@ function TableDetailContent() {
         // notes alanını ekleme (undefined gönderme)
         const orderId = await addOrder(newOrderData);
         updatedOrder = await getOrder(orderId);
-        
+
         // Yeni order oluşturulduğunda originalOrderItemsRef'i güncelle
         originalOrderItemsRef.current = [...finalItems];
 
@@ -2350,7 +2359,10 @@ function TableDetailContent() {
               // uniqueKey kontrolü: menuId + selectedExtras
               const getExtrasKey = (extras?: SelectedExtra[]): string => {
                 if (!extras || extras.length === 0) return "";
-                return extras.map((e) => e.id).sort().join(",");
+                return extras
+                  .map((e) => e.id)
+                  .sort()
+                  .join(",");
               };
               const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
               if (!item || itemUniqueKey !== paymentItem.uniqueKey) continue;
@@ -2387,14 +2399,17 @@ function TableDetailContent() {
       if (
         !order ||
         !order.items ||
-        (!hasSelectedItemsForGift && (!amountToUse || parseFloat(amountToUse) <= 0 || isNaN(parseFloat(amountToUse))))
+        (!hasSelectedItemsForGift &&
+          (!amountToUse ||
+            parseFloat(amountToUse) <= 0 ||
+            isNaN(parseFloat(amountToUse))))
       ) {
         if (!hasSelectedItemsForGift) {
-        customAlert(
-          "Lütfen geçerli bir ödeme tutarı girin",
-          "Uyarı",
-          "warning"
-        );
+          customAlert(
+            "Lütfen geçerli bir ödeme tutarı girin",
+            "Uyarı",
+            "warning"
+          );
         }
         return;
       }
@@ -2421,7 +2436,8 @@ function TableDetailContent() {
           // Eğer quantitiesToUse ile miktar seçildiyse, sadece seçilen miktar kadar hesapla
           if (quantitiesToUse.size > 0 && pendingItemsToUse.length > 0) {
             pendingItemsToUse.forEach((paymentItem) => {
-              const selectedQty = quantitiesToUse.get(paymentItem.uniqueKey) || 0;
+              const selectedQty =
+                quantitiesToUse.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
                 let remainingQty = selectedQty;
                 for (const index of paymentItem.indices) {
@@ -2431,7 +2447,10 @@ function TableDetailContent() {
                   // uniqueKey kontrolü
                   const getExtrasKey = (extras?: SelectedExtra[]): string => {
                     if (!extras || extras.length === 0) return "";
-                    return extras.map((e) => e.id).sort().join(",");
+                    return extras
+                      .map((e) => e.id)
+                      .sort()
+                      .join(",");
                   };
                   const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
                   if (itemUniqueKey !== paymentItem.uniqueKey) continue;
@@ -2509,7 +2528,10 @@ function TableDetailContent() {
           // Seçili ürünleri uniqueKey'e göre birleştir (menuId + selectedExtras)
           const getExtrasKey = (extras?: SelectedExtra[]): string => {
             if (!extras || extras.length === 0) return "";
-            return extras.map((e) => e.id).sort().join(",");
+            return extras
+              .map((e) => e.id)
+              .sort()
+              .join(",");
           };
           const mergedSelectedItems = new Map<
             string,
@@ -2680,7 +2702,8 @@ function TableDetailContent() {
           pendingItemsToUse.forEach((paymentItem) => {
             // Eğer quantitiesToUse varsa, sadece seçilen miktar kadar hesapla
             if (quantitiesToUse.size > 0) {
-              const selectedQty = quantitiesToUse.get(paymentItem.uniqueKey) || 0;
+              const selectedQty =
+                quantitiesToUse.get(paymentItem.uniqueKey) || 0;
               if (selectedQty > 0) {
                 // Ekstra malzemeler dahil fiyat hesapla
                 const extrasTotal = (paymentItem.selectedExtras || []).reduce(
@@ -2698,8 +2721,7 @@ function TableDetailContent() {
                 0
               );
               const itemPrice = paymentItem.menuPrice + extrasTotal;
-              discountBaseAmount +=
-                paymentItem.totalQuantity * itemPrice;
+              discountBaseAmount += paymentItem.totalQuantity * itemPrice;
             }
           });
         } else {
@@ -2764,10 +2786,14 @@ function TableDetailContent() {
                     // uniqueKey kontrolü
                     const getExtrasKey = (extras?: SelectedExtra[]): string => {
                       if (!extras || extras.length === 0) return "";
-                      return extras.map((e) => e.id).sort().join(",");
+                      return extras
+                        .map((e) => e.id)
+                        .sort()
+                        .join(",");
                     };
                     const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                    if (!item || itemUniqueKey !== paymentItem.uniqueKey) continue;
+                    if (!item || itemUniqueKey !== paymentItem.uniqueKey)
+                      continue;
 
                     const qtyToUse = Math.min(item.quantity, remainingQty);
                     // Bu index'teki ürün için indirim miktarı (orantılı)
@@ -2906,7 +2932,10 @@ function TableDetailContent() {
                 // uniqueKey kullanarak eşleştir
                 const getExtrasKey = (extras?: SelectedExtra[]): string => {
                   if (!extras || extras.length === 0) return "";
-                  return extras.map((e) => e.id).sort().join(",");
+                  return extras
+                    .map((e) => e.id)
+                    .sort()
+                    .join(",");
                 };
                 const getPaidItemUniqueKey = (): string => {
                   if (paidItem.uniqueKey) {
@@ -2920,7 +2949,7 @@ function TableDetailContent() {
                   return `${paidItem.menuId}_${extrasKey}`;
                 };
                 const paidItemUniqueKey = getPaidItemUniqueKey();
-                
+
                 const matchingItems = updatedItems.filter((item) => {
                   const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
                   return itemUniqueKey === paidItemUniqueKey;
@@ -3483,7 +3512,7 @@ function TableDetailContent() {
                           .join(",");
                         return `${paidItem.menuId}_${extrasKey}`;
                       };
-                      
+
                       const uniqueKey = getPaidItemUniqueKey();
                       const existing = paidItemsByUniqueKey.get(uniqueKey);
                       if (existing) {
@@ -3518,7 +3547,7 @@ function TableDetailContent() {
                   // updatedOrder.items + paidItems'lardaki ödenen ürünleri birleştir
                   // (kısmi ödeme sonrası kalan ürünler için)
                   const sourceItemsMap = new Map<string, OrderItem>();
-                  
+
                   // Önce updatedOrder.items'ı ekle (kalan ürünler)
                   updatedOrder.items.forEach((item) => {
                     const getUniqueKey = (item: OrderItem): string => {
@@ -3532,12 +3561,13 @@ function TableDetailContent() {
                     const existing = sourceItemsMap.get(uniqueKey);
                     if (existing) {
                       existing.quantity += item.quantity;
-                      existing.subtotal = (existing.subtotal || 0) + (item.subtotal || 0);
+                      existing.subtotal =
+                        (existing.subtotal || 0) + (item.subtotal || 0);
                     } else {
                       sourceItemsMap.set(uniqueKey, { ...item });
                     }
                   });
-                  
+
                   // Sonra paidItems'lardaki ödenen ürünleri ekle
                   allPayments.forEach((payment) => {
                     if (payment.paidItems) {
@@ -3556,7 +3586,8 @@ function TableDetailContent() {
                         const existing = sourceItemsMap.get(uniqueKey);
                         if (existing) {
                           existing.quantity += paidItem.quantity;
-                          existing.subtotal = (existing.subtotal || 0) + (paidItem.subtotal || 0);
+                          existing.subtotal =
+                            (existing.subtotal || 0) + (paidItem.subtotal || 0);
                         } else {
                           // Ödenen ürünü ekle (OrderItem formatına çevir)
                           sourceItemsMap.set(uniqueKey, {
@@ -3572,7 +3603,7 @@ function TableDetailContent() {
                       });
                     }
                   });
-                  
+
                   sourceItems = Array.from(sourceItemsMap.values());
                 }
 
@@ -3594,13 +3625,16 @@ function TableDetailContent() {
                     0
                   );
                   // Orijinal subtotal: (menuPrice + extrasTotal) * quantity
-                  const originalSubtotal = ((item.menuPrice || 0) + extrasTotal) * item.quantity;
-                  
+                  const originalSubtotal =
+                    ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+
                   // Eğer aynı uniqueKey'li ürün varsa, quantity ve subtotal'ı topla
                   const existingItem = billItemsMap.get(uniqueKey);
                   if (existingItem) {
                     existingItem.quantity += item.quantity;
-                    existingItem.subtotal = (existingItem.subtotal || 0) + (item.subtotal || originalSubtotal);
+                    existingItem.subtotal =
+                      (existingItem.subtotal || 0) +
+                      (item.subtotal || originalSubtotal);
                   } else {
                     billItemsMap.set(uniqueKey, {
                       ...item,
@@ -3623,7 +3657,7 @@ function TableDetailContent() {
                       (sum, pi) => sum + pi.quantity,
                       0
                     );
-                    
+
                     // Eğer tüm ürün ödendiyse, subtotal'ı güncelle
                     // Eğer kısmen ödendiyse, orantılı olarak güncelle
                     if (totalPaidQuantity >= existingItem.quantity) {
@@ -3631,15 +3665,17 @@ function TableDetailContent() {
                       existingItem.subtotal = totalPaidSubtotal;
                     } else {
                       // Kısmen ödendiyse, ödenen kısım için indirimli, kalan kısım için orijinal
-                      const extrasTotal = (existingItem.selectedExtras || []).reduce(
-                        (sum, extra) => sum + extra.price,
-                        0
-                      );
-                      const paidOriginalSubtotal = ((existingItem.menuPrice || 0) + extrasTotal) * totalPaidQuantity;
-                      const unpaidQuantity = existingItem.quantity - totalPaidQuantity;
-                      const unpaidSubtotal = ((existingItem.menuPrice || 0) + extrasTotal) * unpaidQuantity;
+                      const extrasTotal = (
+                        existingItem.selectedExtras || []
+                      ).reduce((sum, extra) => sum + extra.price, 0);
+                      const unpaidQuantity =
+                        existingItem.quantity - totalPaidQuantity;
+                      const unpaidSubtotal =
+                        ((existingItem.menuPrice || 0) + extrasTotal) *
+                        unpaidQuantity;
                       // Ödenen kısım için indirimli subtotal + ödenmeyen kısım için orijinal subtotal
-                      existingItem.subtotal = totalPaidSubtotal + unpaidSubtotal;
+                      existingItem.subtotal =
+                        totalPaidSubtotal + unpaidSubtotal;
                     }
                   }
                 });
@@ -3647,7 +3683,7 @@ function TableDetailContent() {
                 const billItems: OrderItem[] = Array.from(
                   billItemsMap.values()
                 );
-                
+
                 // Bill subtotal: Tüm ürünlerin orijinal fiyatları (ekstra malzemeler dahil)
                 let billSubtotal = 0;
                 billItems.forEach((item) => {
@@ -3655,20 +3691,21 @@ function TableDetailContent() {
                     (sum, extra) => sum + extra.price,
                     0
                   );
-                  billSubtotal += ((item.menuPrice || 0) + extrasTotal) * item.quantity;
+                  billSubtotal +=
+                    ((item.menuPrice || 0) + extrasTotal) * item.quantity;
                 });
-                
+
                 // Bill total: Tüm ürünlerin indirimli subtotal'ları toplamı
                 const billTotal = billItems.reduce(
                   (sum, item) => sum + (item.subtotal || 0),
                   0
                 );
-                
+
                 // Bill discount: Orijinal toplam - İndirimli toplam
                 // Ama dikkat: İndirim sadece ödenen ürünlere uygulanmış olabilir
                 // Bu yüzden indirimi doğru hesaplamak için paidItems'lardan indirimli subtotal'ları kullan
                 let billDiscount = 0;
-                
+
                 // Önce tüm ödenen ürünlerin orijinal ve indirimli subtotal'larını hesapla
                 paidItemsByUniqueKey.forEach((paidItemsArray, uniqueKey) => {
                   const billItem = billItemsMap.get(uniqueKey);
@@ -3687,14 +3724,17 @@ function TableDetailContent() {
                       (sum, extra) => sum + extra.price,
                       0
                     );
-                    const totalPaidOriginalSubtotal = ((billItem.menuPrice || 0) + extrasTotal) * totalPaidQuantity;
-                    
+                    const totalPaidOriginalSubtotal =
+                      ((billItem.menuPrice || 0) + extrasTotal) *
+                      totalPaidQuantity;
+
                     // Bu ürün için indirim = Orijinal - İndirimli
-                    const itemDiscount = totalPaidOriginalSubtotal - totalPaidSubtotal;
+                    const itemDiscount =
+                      totalPaidOriginalSubtotal - totalPaidSubtotal;
                     billDiscount += itemDiscount;
                   }
                 });
-                
+
                 // Eğer billDiscount 0 ise veya çok küçükse, fallback olarak billSubtotal - billTotal kullan
                 if (billDiscount < 0.01) {
                   billDiscount = Math.max(0, billSubtotal - billTotal);
@@ -5290,7 +5330,8 @@ function TableDetailContent() {
         if (hasSelectedItems) {
           // Seçili ürünleri kaydet
           pendingPaymentItems.forEach((paymentItem) => {
-            const selectedQty = selectedQuantities.get(paymentItem.uniqueKey) || 0;
+            const selectedQty =
+              selectedQuantities.get(paymentItem.uniqueKey) || 0;
             if (selectedQty > 0) {
               let remainingQty = selectedQty;
               for (const index of paymentItem.indices) {
@@ -5714,7 +5755,10 @@ function TableDetailContent() {
         className="hidden lg:flex lg:flex-none lg:w-[320px] xl:w-[400px] flex-col overflow-hidden border-l-4 border-r-4 border-purple-600"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
       >
-        <div className="p-3 shrink-0 flex items-center" style={{ height: '56px' }}>
+        <div
+          className="p-3 shrink-0 flex items-center"
+          style={{ height: "56px" }}
+        >
           <div className="flex items-center justify-between w-full">
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -6002,13 +6046,12 @@ function TableDetailContent() {
                   if (payment.isGift) {
                     payment.paidItems.forEach((paidItem) => {
                       // Ekstra malzemelerin fiyatını hesapla
-                      const extrasTotal = (paidItem.selectedExtras || []).reduce(
-                        (sum, extra) => sum + extra.price,
-                        0
-                      );
+                      const extrasTotal = (
+                        paidItem.selectedExtras || []
+                      ).reduce((sum, extra) => sum + extra.price, 0);
                       const itemPrice = (paidItem.menuPrice || 0) + extrasTotal;
                       const originalTotal = itemPrice * paidItem.quantity;
-                      
+
                       const existing = giftItemsMap.get(paidItem.menuId);
                       if (existing) {
                         existing.quantity += paidItem.quantity;
@@ -6472,8 +6515,11 @@ function TableDetailContent() {
 
                                     // Aynı menuId ve aynı ekstra malzemelere sahip ürünleri birleştir (aynı tarih grubu içinde)
                                     // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
-                                    const getExtrasKey = (extras?: SelectedExtra[]): string => {
-                                      if (!extras || extras.length === 0) return "";
+                                    const getExtrasKey = (
+                                      extras?: SelectedExtra[]
+                                    ): string => {
+                                      if (!extras || extras.length === 0)
+                                        return "";
                                       // ID'lere göre sırala ve string'e çevir
                                       return extras
                                         .map((e) => e.id)
@@ -6583,22 +6629,29 @@ function TableDetailContent() {
                                                       // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
                                                       if (showPaymentModal) {
                                                         // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
-                                                        const getExtrasKey = (extras?: SelectedExtra[]): string => {
-                                                          if (!extras || extras.length === 0) return "";
+                                                        const getExtrasKey = (
+                                                          extras?: SelectedExtra[]
+                                                        ): string => {
+                                                          if (
+                                                            !extras ||
+                                                            extras.length === 0
+                                                          )
+                                                            return "";
                                                           // ID'lere göre sırala ve string'e çevir
                                                           return extras
                                                             .map((e) => e.id)
                                                             .sort()
                                                             .join(",");
                                                         };
-                                                        
+
                                                         const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                                                        
+
                                                         // Önce pendingPaymentItems içinde bu uniqueKey'e sahip ürün var mı kontrol et
                                                         let existingInPending =
                                                           pendingPaymentItems.find(
                                                             (p) =>
-                                                              p.uniqueKey === itemUniqueKey
+                                                              p.uniqueKey ===
+                                                              itemUniqueKey
                                                           );
 
                                                         // Eğer yoksa, pendingPaymentItems'a ekle
@@ -6610,7 +6663,10 @@ function TableDetailContent() {
                                                             order.items.filter(
                                                               (o) => {
                                                                 const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
-                                                                return oUniqueKey === itemUniqueKey;
+                                                                return (
+                                                                  oUniqueKey ===
+                                                                  itemUniqueKey
+                                                                );
                                                               }
                                                             );
                                                           const totalQty =
@@ -6624,7 +6680,10 @@ function TableDetailContent() {
                                                             order.items
                                                               .map((o, idx) => {
                                                                 const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
-                                                                return oUniqueKey === itemUniqueKey ? idx : -1;
+                                                                return oUniqueKey ===
+                                                                  itemUniqueKey
+                                                                  ? idx
+                                                                  : -1;
                                                               })
                                                               .filter(
                                                                 (idx) =>
@@ -6642,8 +6701,11 @@ function TableDetailContent() {
                                                               menuPrice:
                                                                 item.menuPrice,
                                                               indices: indices,
-                                                              uniqueKey: itemUniqueKey,
-                                                              selectedExtras: item.selectedExtras || undefined,
+                                                              uniqueKey:
+                                                                itemUniqueKey,
+                                                              selectedExtras:
+                                                                item.selectedExtras ||
+                                                                undefined,
                                                             };
 
                                                           setPendingPaymentItems(
@@ -6707,12 +6769,26 @@ function TableDetailContent() {
                                                       isSelected ||
                                                       (showPaymentModal &&
                                                         (() => {
-                                                          const getExtrasKey = (extras?: SelectedExtra[]): string => {
-                                                            if (!extras || extras.length === 0) return "";
-                                                            return extras.map((e) => e.id).sort().join(",");
+                                                          const getExtrasKey = (
+                                                            extras?: SelectedExtra[]
+                                                          ): string => {
+                                                            if (
+                                                              !extras ||
+                                                              extras.length ===
+                                                                0
+                                                            )
+                                                              return "";
+                                                            return extras
+                                                              .map((e) => e.id)
+                                                              .sort()
+                                                              .join(",");
                                                           };
                                                           const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                                                          return (selectedQuantities.get(itemUniqueKey) || 0) > 0;
+                                                          return (
+                                                            (selectedQuantities.get(
+                                                              itemUniqueKey
+                                                            ) || 0) > 0
+                                                          );
                                                         })())
                                                         ? "bg-blue-50 dark:bg-blue-900/20"
                                                         : ""
@@ -6727,9 +6803,16 @@ function TableDetailContent() {
                                                           {item.menuName}
                                                         </p>
                                                         {item.selectedExtras &&
-                                                          item.selectedExtras.length > 0 && (
+                                                          item.selectedExtras
+                                                            .length > 0 && (
                                                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                              + {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                                                              +{" "}
+                                                              {item.selectedExtras
+                                                                .map(
+                                                                  (extra) =>
+                                                                    extra.name
+                                                                )
+                                                                .join(", ")}
                                                             </p>
                                                           )}
                                                         {item.addedAt &&
@@ -6846,7 +6929,9 @@ function TableDetailContent() {
                               } else {
                                 // Normal masalarda aynı menuId ve aynı ekstra malzemelere sahip ürünleri birleştir
                                 // Ekstra malzemeleri karşılaştırmak için helper fonksiyon
-                                const getExtrasKey = (extras?: SelectedExtra[]): string => {
+                                const getExtrasKey = (
+                                  extras?: SelectedExtra[]
+                                ): string => {
                                   if (!extras || extras.length === 0) return "";
                                   // ID'lere göre sırala ve string'e çevir
                                   return extras
@@ -6921,24 +7006,26 @@ function TableDetailContent() {
                                             // Eğer ödeme modalı açıksa, selectedQuantities'yi güncelle
                                             if (showPaymentModal) {
                                               const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                                              
+
                                               // Önce pendingPaymentItems içinde bu uniqueKey'e sahip ürün var mı kontrol et
                                               let existingInPending =
                                                 pendingPaymentItems.find(
                                                   (p) =>
-                                                    p.uniqueKey === itemUniqueKey
+                                                    p.uniqueKey ===
+                                                    itemUniqueKey
                                                 );
 
                                               // Eğer yoksa, pendingPaymentItems'a ekle
                                               if (!existingInPending) {
                                                 // Aynı uniqueKey'e sahip tüm item'ları bul ve topla
                                                 const allSameItems =
-                                                  order.items.filter(
-                                                    (o) => {
-                                                      const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
-                                                      return oUniqueKey === itemUniqueKey;
-                                                    }
-                                                  );
+                                                  order.items.filter((o) => {
+                                                    const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
+                                                    return (
+                                                      oUniqueKey ===
+                                                      itemUniqueKey
+                                                    );
+                                                  });
                                                 const totalQty =
                                                   allSameItems.reduce(
                                                     (sum, o) =>
@@ -6948,7 +7035,10 @@ function TableDetailContent() {
                                                 const indices = order.items
                                                   .map((o, idx) => {
                                                     const oUniqueKey = `${o.menuId}_${getExtrasKey(o.selectedExtras)}`;
-                                                    return oUniqueKey === itemUniqueKey ? idx : -1;
+                                                    return oUniqueKey ===
+                                                      itemUniqueKey
+                                                      ? idx
+                                                      : -1;
                                                   })
                                                   .filter((idx) => idx !== -1);
 
@@ -6959,7 +7049,9 @@ function TableDetailContent() {
                                                   menuPrice: item.menuPrice,
                                                   indices: indices,
                                                   uniqueKey: itemUniqueKey,
-                                                  selectedExtras: item.selectedExtras || undefined,
+                                                  selectedExtras:
+                                                    item.selectedExtras ||
+                                                    undefined,
                                                 };
 
                                                 setPendingPaymentItems(
@@ -6987,7 +7079,10 @@ function TableDetailContent() {
                                               );
                                               setSelectedQuantities((prev) => {
                                                 const newMap = new Map(prev);
-                                                newMap.set(itemUniqueKey, newQty);
+                                                newMap.set(
+                                                  itemUniqueKey,
+                                                  newQty
+                                                );
                                                 return newMap;
                                               });
                                               return;
@@ -7083,9 +7178,15 @@ function TableDetailContent() {
                                                 {item.menuName}
                                               </p>
                                               {item.selectedExtras &&
-                                                item.selectedExtras.length > 0 && (
+                                                item.selectedExtras.length >
+                                                  0 && (
                                                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                    + {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                                                    +{" "}
+                                                    {item.selectedExtras
+                                                      .map(
+                                                        (extra) => extra.name
+                                                      )
+                                                      .join(", ")}
                                                   </p>
                                                 )}
                                               {item.addedAt &&
@@ -7340,8 +7441,9 @@ function TableDetailContent() {
                     );
                     // Ürünün ekstra malzemesi var mı kontrol et
                     const menuItem = menus.find((m) => m.id === item.menuId);
-                    const hasExtras = menuItem?.extras && menuItem.extras.length > 0;
-                    
+                    const hasExtras =
+                      menuItem?.extras && menuItem.extras.length > 0;
+
                     return (
                       <div
                         key={item.menuId}
@@ -7386,8 +7488,15 @@ function TableDetailContent() {
                                   setSelectedMenuForExtra(menuItem || null);
                                   setSelectedCartItemForExtra(item);
                                   // Mevcut seçili ekstra malzemeleri yükle
-                                  const currentExtras = item.selectedExtras || [];
-                                  setSelectedExtras(new Set(currentExtras.map((e: SelectedExtra) => e.id)));
+                                  const currentExtras =
+                                    item.selectedExtras || [];
+                                  setSelectedExtras(
+                                    new Set(
+                                      currentExtras.map(
+                                        (e: SelectedExtra) => e.id
+                                      )
+                                    )
+                                  );
                                   setShowExtraModal(true);
                                 }}
                                 className="p-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -7696,12 +7805,10 @@ function TableDetailContent() {
               // Bu yüzden order.items zaten sadece ödenmemiş ürünleri içeriyor
               // Direkt olarak order.items içindeki aktif ürünlerin toplamını hesaplamalıyız
               let unpaidSubtotal = 0;
-              let unpaidOriginalAmount = 0;
 
               activeItems.forEach((item) => {
                 // order.items içindeki tüm aktif ürünler zaten ödenmemiş ürünlerdir
                 // Çünkü ödeme yapıldığında ödenen ürünler kaldırılıyor veya miktarları azaltılıyor
-                unpaidOriginalAmount += item.menuPrice * item.quantity;
                 unpaidSubtotal += item.subtotal;
               });
 
@@ -7853,29 +7960,29 @@ function TableDetailContent() {
             </div>
           ) : (
             filteredMenus.map((menu) => {
-                return (
-                  <div
-                    key={menu.id}
+              return (
+                <div
+                  key={menu.id}
                   className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer flex flex-col items-center justify-center"
-                    onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
-                    onMouseDown={() =>
-                      !isRefreshingOrder && handleLongPressStart(menu)
-                    }
-                    onMouseUp={handleLongPressEnd}
-                    onMouseLeave={handleLongPressEnd}
-                    onTouchStart={() =>
-                      !isRefreshingOrder && handleLongPressStart(menu)
-                    }
-                    onTouchEnd={handleLongPressEnd}
-                    onTouchCancel={handleLongPressEnd}
-                    style={{
+                  onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
+                  onMouseDown={() =>
+                    !isRefreshingOrder && handleLongPressStart(menu)
+                  }
+                  onMouseUp={handleLongPressEnd}
+                  onMouseLeave={handleLongPressEnd}
+                  onTouchStart={() =>
+                    !isRefreshingOrder && handleLongPressStart(menu)
+                  }
+                  onTouchEnd={handleLongPressEnd}
+                  onTouchCancel={handleLongPressEnd}
+                  style={{
                     width: `${productGridConfig.cardSize}px`,
                     height: `${productGridConfig.cardSize}px`,
                     padding: `${productGridConfig.cardSize * 0.05}px`,
-                      pointerEvents: isRefreshingOrder ? "none" : "auto",
-                      opacity: isRefreshingOrder ? 0.5 : 1,
-                    }}
-                  >
+                    pointerEvents: isRefreshingOrder ? "none" : "auto",
+                    opacity: isRefreshingOrder ? 0.5 : 1,
+                  }}
+                >
                   <h3
                     className="font-semibold text-gray-900 dark:text-white text-center line-clamp-2 leading-tight"
                     style={{
@@ -7883,18 +7990,18 @@ function TableDetailContent() {
                       marginBottom: `${productGridConfig.cardSize * 0.015}px`,
                     }}
                   >
-                        {menu.name}
-                      </h3>
+                    {menu.name}
+                  </h3>
                   <span
                     className="font-bold text-blue-600 dark:text-blue-400"
                     style={{
                       fontSize: `${productGridConfig.cardSize * 0.08}px`,
                     }}
                   >
-                          ₺{menu.price.toFixed(2)}
-                        </span>
-                  </div>
-                );
+                    ₺{menu.price.toFixed(2)}
+                  </span>
+                </div>
+              );
             })
           )}
         </div>
@@ -8043,7 +8150,10 @@ function TableDetailContent() {
                   className="hidden lg:flex lg:flex-none lg:w-96 flex-col overflow-hidden"
                   style={{ backgroundColor: "rgba(0, 0, 0, 0.2)" }}
                 >
-                  <div className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 flex items-center" style={{ height: '56px' }}>
+                  <div
+                    className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 flex items-center"
+                    style={{ height: "56px" }}
+                  >
                     <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4" />
                       Seçili Ürünler
@@ -8052,7 +8162,8 @@ function TableDetailContent() {
                   <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     {(() => {
                       const selectedItemsList = pendingPaymentItems.filter(
-                        (item) => (selectedQuantities.get(item.uniqueKey) || 0) > 0
+                        (item) =>
+                          (selectedQuantities.get(item.uniqueKey) || 0) > 0
                       );
 
                       // Seçili ürünlerin toplam fiyatını hesapla (orijinal - ekstra malzemeler dahil)
@@ -8061,10 +8172,9 @@ function TableDetailContent() {
                           const selectedQty =
                             selectedQuantities.get(paymentItem.uniqueKey) || 0;
                           // Ekstra malzemelerin fiyatını hesapla
-                          const extrasTotal = (paymentItem.selectedExtras || []).reduce(
-                            (sum, extra) => sum + extra.price,
-                            0
-                          );
+                          const extrasTotal = (
+                            paymentItem.selectedExtras || []
+                          ).reduce((sum, extra) => sum + extra.price, 0);
                           const itemPrice = paymentItem.menuPrice + extrasTotal;
                           return sum + selectedQty * itemPrice;
                         }, 0);
@@ -8123,14 +8233,15 @@ function TableDetailContent() {
                             <div className="space-y-2 p-3">
                               {selectedItemsList.map((paymentItem) => {
                                 const selectedQty =
-                                  selectedQuantities.get(paymentItem.uniqueKey) ||
-                                  0;
+                                  selectedQuantities.get(
+                                    paymentItem.uniqueKey
+                                  ) || 0;
                                 // Ekstra malzemelerin fiyatını hesapla
-                                const extrasTotal = (paymentItem.selectedExtras || []).reduce(
-                                  (sum, extra) => sum + extra.price,
-                                  0
-                                );
-                                const itemPrice = paymentItem.menuPrice + extrasTotal;
+                                const extrasTotal = (
+                                  paymentItem.selectedExtras || []
+                                ).reduce((sum, extra) => sum + extra.price, 0);
+                                const itemPrice =
+                                  paymentItem.menuPrice + extrasTotal;
                                 const itemOriginalTotal =
                                   selectedQty * itemPrice;
                                 const itemDiscountedTotal =
@@ -8185,7 +8296,9 @@ function TableDetailContent() {
                                           setSelectedQuantities((prev) => {
                                             const newMap = new Map(prev);
                                             if (newQty === 0) {
-                                              newMap.delete(paymentItem.uniqueKey);
+                                              newMap.delete(
+                                                paymentItem.uniqueKey
+                                              );
                                             } else {
                                               newMap.set(
                                                 paymentItem.uniqueKey,
@@ -8278,7 +8391,10 @@ function TableDetailContent() {
 
                 {/* Ana Ödeme Alanı */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center" style={{ height: '56px' }}>
+                  <div
+                    className="p-3 shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center"
+                    style={{ height: "56px" }}
+                  >
                     <div className="flex items-center justify-between w-full">
                       <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                         Ödeme Al
@@ -8415,7 +8531,9 @@ function TableDetailContent() {
                                     to: "/table/$tableId",
                                     params: { tableId: tableId },
                                     search: (prev) => ({
-                                      area: (prev?.area ?? undefined) as string | undefined,
+                                      area: (prev?.area ?? undefined) as
+                                        | string
+                                        | undefined,
                                       activeOnly: prev?.activeOnly ?? false,
                                       payment: undefined,
                                     }),
@@ -8434,45 +8552,73 @@ function TableDetailContent() {
                                     // Miktar seçimi yapılmışsa
                                     // selectedQuantities uniqueKey bazlı, handleCancelSelectedItemsWithQuantities menuId bekliyor
                                     // uniqueKey'den menuId'ye çevir
-                                    const quantitiesByMenuId = new Map<string, number>();
+                                    const quantitiesByMenuId = new Map<
+                                      string,
+                                      number
+                                    >();
                                     const allIndices: number[] = [];
-                                    
+
                                     pendingPaymentItems.forEach(
                                       (paymentItem) => {
-                                        const selectedQty = selectedQuantities.get(paymentItem.uniqueKey) || 0;
+                                        const selectedQty =
+                                          selectedQuantities.get(
+                                            paymentItem.uniqueKey
+                                          ) || 0;
                                         if (selectedQty > 0) {
                                           // Bu uniqueKey için seçilen miktarı menuId'ye ekle
-                                          const existingQty = quantitiesByMenuId.get(paymentItem.menuId) || 0;
-                                          quantitiesByMenuId.set(paymentItem.menuId, existingQty + selectedQty);
-                                          
+                                          const existingQty =
+                                            quantitiesByMenuId.get(
+                                              paymentItem.menuId
+                                            ) || 0;
+                                          quantitiesByMenuId.set(
+                                            paymentItem.menuId,
+                                            existingQty + selectedQty
+                                          );
+
                                           // Sadece seçilen miktar kadar index ekle
                                           let remainingQty = selectedQty;
                                           for (const index of paymentItem.indices) {
                                             if (remainingQty <= 0) break;
                                             const item = order.items[index];
                                             if (!item) continue;
-                                            
+
                                             // uniqueKey kontrolü
-                                            const getExtrasKey = (extras?: SelectedExtra[]): string => {
-                                              if (!extras || extras.length === 0) return "";
-                                              return extras.map((e) => e.id).sort().join(",");
+                                            const getExtrasKey = (
+                                              extras?: SelectedExtra[]
+                                            ): string => {
+                                              if (
+                                                !extras ||
+                                                extras.length === 0
+                                              )
+                                                return "";
+                                              return extras
+                                                .map((e) => e.id)
+                                                .sort()
+                                                .join(",");
                                             };
                                             const itemUniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
-                                            if (itemUniqueKey !== paymentItem.uniqueKey) continue;
-                                            
+                                            if (
+                                              itemUniqueKey !==
+                                              paymentItem.uniqueKey
+                                            )
+                                              continue;
+
                                             allIndices.push(index);
                                             remainingQty -= item.quantity;
                                           }
                                         }
                                       }
                                     );
-                                    
-                                    if (quantitiesByMenuId.size > 0 && allIndices.length > 0) {
-                                    await handleCancelSelectedItemsWithQuantities(
+
+                                    if (
+                                      quantitiesByMenuId.size > 0 &&
+                                      allIndices.length > 0
+                                    ) {
+                                      await handleCancelSelectedItemsWithQuantities(
                                         quantitiesByMenuId,
                                         allIndices,
                                         order
-                                    );
+                                      );
                                     }
                                   } else if (selectedItems.size > 0) {
                                     // Ürün seçimi yapılmışsa
@@ -8635,13 +8781,15 @@ function TableDetailContent() {
                                           ) || 0;
                                         if (selectedQty > 0) {
                                           // Ekstra malzemeler dahil fiyat hesapla
-                                          const extrasTotal = (paymentItem.selectedExtras || []).reduce(
+                                          const extrasTotal = (
+                                            paymentItem.selectedExtras || []
+                                          ).reduce(
                                             (sum, extra) => sum + extra.price,
                                             0
                                           );
-                                          const itemPrice = paymentItem.menuPrice + extrasTotal;
-                                          giftAmount +=
-                                            selectedQty * itemPrice;
+                                          const itemPrice =
+                                            paymentItem.menuPrice + extrasTotal;
+                                          giftAmount += selectedQty * itemPrice;
                                         }
                                       }
                                     );
@@ -8784,48 +8932,17 @@ function TableDetailContent() {
                           {/* Ödeme Bilgileri - Numerik keypad genişliğinde */}
                           <div className="px-2 py-2 sm:py-3 border-b-2 border-gray-200 dark:border-gray-700 bg-linear-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 shrink-0">
                             <div className="flex items-center justify-evenly w-full gap-2 sm:gap-3">
-                        <div className="text-right flex-1">
-                          <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-                            ALINAN ÖDEME
-                          </div>
+                              <div className="text-right flex-1">
+                                <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                                  ALINAN ÖDEME
+                                </div>
                                 <div className="text-base sm:text-lg md:text-xl font-extrabold text-green-600 dark:text-green-400">
-                            ₺
-                            {(
-                              (order.payments || []).reduce(
-                                (sum, p) => sum + p.amount,
-                                0
-                              ) +
-                              appliedPayments.reduce(
-                                (sum, p) => sum + p.amount,
-                                0
-                              )
-                            )
-                              .toFixed(2)
-                              .replace(".", ",")}
-                          </div>
-                        </div>
-                        <div className="text-right flex-1">
-                          <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-                            KALAN TUTAR
-                          </div>
-                                <div className="flex items-center justify-end gap-2">
-                                  {(() => {
-                                    const hasDiscount =
-                                      discount > 0 ||
-                                      originalTotal > remaining ||
-                                      (order.discount && order.discount > 0);
-                                    return hasDiscount ? (
-                              <>
-                                        <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
-                                  ₺
-                                  {originalTotal
-                                    .toFixed(2)
-                                    .replace(".", ",")}
-                                </span>
-                                        <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
                                   ₺
                                   {(
-                                    remaining -
+                                    (order.payments || []).reduce(
+                                      (sum, p) => sum + p.amount,
+                                      0
+                                    ) +
                                     appliedPayments.reduce(
                                       (sum, p) => sum + p.amount,
                                       0
@@ -8834,142 +8951,173 @@ function TableDetailContent() {
                                     .toFixed(2)
                                     .replace(".", ",")}
                                 </div>
-                              </>
-                            ) : (
-                                      <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
-                                ₺
-                                {(
-                                  remaining -
-                                  appliedPayments.reduce(
-                                    (sum, p) => sum + p.amount,
-                                    0
-                                  )
-                                )
-                                  .toFixed(2)
-                                  .replace(".", ",")}
                               </div>
+                              <div className="text-right flex-1">
+                                <div className="text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                                  KALAN TUTAR
+                                </div>
+                                <div className="flex items-center justify-end gap-2">
+                                  {(() => {
+                                    const hasDiscount =
+                                      discount > 0 ||
+                                      originalTotal > remaining ||
+                                      (order.discount && order.discount > 0);
+                                    return hasDiscount ? (
+                                      <>
+                                        <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 line-through">
+                                          ₺
+                                          {originalTotal
+                                            .toFixed(2)
+                                            .replace(".", ",")}
+                                        </span>
+                                        <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
+                                          ₺
+                                          {(
+                                            remaining -
+                                            appliedPayments.reduce(
+                                              (sum, p) => sum + p.amount,
+                                              0
+                                            )
+                                          )
+                                            .toFixed(2)
+                                            .replace(".", ",")}
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="text-base sm:text-lg md:text-xl font-extrabold text-red-600 dark:text-red-400">
+                                        ₺
+                                        {(
+                                          remaining -
+                                          appliedPayments.reduce(
+                                            (sum, p) => sum + p.amount,
+                                            0
+                                          )
+                                        )
+                                          .toFixed(2)
+                                          .replace(".", ",")}
+                                      </div>
                                     );
                                   })()}
-                          </div>
-                        </div>
+                                </div>
+                              </div>
                               <div className="flex-1 flex justify-center">
-                          <Button
-                            type="button"
-                            onClick={async () => {
-                              setIsProcessingPayment(true);
-                              try {
+                                <Button
+                                  type="button"
+                                  onClick={async () => {
+                                    setIsProcessingPayment(true);
+                                    try {
                                       const totalTagAmount =
                                         appliedPayments.reduce(
-                                  (sum, p) => sum + p.amount,
-                                  0
-                                );
+                                          (sum, p) => sum + p.amount,
+                                          0
+                                        );
 
-                                if (appliedPayments.length > 0) {
-                                  await handlePayment(
-                                    totalTagAmount.toString(),
-                                    undefined,
-                                    undefined,
+                                      if (appliedPayments.length > 0) {
+                                        await handlePayment(
+                                          totalTagAmount.toString(),
+                                          undefined,
+                                          undefined,
                                           undefined,
                                           appliedPayments[0].method
-                                  );
-                                  setAppliedPayments([]);
-                                  setPaymentAmount("0");
-                                  setPaymentMethod("");
-                                  setIsProcessingPayment(false);
-                                  return;
-                                }
+                                        );
+                                        setAppliedPayments([]);
+                                        setPaymentAmount("0");
+                                        setPaymentMethod("");
+                                        setIsProcessingPayment(false);
+                                        return;
+                                      }
 
-                                const remainingAmount =
-                                  remaining -
-                                  appliedPayments.reduce(
-                                    (sum, p) => sum + p.amount,
-                                    0
-                                  );
+                                      const remainingAmount =
+                                        remaining -
+                                        appliedPayments.reduce(
+                                          (sum, p) => sum + p.amount,
+                                          0
+                                        );
 
-                                if (!paymentMethod) {
-                                  customAlert(
-                                    "Lütfen bir ödeme yöntemi seçin",
-                                    "Uyarı",
-                                    "warning"
-                                  );
-                                  setIsProcessingPayment(false);
-                                  return;
-                                }
+                                      if (!paymentMethod) {
+                                        customAlert(
+                                          "Lütfen bir ödeme yöntemi seçin",
+                                          "Uyarı",
+                                          "warning"
+                                        );
+                                        setIsProcessingPayment(false);
+                                        return;
+                                      }
 
-                                const hasSelectedItems =
-                                  (selectedQuantities.size > 0 &&
-                                    pendingPaymentItems.length > 0) ||
-                                  pendingPaymentItems.length > 0;
+                                      const hasSelectedItems =
+                                        (selectedQuantities.size > 0 &&
+                                          pendingPaymentItems.length > 0) ||
+                                        pendingPaymentItems.length > 0;
 
-                                await handlePayment(
-                                  remainingAmount.toString(),
+                                      await handlePayment(
+                                        remainingAmount.toString(),
                                         undefined,
-                                  hasSelectedItems &&
-                                    pendingPaymentItems.length > 0
-                                    ? pendingPaymentItems
-                                    : undefined,
-                                  hasSelectedItems &&
-                                    selectedQuantities.size > 0
-                                    ? selectedQuantities
-                                    : undefined,
-                                  paymentMethod
-                                );
+                                        hasSelectedItems &&
+                                          pendingPaymentItems.length > 0
+                                          ? pendingPaymentItems
+                                          : undefined,
+                                        hasSelectedItems &&
+                                          selectedQuantities.size > 0
+                                          ? selectedQuantities
+                                          : undefined,
+                                        paymentMethod
+                                      );
 
-                                setPaymentAmount("0");
-                                setPaymentMethod("");
-                                setAppliedPayments([]);
-                                setShowPaymentModal(false);
-                                navigate({
-                                  to: "/table/$tableId",
-                                  params: { tableId: tableId },
-                                  search: (prev) => ({
-                                    area: (prev?.area ?? undefined) as
-                                      | string
-                                      | undefined,
-                                    activeOnly: prev?.activeOnly ?? false,
-                                    payment: undefined,
-                                  }),
-                                  replace: true,
-                                });
-                              } catch {
-                                customAlert(
-                                  "Ödeme işlenirken bir hata oluştu",
-                                  "Hata",
-                                  "error"
-                                );
-                              } finally {
-                                setIsProcessingPayment(false);
-                              }
-                            }}
+                                      setPaymentAmount("0");
+                                      setPaymentMethod("");
+                                      setAppliedPayments([]);
+                                      setShowPaymentModal(false);
+                                      navigate({
+                                        to: "/table/$tableId",
+                                        params: { tableId: tableId },
+                                        search: (prev) => ({
+                                          area: (prev?.area ?? undefined) as
+                                            | string
+                                            | undefined,
+                                          activeOnly: prev?.activeOnly ?? false,
+                                          payment: undefined,
+                                        }),
+                                        replace: true,
+                                      });
+                                    } catch {
+                                      customAlert(
+                                        "Ödeme işlenirken bir hata oluştu",
+                                        "Hata",
+                                        "error"
+                                      );
+                                    } finally {
+                                      setIsProcessingPayment(false);
+                                    }
+                                  }}
                                   className="h-10 sm:h-11 md:h-12 w-full px-2 sm:px-3 text-xs sm:text-sm md:text-base font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 disabled:bg-gray-400 disabled:hover:bg-gray-400 whitespace-nowrap"
-                            disabled={isProcessingPayment}
-                          >
-                            {appliedPayments.length > 0 ? (
-                              <>
-                                Ödeme Al ₺
-                                {appliedPayments
-                                  .reduce((sum, p) => sum + p.amount, 0)
-                                  .toFixed(2)
-                                  .replace(".", ",")}
-                              </>
-                            ) : (
-                              <>
-                                Ödeme Al ₺
-                                {(
-                                  remaining -
-                                  appliedPayments.reduce(
-                                    (sum, p) => sum + p.amount,
-                                    0
-                                  )
-                                )
-                                  .toFixed(2)
-                                  .replace(".", ",")}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                                  disabled={isProcessingPayment}
+                                >
+                                  {appliedPayments.length > 0 ? (
+                                    <>
+                                      Ödeme Al ₺
+                                      {appliedPayments
+                                        .reduce((sum, p) => sum + p.amount, 0)
+                                        .toFixed(2)
+                                        .replace(".", ",")}
+                                    </>
+                                  ) : (
+                                    <>
+                                      Ödeme Al ₺
+                                      {(
+                                        remaining -
+                                        appliedPayments.reduce(
+                                          (sum, p) => sum + p.amount,
+                                          0
+                                        )
+                                      )
+                                        .toFixed(2)
+                                        .replace(".", ",")}
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
                           {/* Numerik Keypad - Kalan Alana Sığdırılmış */}
                           <div className="flex flex-col flex-1 min-h-0">
                             <div className="flex flex-col px-[10px] pb-0 flex-1 min-h-0">
@@ -9813,8 +9961,9 @@ function TableDetailContent() {
                               // Seçili ürünlerin toplamını hesapla (orijinal fiyatlardan)
                               pendingPaymentItems.forEach((paymentItem) => {
                                 const selectedQty =
-                                  selectedQuantities.get(paymentItem.uniqueKey) ||
-                                  0;
+                                  selectedQuantities.get(
+                                    paymentItem.uniqueKey
+                                  ) || 0;
                                 if (selectedQty > 0) {
                                   paymentItem.indices.forEach((idx) =>
                                     selectedIndices.add(idx)
@@ -9872,8 +10021,7 @@ function TableDetailContent() {
                             const originalSubtotal =
                               order.subtotal ||
                               (order.items || []).reduce(
-                                (sum, item) =>
-                                  sum + item.subtotal,
+                                (sum, item) => sum + item.subtotal,
                                 0
                               );
 
@@ -10037,9 +10185,15 @@ function TableDetailContent() {
                                             )
                                             .filter((idx) => idx !== -1);
 
-                                          const getExtrasKey = (extras?: SelectedExtra[]): string => {
-                                            if (!extras || extras.length === 0) return "";
-                                            return extras.map((e) => e.id).sort().join(",");
+                                          const getExtrasKey = (
+                                            extras?: SelectedExtra[]
+                                          ): string => {
+                                            if (!extras || extras.length === 0)
+                                              return "";
+                                            return extras
+                                              .map((e) => e.id)
+                                              .sort()
+                                              .join(",");
                                           };
                                           const uniqueKey = `${item.menuId}_${getExtrasKey(item.selectedExtras)}`;
 
@@ -10565,7 +10719,9 @@ function TableDetailContent() {
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {selectedCartItemForExtra ? "Ekstra Malzeme Ekle" : "Ekstra Malzeme Seç"}
+                  {selectedCartItemForExtra
+                    ? "Ekstra Malzeme Ekle"
+                    : "Ekstra Malzeme Seç"}
                 </h2>
                 <button
                   onClick={() => {
@@ -10585,7 +10741,8 @@ function TableDetailContent() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   {selectedMenuForExtra.name}
                 </p>
-                {selectedMenuForExtra.extras && selectedMenuForExtra.extras.length > 0 ? (
+                {selectedMenuForExtra.extras &&
+                selectedMenuForExtra.extras.length > 0 ? (
                   <div className="space-y-3">
                     {selectedMenuForExtra.extras.map((extra) => {
                       const isSelected = selectedExtras.has(extra.id);

@@ -944,11 +944,11 @@ $printers | ConvertTo-Json -Depth 10
           const fileExtension = isHTML ? "html" : "txt";
           const tempFile = join(tmpdir(), `print_${Date.now()}.${fileExtension}`);
 
-          // ESC/POS komutları için binary olarak kaydet (BOM yok, latin1 encoding)
+          // ESC/POS komutları için binary olarak kaydet (BOM yok, binary encoding)
           try {
-            // ESC/POS komutları binary olmalı, latin1 encoding kullan (UTF-8 BOM eklemek komutları bozabilir)
-            // latin1 encoding, byte'ları olduğu gibi korur (0-255 arası değerler)
-            writeFileSync(tempFile, data.content, "latin1");
+            // ESC/POS komutları binary olmalı, Buffer kullanarak doğrudan yaz
+            const buffer = Buffer.from(data.content, "latin1");
+            writeFileSync(tempFile, buffer);
             safeLog(`📁 Temp file created: ${tempFile}`);
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
@@ -1134,15 +1134,17 @@ $printers | ConvertTo-Json -Depth 10
                 "      Write-Output \"SUCCESS\";\n" +
                 "    } else {\n" +
                 "      # Copy başarısız olursa Out-Printer'a fallback yap\n" +
+                "      # Latin1 encoding kullan (ESC/POS komutları için)\n" +
                 "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "      $content = [System.Text.Encoding]::Default.GetString($bytes);\n" +
+                "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
                 "      $content | Out-Printer -Name $printerName;\n" +
                 "      Write-Output \"SUCCESS\";\n" +
                 "    }\n" +
                 "  } catch {\n" +
                 "    # Hata durumunda Out-Printer'a fallback yap\n" +
+                "    # Latin1 encoding kullan (ESC/POS komutları için)\n" +
                 "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "    $content = [System.Text.Encoding]::Default.GetString($bytes);\n" +
+                "    $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
                 "    $content | Out-Printer -Name $printerName;\n" +
                 "    Write-Output \"SUCCESS\";\n" +
                 "  }\n" +
@@ -1442,7 +1444,8 @@ try {
           // macOS için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
           try {
-            writeFileSync(tempFile, data.content, "latin1");
+            const buffer = Buffer.from(data.content, "latin1");
+            writeFileSync(tempFile, buffer);
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
@@ -1481,7 +1484,8 @@ try {
           // Linux için lp komutu
           const tempFile = join(tmpdir(), `print_${Date.now()}.txt`);
           try {
-            writeFileSync(tempFile, data.content, "latin1");
+            const buffer = Buffer.from(data.content, "latin1");
+            writeFileSync(tempFile, buffer);
           } catch (writeError) {
                 safeError("❌ Error writing temp file:", writeError);
             const errorMessage =
