@@ -432,6 +432,17 @@ function registerIpcHandlers() {
         status: number;
         isDefault: boolean;
         options: Record<string, any>;
+        manufacturer?: string;
+        model?: string;
+        driverName?: string;
+        driverVersion?: string;
+        printerType?: string; // "thermal", "inkjet", "laser", "dotmatrix", "unknown"
+        paperSizes?: string[];
+        capabilities?: string[];
+        connectionType?: string;
+        portName?: string;
+        maxWidth?: number;
+        maxHeight?: number;
       }> = [];
 
       // Windows için kapsamlı yazıcı tarama (USB, WiFi, Bluetooth, Network)
@@ -442,7 +453,7 @@ function registerIpcHandlers() {
 $printers = @()
 try {
   # WMI ile tüm yazıcıları al (detaylı bilgi ile)
-  $wmiPrinters = Get-WmiObject -Class Win32_Printer -ErrorAction SilentlyContinue | Select-Object Name, PrinterStatus, Default, PortName, Local, Network, Shared, DeviceID, Location, Comment, WorkOffline
+  $wmiPrinters = Get-WmiObject -Class Win32_Printer -ErrorAction SilentlyContinue | Select-Object Name, PrinterStatus, Default, PortName, Local, Network, Shared, DeviceID, Location, Comment, WorkOffline, DriverName, PrintProcessor, Datatype, Attributes, ExtendedPrinterStatus
   
   foreach ($printer in $wmiPrinters) {
     # Bağlantı türünü belirle
@@ -463,17 +474,91 @@ try {
       $connectionType = "usb"
     }
     
-    # Kağıt boyutu bilgilerini al
+    # Yazıcı sürücü bilgilerini al (marka/model için)
+    $driverName = $printer.DriverName
+    $manufacturer = $null
+    $model = $null
+    $driverVersion = $null
+    $printerType = "unknown"
+    
+    try {
+      if ($driverName) {
+        # Driver adından marka/model çıkarmaya çalış
+        $driverParts = $driverName -split " "
+        if ($driverParts.Length -gt 0) {
+          $manufacturer = $driverParts[0]
+          if ($driverParts.Length -gt 1) {
+            $model = ($driverParts[1..($driverParts.Length-1)] -join " ")
+          }
+        }
+        
+        # Driver bilgilerini al
+        $driverInfo = Get-WmiObject -Class Win32_PrinterDriver -Filter "Name LIKE '%$driverName%'" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($driverInfo) {
+          $driverVersion = $driverInfo.DriverPath
+        }
+        
+        # Yazıcı türünü belirle (driver adına göre)
+        $driverLower = $driverName.ToLower()
+        if ($driverLower -like "*thermal*" -or $driverLower -like "*esc/pos*" -or $driverLower -like "*receipt*" -or $driverLower -like "*pos*" -or $driverLower -like "*epson tm*" -or $driverLower -like "*star*" -or $driverLower -like "*bixolon*") {
+          $printerType = "thermal"
+        } elseif ($driverLower -like "*inkjet*" -or $driverLower -like "*ink*") {
+          $printerType = "inkjet"
+        } elseif ($driverLower -like "*laser*") {
+          $printerType = "laser"
+        } elseif ($driverLower -like "*dot matrix*" -or $driverLower -like "*dotmatrix*") {
+          $printerType = "dotmatrix"
+        }
+      }
+    } catch {}
+    
+    # Kağıt boyutu ve yapılandırma bilgilerini al
     $maxWidth = $null
     $maxHeight = $null
+    $paperSizes = @()
+    $capabilities = @()
+    
     try {
       $printerNameEscaped = $printer.Name -replace "'", "''"
       $printerConfig = Get-WmiObject -Class Win32_PrinterConfiguration -Filter "Name='$printerNameEscaped'" -ErrorAction SilentlyContinue
       if ($printerConfig) {
         $maxWidth = $printerConfig.MaxExtentX
         $maxHeight = $printerConfig.MaxExtentY
+        
+        # Kağıt boyutlarını al
+        try {
+          $paperNames = $printerConfig.PaperNames
+          if ($paperNames) {
+            $paperSizes = @($paperNames)
+          }
+        } catch {}
       }
+      
+      # Yazıcı capabilities bilgilerini al
+      try {
+        $printerCapabilities = Get-WmiObject -Class Win32_Printer -Filter "Name='$printerNameEscaped'" -ErrorAction SilentlyContinue
+        if ($printerCapabilities) {
+          # Capabilities array'ini al
+          if ($printerCapabilities.Capabilities) {
+            $capabilities = @($printerCapabilities.Capabilities)
+          }
+        }
+      } catch {}
     } catch {}
+    
+    # Yazıcı adından da tür belirlemeyi dene
+    $printerNameLower = $printer.Name.ToLower()
+    if ($printerType -eq "unknown") {
+      if ($printerNameLower -like "*thermal*" -or $printerNameLower -like "*receipt*" -or $printerNameLower -like "*pos*" -or $printerNameLower -like "*epson tm*" -or $printerNameLower -like "*star*" -or $printerNameLower -like "*bixolon*") {
+        $printerType = "thermal"
+      } elseif ($printerNameLower -like "*inkjet*" -or $printerNameLower -like "*ink*") {
+        $printerType = "inkjet"
+      } elseif ($printerNameLower -like "*laser*") {
+        $printerType = "laser"
+      } elseif ($printerNameLower -like "*dot matrix*" -or $printerNameLower -like "*dotmatrix*") {
+        $printerType = "dotmatrix"
+      }
+    }
     
     $printers += @{
       Name = $printer.Name
@@ -490,6 +575,13 @@ try {
       WorkOffline = $printer.WorkOffline
       MaxWidth = $maxWidth
       MaxHeight = $maxHeight
+      DriverName = $driverName
+      Manufacturer = $manufacturer
+      Model = $model
+      DriverVersion = $driverVersion
+      PrinterType = $printerType
+      PaperSizes = $paperSizes
+      Capabilities = $capabilities
     }
   }
   
@@ -580,6 +672,7 @@ $printers | ConvertTo-Json -Depth 10
               // Kağıt boyutunu tespit et
               let paperWidth = 56; // Varsayılan: 80mm termal yazıcı (56 karakter - küçük font)
               let paperType = "80mm"; // Varsayılan
+              let paperWidthMM = 80; // Varsayılan mm
 
               // MaxWidth bilgisi varsa kullan (mikron veya pixel cinsinden olabilir)
               if (printer.MaxWidth) {
@@ -588,18 +681,22 @@ $printers | ConvertTo-Json -Depth 10
                 if (widthMM > 1000) {
                   widthMM = printer.MaxWidth / 100; // Pixel olabilir
                 }
+                paperWidthMM = widthMM; // MM değerini sakla
                 if (widthMM >= 75 && widthMM <= 85) {
                   paperWidth = 48; // 80mm için Font A ile 48 karakter (tam genişlik)
                   paperType = "80mm";
                 } else if (widthMM >= 55 && widthMM <= 62) {
                   paperWidth = 40;
                   paperType = "58mm";
+                  paperWidthMM = 58;
                 } else if (widthMM >= 100 && widthMM <= 110) {
                   paperWidth = 80;
                   paperType = "110mm";
+                  paperWidthMM = 110;
                 } else {
                   paperWidth = Math.floor(widthMM * 0.7);
                   paperType = `${Math.round(widthMM)}mm`;
+                  paperWidthMM = Math.round(widthMM);
                 }
               }
 
@@ -635,13 +732,29 @@ $printers | ConvertTo-Json -Depth 10
                         ? 2
                         : 0,
                 isDefault: printer.Default === true,
+                manufacturer: printer.Manufacturer || undefined,
+                model: printer.Model || undefined,
+                driverName: printer.DriverName || undefined,
+                driverVersion: printer.DriverVersion || undefined,
+                printerType: printer.PrinterType || "unknown",
+                paperSizes: printer.PaperSizes || undefined,
+                capabilities: printer.Capabilities || undefined,
+                connectionType: printer.ConnectionType || "unknown",
+                portName: printer.PortName || undefined,
+                maxWidth: printer.MaxWidth || undefined,
+                maxHeight: printer.MaxHeight || undefined,
                 options: {
                   paperWidth: paperWidth,
                   paperType: paperType,
+                  paperWidthMM: paperWidthMM,
                   maxWidth: printer.MaxWidth,
                   maxHeight: printer.MaxHeight,
                   connectionType: printer.ConnectionType || "unknown",
                   portName: printer.PortName || "",
+                  printerType: printer.PrinterType || "unknown",
+                  manufacturer: printer.Manufacturer || undefined,
+                  model: printer.Model || undefined,
+                  driverName: printer.DriverName || undefined,
                 },
               });
             }
@@ -938,6 +1051,79 @@ $printers | ConvertTo-Json -Depth 10
       const isHTML = data.content.trim().toLowerCase().startsWith("<!doctype html") || 
                      data.content.trim().toLowerCase().startsWith("<html");
 
+      // Yazıcı bilgilerini al (tür, bağlantı tipi vb.)
+      let printerInfo: {
+        printerType?: string;
+        connectionType?: string;
+        portName?: string;
+        manufacturer?: string;
+        model?: string;
+      } = {};
+
+      try {
+        // Sistem yazıcılarını al ve eşleşen yazıcıyı bul
+        const execAsync = promisify(exec);
+        
+        const powershellGetPrinter = `
+$printer = Get-Printer -Name "${data.printerName.replace(/"/g, '""')}" -ErrorAction SilentlyContinue;
+if ($printer) {
+  $printerConfig = Get-WmiObject -Class Win32_Printer -Filter "Name='$($printer.Name -replace \"'\", \"''\")'" -ErrorAction SilentlyContinue;
+  $driverName = if ($printerConfig) { $printerConfig.DriverName } else { "" };
+  $portName = $printer.PortName;
+  $connectionType = "unknown";
+  if ($portName -like "*usb*" -or $portName -like "*dot4*" -or $portName -like "*wsd*") {
+    $connectionType = "usb";
+  } elseif ($portName -like "*tcp*" -or $portName -like "*ip*") {
+    $connectionType = "network";
+  }
+  $printerType = "unknown";
+  if ($driverName) {
+    $driverLower = $driverName.ToLower();
+    if ($driverLower -like "*thermal*" -or $driverLower -like "*esc/pos*" -or $driverLower -like "*receipt*" -or $driverLower -like "*pos*" -or $driverLower -like "*epson tm*" -or $driverLower -like "*star*" -or $driverLower -like "*bixolon*") {
+      $printerType = "thermal";
+    }
+  }
+  $printerNameLower = $printer.Name.ToLower();
+  if ($printerType -eq "unknown") {
+    if ($printerNameLower -like "*thermal*" -or $printerNameLower -like "*receipt*" -or $printerNameLower -like "*pos*" -or $printerNameLower -like "*epson tm*" -or $printerNameLower -like "*star*" -or $printerNameLower -like "*bixolon*") {
+      $printerType = "thermal";
+    }
+  }
+  @{
+    PrinterType = $printerType;
+    ConnectionType = $connectionType;
+    PortName = $portName;
+    DriverName = $driverName;
+  } | ConvertTo-Json;
+} else {
+  "{}"
+}
+        `.trim();
+
+        const scriptPath = join(tmpdir(), `get-printer-info-${Date.now()}.ps1`);
+        writeFileSync(scriptPath, powershellGetPrinter, "utf8");
+        
+        try {
+          const { stdout } = await execAsync(
+            `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
+          );
+          printerInfo = JSON.parse(stdout || "{}");
+          safeLog(`📋 Printer info: ${JSON.stringify(printerInfo)}`);
+        } catch (e) {
+          safeLog(`⚠️ Could not get printer info: ${e}`);
+        } finally {
+          try {
+            if (existsSync(scriptPath)) {
+              unlinkSync(scriptPath);
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+      } catch (e) {
+        safeLog(`⚠️ Error getting printer info: ${e}`);
+      }
+
       try {
         if (process.platform === "win32") {
           // HTML formatında ise HTML dosyası oluştur ve yazdır
@@ -1122,36 +1308,68 @@ $printers | ConvertTo-Json -Depth 10
                 "}\n\n" +
                 "$portName = $printer.PortName;\n" +
                 "Write-Host \"Printer Port: $portName\";\n\n" +
+                "# Yazıcı türünü belirle (thermal printer için özel işlem)\n" +
+                "$printerType = \"unknown\";\n" +
+                "$driverName = $null;\n" +
+                "try {\n" +
+                "  $printerConfig = Get-WmiObject -Class Win32_Printer -Filter \"Name='$printerName'\" -ErrorAction SilentlyContinue;\n" +
+                "  if ($printerConfig) {\n" +
+                "    $driverName = $printerConfig.DriverName;\n" +
+                "    if ($driverName) {\n" +
+                "      $driverLower = $driverName.ToLower();\n" +
+                "      if ($driverLower -like \"*thermal*\" -or $driverLower -like \"*esc/pos*\" -or $driverLower -like \"*receipt*\" -or $driverLower -like \"*pos*\" -or $driverLower -like \"*epson tm*\" -or $driverLower -like \"*star*\" -or $driverLower -like \"*bixolon*\") {\n" +
+                "        $printerType = \"thermal\";\n" +
+                "      }\n" +
+                "    }\n" +
+                "    $printerNameLower = $printerName.ToLower();\n" +
+                "    if ($printerType -eq \"unknown\") {\n" +
+                "      if ($printerNameLower -like \"*thermal*\" -or $printerNameLower -like \"*receipt*\" -or $printerNameLower -like \"*pos*\" -or $printerNameLower -like \"*epson tm*\" -or $printerNameLower -like \"*star*\" -or $printerNameLower -like \"*bixolon*\") {\n" +
+                "        $printerType = \"thermal\";\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "} catch {}\n\n" +
                 "# Port tipine göre yazdır\n" +
                 "if ($portName -like \"LPT*\" -or $portName -like \"USB*\" -or $portName -like \"COM*\") {\n" +
-                "  # LPT, USB veya COM portu - copy /b komutu ile raw printing\n" +
-                "  try {\n" +
-                "    # Önce normal port adıyla dene\n" +
-                "    $copyResult = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
-                "    if ($LASTEXITCODE -eq 0) {\n" +
-                "      Write-Output \"SUCCESS\";\n" +
-                "    } else {\n" +
-                "      # USB/LPT portları için \\\\.\\ prefix'i ile dene\n" +
-                "      $portPath = \"\\\\.\\$portName\";\n" +
-                "      $copyResult2 = cmd /c \"copy /b \\\"$file\\\" \\\"$portPath\\\"\" 2>&1;\n" +
+                "  # Thermal printer ise raw printing (ESC/POS komutları için)\n" +
+                "  if ($printerType -eq \"thermal\") {\n" +
+                "    # Thermal printer için copy /b ile raw printing\n" +
+                "    try {\n" +
+                "      $copyResult = cmd /c \"copy /b \\\"$file\\\" $portName\" 2>&1;\n" +
                 "      if ($LASTEXITCODE -eq 0) {\n" +
                 "        Write-Output \"SUCCESS\";\n" +
                 "      } else {\n" +
-                "        # Son çare: Out-Printer (Latin1 encoding)\n" +
-                "        Write-Host \"Copy failed, trying Out-Printer...\";\n" +
-                "        $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "        $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
-                "        $content | Out-Printer -Name $printerName;\n" +
-                "        Write-Output \"SUCCESS\";\n" +
+                "        $portPath = \"\\\\.\\$portName\";\n" +
+                "        $copyResult2 = cmd /c \"copy /b \\\"$file\\\" \\\"$portPath\\\"\" 2>&1;\n" +
+                "        if ($LASTEXITCODE -eq 0) {\n" +
+                "          Write-Output \"SUCCESS\";\n" +
+                "        } else {\n" +
+                "          # Fallback: Out-Printer (Latin1 encoding)\n" +
+                "          $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "          $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
+                "          $content | Out-Printer -Name $printerName;\n" +
+                "          Write-Output \"SUCCESS\";\n" +
+                "        }\n" +
                 "      }\n" +
-                "    }\n" +
-                "  } catch {\n" +
-                "    # Hata durumunda Out-Printer'a fallback yap\n" +
-                "    Write-Host \"Exception occurred: $($_.Exception.Message)\";\n" +
-                "    try {\n" +
+                "    } catch {\n" +
                 "      $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
-                "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes); # Latin1\n" +
+                "      $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
                 "      $content | Out-Printer -Name $printerName;\n" +
+                "      Write-Output \"SUCCESS\";\n" +
+                "    }\n" +
+                "  } else {\n" +
+                "    # Normal yazıcılar için Out-Printer kullan\n" +
+                "    try {\n" +
+                "      if ($isHTML) {\n" +
+                "        # HTML içeriği için özel işlem\n" +
+                "        $htmlContent = Get-Content -Path $file -Raw -Encoding UTF8;\n" +
+                "        $htmlContent | Out-Printer -Name $printerName;\n" +
+                "      } else {\n" +
+                "        # Text içeriği için\n" +
+                "        $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "        $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
+                "        $content | Out-Printer -Name $printerName;\n" +
+                "      }\n" +
                 "      Write-Output \"SUCCESS\";\n" +
                 "    } catch {\n" +
                 "      Write-Output \"ERROR: Print failed: $($_.Exception.Message)\";\n" +

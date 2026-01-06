@@ -138,6 +138,18 @@ export function PrintersContent() {
                   isConnected: printer.status === 0 || printer.status === 1, // idle veya printing durumunda bağlı
                   paperWidth: printer.options?.paperWidth || 110, // Kağıt genişliği (karakter sayısı)
                   paperType: printer.options?.paperType || "80mm", // Kağıt tipi
+                  options: {
+                    paperWidth: printer.options?.paperWidth,
+                    paperType: printer.options?.paperType,
+                    manufacturer: printer.options?.manufacturer,
+                    model: printer.options?.model,
+                    driverName: printer.options?.driverName,
+                    printerType: printer.options?.printerType,
+                    connectionType: printer.options?.connectionType,
+                    portName: printer.options?.portName,
+                    maxWidth: printer.options?.maxWidth,
+                    maxHeight: printer.options?.maxHeight,
+                  },
                 };
               }
             );
