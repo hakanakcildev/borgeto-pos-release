@@ -486,9 +486,11 @@ export const addPayment = async (
 
     const payments = order.payments || [];
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0) + payment.amount;
+    // Küçük tolerans: ondalık farklar yüzünden tam ödeme "unpaid" kalmasın
+    const paidThreshold = (order.total ?? 0) - 0.005;
 
     let paymentStatus: PaymentStatus = "unpaid";
-    if (totalPaid >= order.total) {
+    if (totalPaid >= paidThreshold && (order.total ?? 0) > 0) {
       paymentStatus = "paid";
     } else if (totalPaid > 0) {
       paymentStatus = "partial";

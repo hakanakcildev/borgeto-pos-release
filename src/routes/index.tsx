@@ -54,6 +54,11 @@ function Index() {
   );
 }
 
+// Geniş ekranlarda kartın maksimum boyutu (boşluk kalmaması için daha fazla kolon)
+const MAX_CARD_SIZE = 160;
+// Çok geniş ekranlarda denenecek maksimum kolon sayısı
+const MAX_COLUMNS = 32;
+
 // Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
 const calculateOptimalGrid = (
   tableCount: number,
@@ -63,63 +68,58 @@ const calculateOptimalGrid = (
   if (tableCount === 0 || width === 0 || height === 0)
     return { cols: 2, gap: 8, cardSize: 100 };
 
-  // Padding için alan hesapla (padding CSS'de uygulanıyor, hesaplamalara dahil etmiyoruz)
-  const paddingY = 10; // paddingTop: 10px için
-  const availableWidth = width; // Padding'i hesaplamalardan çıkardık
+  const paddingY = 10;
+  const availableWidth = width;
   const availableHeight = height - paddingY;
-
-  // Gap değeri (8px - daha az aralık)
   const gap = 8;
-
-  // Minimum kart boyutu (çok küçük olmasın)
   const minCardSize = 80;
 
-  // Farklı kolon sayılarını dene ve en iyisini bul
   let bestCols = 2;
   let bestCardSize = minCardSize;
-  let bestFit = Infinity;
+  let bestUnused = Infinity;
 
-  for (let cols = 2; cols <= 20; cols++) {
+  for (let cols = 2; cols <= MAX_COLUMNS; cols++) {
     const rows = Math.ceil(tableCount / cols);
-
-    // Her kartın boyutunu hesapla (kare olması için)
     const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
     const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+    // Geniş ekranlarda kartları çok büyütme; max ile sınırla
+    const cardSize = Math.min(
+      MAX_CARD_SIZE,
+      Math.min(cardWidth, cardHeight)
+    );
 
-    // Kare olması için en küçük boyutu kullan
-    const cardSize = Math.min(cardWidth, cardHeight);
-
-    // Minimum boyuttan küçük olmamalı
     if (cardSize < minCardSize) continue;
 
-    // Tüm kartların sığması için gerekli alan
     const requiredWidth = cols * cardSize + (cols - 1) * gap;
     const requiredHeight = rows * cardSize + (rows - 1) * gap;
 
-    // Eğer sığıyorsa ve daha iyi bir fit ise
     if (requiredWidth <= availableWidth && requiredHeight <= availableHeight) {
-      const unusedSpace =
+      const unused =
         availableWidth - requiredWidth + (availableHeight - requiredHeight);
-      if (unusedSpace < bestFit) {
-        bestFit = unusedSpace;
+      // Aynı unused değerde geniş ekranı daha iyi dolduran (daha fazla kolon) seç
+      if (
+        unused < bestUnused ||
+        (unused === bestUnused && cols > bestCols)
+      ) {
+        bestUnused = unused;
         bestCols = cols;
         bestCardSize = cardSize;
       }
     }
   }
 
-  // Eğer hiçbir kolon sayısı sığmıyorsa, en az satır sayısına sahip olanı seç
-  if (bestFit === Infinity) {
-    let minRows = Infinity;
-    for (let cols = 2; cols <= 20; cols++) {
+  if (bestUnused === Infinity) {
+    for (let cols = 2; cols <= MAX_COLUMNS; cols++) {
       const rows = Math.ceil(tableCount / cols);
-      if (rows < minRows) {
-        minRows = rows;
-        bestCols = cols;
-        const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
-        const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
-        bestCardSize = Math.max(Math.min(cardWidth, cardHeight), minCardSize);
-      }
+      const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
+      const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
+      bestCardSize = Math.max(
+        minCardSize,
+        Math.min(MAX_CARD_SIZE, cardWidth, cardHeight)
+      );
+      bestCols = cols;
+      const requiredHeight = rows * bestCardSize + (rows - 1) * gap;
+      if (requiredHeight <= availableHeight) break;
     }
   }
 
@@ -186,15 +186,13 @@ function TablesView() {
       }
 
       try {
-        // Standart masaları oluştur (sadece ilk yüklemede)
+        // Standart masaları arka planda oluştur (ilk yüklemede bloklamaz)
         if (!defaultTablesCreated) {
-          await createDefaultTables(
+          setDefaultTablesCreated(true);
+          createDefaultTables(
             effectiveCompanyId,
             effectiveBranchId || undefined
-          ).catch(() => {
-            // Hata olsa bile devam et
-          });
-          setDefaultTablesCreated(true);
+          ).catch(() => {}).then(() => {});
         }
 
         const [tablesData, ordersData] = await Promise.all([
@@ -1023,16 +1021,16 @@ function TablesView() {
           ) : (
             <div
               ref={gridContainerRef}
-              className="flex-1 min-h-0 overflow-hidden flex items-center justify-center"
+              className="flex-1 min-h-0 overflow-auto"
               style={{
-                paddingTop: '10px',
-                paddingLeft: '10px',
-                paddingRight: '10px',
+                paddingTop: "10px",
+                paddingLeft: "10px",
+                paddingRight: "10px",
                 display: "grid",
-                gridTemplateColumns: `repeat(${optimalColumns}, ${cardSize}px)`,
+                gridTemplateColumns: `repeat(${optimalColumns}, minmax(${cardSize}px, 1fr))`,
+                gridAutoRows: `${cardSize}px`,
                 gap: `${gap}px`,
-                alignContent: "center",
-                justifyContent: "start",
+                alignContent: "start",
                 width: "100%",
                 maxHeight: containerSize ? `${containerSize.height}px` : "100%",
               }}
@@ -1060,10 +1058,10 @@ function TablesView() {
                     }
                     onTouchEnd={() => handleLongPressEnd(table.id!)}
                     onTouchCancel={() => handleMouseLeave(table.id!)}
-                    className="relative w-full"
+                    className="relative w-full h-full min-w-0"
                     style={{
-                      width: `${cardSize}px`,
-                      height: `${cardSize}px`,
+                      minWidth: `${cardSize}px`,
+                      minHeight: `${cardSize}px`,
                     }}
                   >
                     <div

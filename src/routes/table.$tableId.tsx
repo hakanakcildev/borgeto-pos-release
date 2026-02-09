@@ -488,52 +488,49 @@ function TableDetailContent() {
       }
 
       try {
-        // Önce standart ödeme yöntemlerini oluştur (yoksa)
-        await createDefaultPaymentMethods(
-          effectiveCompanyId,
-          effectiveBranchId || undefined
-        ).catch(() => {
-          // Error creating default payment methods
-        });
-
         // Manager kullanıcısının ID'si (QR menü branchId'si olarak kullanılacak)
         const managerUserId = userData?.id || undefined;
 
+        // Varsayılan ödeme yöntemleri arka planda (bloklamaz)
+        createDefaultPaymentMethods(
+          effectiveCompanyId,
+          effectiveBranchId || undefined
+        ).catch(() => {});
+
+        // Tüm verileri tek seferde paralel yükle (loader'dan gelen table kullanılır, tekrar istek yok)
         const [
           menusData,
           categoriesData,
-          tableData,
           allOrders,
           paymentMethodsData,
+          couriersData,
+          tablesData,
         ] = await Promise.all([
           getAllMenusByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined,
             managerUserId
-          ).catch(() => {
-            return [];
-          }),
+          ).catch(() => []),
           getAllCategoriesByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined,
             managerUserId
-          ).catch(() => {
-            return [];
-          }),
-          getTable(table.id!).catch(() => {
-            return null;
-          }),
+          ).catch(() => []),
           getOrdersByCompany(effectiveCompanyId, {
             branchId: effectiveBranchId || undefined,
-          }).catch(() => {
-            return [];
-          }),
+          }).catch(() => []),
           getPaymentMethodsByCompany(
             effectiveCompanyId,
             effectiveBranchId || undefined
-          ).catch(() => {
-            return [];
-          }),
+          ).catch(() => []),
+          getCouriersByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => []),
+          getTablesByCompany(
+            effectiveCompanyId,
+            effectiveBranchId || undefined
+          ).catch(() => []),
         ]);
 
         // Bu masa için sadece aktif siparişi bul
@@ -555,9 +552,7 @@ function TableDetailContent() {
         // Sadece aktif kategorileri göster
         const activeCategories = categoriesData.filter((cat) => cat.isActive);
         setCategories(activeCategories);
-        if (tableData) {
-          setCurrentTable(tableData);
-        }
+        // Masa loader'dan geldi, tekrar set etmeye gerek yok (currentTable zaten table ile başlatıldı)
 
         // Yazıcıları yükle
         try {
@@ -587,28 +582,9 @@ function TableDetailContent() {
 
         // Ödeme yöntemi otomatik seçilmeyecek, kullanıcı manuel seçecek
 
-        // Kuryeleri yükle
-        try {
-          const couriersData = await getCouriersByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          );
-          const activeCouriers = couriersData.filter((c) => c.isActive);
-          setCouriers(activeCouriers);
-        } catch {
-          // Error loading couriers
-        }
-
-        // Tüm masaları yükle (cari masaları kontrol etmek için)
-        try {
-          const tablesData = await getTablesByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          );
-          setAllTablesForCheck(tablesData);
-        } catch {
-          // Error loading tables
-        }
+        const activeCouriers = (couriersData || []).filter((c) => c.isActive);
+        setCouriers(activeCouriers);
+        setAllTablesForCheck(tablesData || []);
 
         // Sadece aktif sipariş varsa göster, yoksa temizle
         if (orderData && orderData.status === "active") {
@@ -2036,33 +2012,19 @@ function TableDetailContent() {
           originalOrderItemsRef.current = Array.from(itemsMap.values());
         }
 
-        // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
+        // Eğer updatedOrder'ın items'ı boşsa hemen local veriyi kullan (bekleme kaldırıldı)
         if (
           !updatedOrder ||
           !updatedOrder.items ||
           updatedOrder.items.length === 0
         ) {
-          console.warn("⚠️ Order items boş, tekrar yükleniyor...");
-          // Biraz bekle ve tekrar yükle (Firebase'in güncellemesi için)
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          updatedOrder = await getOrder(currentOrder.id!);
-
-          // Hala boşsa, finalItems'ı manuel olarak ekle
-          if (
-            !updatedOrder ||
-            !updatedOrder.items ||
-            updatedOrder.items.length === 0
-          ) {
-            console.error(
-              "❌ Order items hala boş, manuel olarak ekleniyor..."
-            );
-            updatedOrder = {
-              ...updatedOrder!,
-              items: finalItems,
-              subtotal: subtotal,
-              total: total,
-            };
-          }
+          const base = updatedOrder || currentOrder!;
+          updatedOrder = {
+            ...base,
+            items: finalItems,
+            subtotal,
+            total,
+          };
         }
       } else {
         // Yeni sipariş oluştur
@@ -2090,33 +2052,29 @@ function TableDetailContent() {
         // Yeni order oluşturulduğunda originalOrderItemsRef'i güncelle
         originalOrderItemsRef.current = [...finalItems];
 
-        // Eğer updatedOrder'ın items'ı boşsa veya yanlışsa, tekrar yükle
         if (
           !updatedOrder ||
           !updatedOrder.items ||
           updatedOrder.items.length === 0
         ) {
-          console.warn("⚠️ Yeni order items boş, tekrar yükleniyor...");
-          // Biraz bekle ve tekrar yükle (Firebase'in güncellemesi için)
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          updatedOrder = await getOrder(orderId);
-
-          // Hala boşsa, finalItems'ı manuel olarak ekle
-          if (
-            !updatedOrder ||
-            !updatedOrder.items ||
-            updatedOrder.items.length === 0
-          ) {
-            console.error(
-              "❌ Yeni order items hala boş, manuel olarak ekleniyor..."
-            );
-            updatedOrder = {
-              ...updatedOrder!,
-              items: finalItems,
-              subtotal: subtotal,
-              total: total,
-            };
-          }
+          updatedOrder = {
+            ...(updatedOrder || {}),
+            id: orderId,
+            companyId: effectiveCompanyId,
+            branchId: effectiveBranchId || currentTable.branchId,
+            tableId: currentTable.id!,
+            tableNumber: currentTable.tableNumber,
+            orderNumber: updatedOrder?.orderNumber ?? `ORD-${Date.now()}`,
+            items: finalItems,
+            status: "active",
+            paymentStatus: "unpaid",
+            subtotal,
+            total,
+            sentItems: sentItemIds,
+            createdBy: userData?.id || "",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as Order;
         }
       }
 
@@ -2283,8 +2241,25 @@ function TableDetailContent() {
           navigateToHome();
         }
       }
-    } catch {
-      customAlert("Sipariş kaydedilirken bir hata oluştu", "Hata", "error");
+    } catch (err) {
+      console.error("Sipariş kaydedilirken hata:", err);
+      customAlert(
+        "Bağlantı hatası. Değişiklikler yerel kaydedildi; internet gelince senkron edilecek.",
+        "Bağlantı Hatası",
+        "warning"
+      );
+      // Offline/kuyruktaki veriyi göster: getOrder Firebase başarısızsa offline’dan döner
+      if (order?.id) {
+        try {
+          const fallbackOrder = await getOrder(order.id);
+          if (fallbackOrder?.items?.length) {
+            setOrder(fallbackOrder);
+            setCart([]);
+          }
+        } catch {
+          // Offline yükleme de başarısızsa sadece uyarı gösterildi
+        }
+      }
     } finally {
       setIsSendingOrder(false);
     }
@@ -3251,8 +3226,23 @@ function TableDetailContent() {
         // Ödemeyi ekle
         await addPayment(order.id!, payment);
 
-        // Siparişi yeniden yükle (güncel haliyle) - önce yükle ki diğer işlemlerde kullanabilelim
-        const updatedOrder = await getOrder(order.id!);
+        // Hemen optimistic güncelle (getOrder beklemeden UI hızlanır)
+        const newPayments = [...(order.payments || []), payment];
+        const totalPaidOpt = newPayments.reduce((s, p) => s + p.amount, 0);
+        const paymentStatusOpt =
+          totalPaidOpt >= (order.total ?? 0) - 0.005
+            ? "paid"
+            : totalPaidOpt > 0
+              ? "partial"
+              : "unpaid";
+        const updatedOrder: Order = {
+          ...order,
+          payments: newPayments,
+          paymentStatus: paymentStatusOpt,
+        };
+        getOrder(order.id!).then((fetched) => {
+          if (fetched) setOrder(fetched);
+        }).catch(() => {});
 
         // Arka planda yapılacak işlemler için verileri hazırla
         const effectiveCompanyId = companyId || userData?.companyId;
@@ -3461,8 +3451,9 @@ function TableDetailContent() {
         // Not: Kısmi ödemede (seçilen ürünlerin belli adetleri) masada ürün kaldığı sürece sipariş açık kalmalı
         // Kurye atandıysa siparişi kapat
         // VEYA tüm ödemelerin toplamı order total'ine eşit veya fazlaysa VE kısmi ödeme değilse siparişi kapat
+        // Küçük tolerans (0.005): ondalık farklar yüzünden masa kapanmama sorununu önler
         const isFullyPaidCheck =
-          totalPaidAmount >= orderTotalAmount &&
+          totalPaidAmount >= orderTotalAmount - 0.005 &&
           orderTotalAmount > 0 &&
           !isPartialPayment;
 

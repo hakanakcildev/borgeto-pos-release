@@ -1,5 +1,19 @@
 # Sürüm Notları
 
+## v2.0.99 - Performans ve Hız İyileştirmeleri
+
+### ⚡ Performans
+- Masa sayfası açılışı hızlandırıldı (paralel veri yükleme, gereksiz istekler kaldırıldı)
+- Ödeme alındıktan sonra optimistic güncelleme ile anında yanıt
+- Ana sayfa ve masa detayında bloklayan işlemler arka plana alındı
+- Sipariş gönder sonrası 500ms bekleme kaldırıldı
+
+### 🖨️ Yazdırma
+- Termal yazıcılar için Windows RAW (ESC/POS) yazdırma iyileştirmeleri
+- Ödeme/masa kapanma tolerans düzeltmeleri
+
+---
+
 ## v1.1.5 - Güncelleme İşlem Sırası Düzeltmesi
 
 ### 🔧 İyileştirmeler

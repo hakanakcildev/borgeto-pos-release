@@ -121,6 +121,8 @@ export async function updateOrder(
         orders[index] = { ...orders[index], ...data } as Order;
         saveOrdersOffline(orders);
       }
+      // Çağıranın hata göstermesi ve offline veriyi kullanması için yeniden fırlat
+      throw error;
     }
   } else {
     // Offline durumunda queue'ya al
@@ -153,6 +155,7 @@ export async function addPayment(
     } catch (error) {
       console.warn("⚠️ Firebase error, queueing operation:", error);
       addToQueue({ type: "addPayment", orderId, payment });
+      throw error;
     }
   } else {
     addToQueue({ type: "addPayment", orderId, payment });
@@ -192,6 +195,7 @@ export async function updateOrderStatus(
         orders[index] = { ...orders[index], status } as Order;
         saveOrdersOffline(orders);
       }
+      throw error;
     }
   } else {
     addToQueue({ type: "updateOrderStatus", orderId, status });

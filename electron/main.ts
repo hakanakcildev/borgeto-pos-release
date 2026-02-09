@@ -1279,9 +1279,72 @@ if ($printer) {
 
                 return { success: true };
               }
-              
-              // ESC/POS formatında ise mevcut yöntemi kullan
-              // PowerShell ile yazıcı port adını al ve doğrudan port'a yaz
+
+              // ESC/POS: Önce Win32 RAW yazdırma dene (tüm port türlerinde çalışır - USB, DOT4, Network vb.)
+              try {
+                const rawScript = [
+                  "$printerName = \"" + data.printerName.replace(/"/g, '`"') + "\";",
+                  "$file = \"" + tempFile.replace(/\\/g, "\\\\") + "\";",
+                  "if (-not (Test-Path $file)) { Write-Output \"ERROR: File not found\"; exit 1; }",
+                  "$bytes = [System.IO.File]::ReadAllBytes($file);",
+                  "$code = @\"",
+                  "using System;",
+                  "using System.Runtime.InteropServices;",
+                  "public class PosRawPrinter {",
+                  "  [DllImport(`\"winspool.drv`\", CharSet=CharSet.Ansi, SetLastError=true)]",
+                  "  public static extern bool OpenPrinter(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);",
+                  "  [DllImport(`\"winspool.drv`\", SetLastError=true)]",
+                  "  public static extern bool ClosePrinter(IntPtr hPrinter);",
+                  "  [DllImport(`\"winspool.drv`\", CharSet=CharSet.Ansi, SetLastError=true)]",
+                  "  public static extern bool StartDocPrinter(IntPtr hPrinter, int level, ref DOCINFO di);",
+                  "  [DllImport(`\"winspool.drv`\", SetLastError=true)]",
+                  "  public static extern bool EndDocPrinter(IntPtr hPrinter);",
+                  "  [DllImport(`\"winspool.drv`\", SetLastError=true)]",
+                  "  public static extern bool StartPagePrinter(IntPtr hPrinter);",
+                  "  [DllImport(`\"winspool.drv`\", SetLastError=true)]",
+                  "  public static extern bool EndPagePrinter(IntPtr hPrinter);",
+                  "  [DllImport(`\"winspool.drv`\", SetLastError=true)]",
+                  "  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);",
+                  "  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]",
+                  "  public struct DOCINFO { public string pDocName; public string pOutputFile; public string pDataType; }",
+                  "  public static bool SendBytesToPrinter(string name, byte[] data) {",
+                  "    IntPtr hPrinter = IntPtr.Zero;",
+                  "    if (!OpenPrinter(name, out hPrinter, IntPtr.Zero)) return false;",
+                  "    try {",
+                  "      DOCINFO di = new DOCINFO(); di.pDocName = `\"POS Receipt`\"; di.pOutputFile = null; di.pDataType = `\"RAW`\";",
+                  "      if (!StartDocPrinter(hPrinter, 1, ref di)) return false;",
+                  "      if (!StartPagePrinter(hPrinter)) { EndDocPrinter(hPrinter); return false; }",
+                  "      var h = GCHandle.Alloc(data, GCHandleType.Pinned);",
+                  "      try { int w; bool ok = WritePrinter(hPrinter, h.AddrOfPinnedObject(), data.Length, out w); if (!ok || w != data.Length) return false; }",
+                  "      finally { h.Free(); }",
+                  "      EndPagePrinter(hPrinter);",
+                  "      EndDocPrinter(hPrinter);",
+                  "      return true;",
+                  "    } finally { ClosePrinter(hPrinter); }",
+                  "  }",
+                  "}",
+                  "\"@",
+                  "Add-Type -TypeDefinition $code -Language CSharp -ErrorAction Stop;",
+                  "$ok = [PosRawPrinter]::SendBytesToPrinter($printerName, $bytes);",
+                  "if ($ok) { Write-Output \"SUCCESS\" } else { Write-Output \"ERROR: Raw print failed\"; exit 1 }",
+                ].join("\n");
+                const rawPsFile = join(tmpdir(), `print_raw_${Date.now()}.ps1`);
+                writeFileSync(rawPsFile, rawScript, "utf-8");
+                const rawResult = await execAsync(
+                  `powershell -NoProfile -ExecutionPolicy Bypass -File "${rawPsFile}"`,
+                  { maxBuffer: 1024 * 1024, timeout: 15000 }
+                );
+                try { unlinkSync(rawPsFile); } catch { /* ignore */ }
+                if (rawResult.stdout && rawResult.stdout.includes("SUCCESS")) {
+                  safeLog(`✅ Printed via Win32 RAW to ${data.printerName}`);
+                  try { setTimeout(() => { try { unlinkSync(tempFile); } catch { /* ignore */ } }, 2000); } catch { /* ignore */ }
+                  return { success: true };
+                }
+              } catch (rawErr) {
+                safeLog(`⚠️ Win32 RAW print failed, falling back to port-based: ${rawErr}`);
+              }
+
+              // ESC/POS: Port tabanlı yedek yöntem (RAW başarısız olursa)
               const printerNameSafe = data.printerName.replace(/"/g, '`"');
               const tempFileSafe = tempFile.replace(/\\/g, "\\\\");
               const psScript = "$printerName = \"" + printerNameSafe + "\";\n" +
@@ -1489,12 +1552,10 @@ if ($printer) {
                 "    }\n" +
                 "  }\n" +
                 "} else {\n" +
-                "  # Diğer portlar (Bluetooth, WSD, vs.) - Out-Printer kullan\n" +
-                "  # Yazıcı ayarlarını optimize et - tam genişlik kullanımı için\n" +
+                "  # Diğer portlar (DOT4, WSD, Bluetooth vb.) - Binary dosyayı Latin1 ile Out-Printer'a gönder\n" +
                 "  try {\n" +
-                "    # Out-Printer ile yazdır (yazıcı sürücüsü ayarlarına bağlı)\n" +
-                "    # ESC/POS komutları zaten margin'leri kaldırıyor, bu yüzden doğrudan yazdır\n" +
-                "    $content = Get-Content -Path $file -Encoding UTF8 -Raw;\n" +
+                "    $bytes = [System.IO.File]::ReadAllBytes($file);\n" +
+                "    $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);\n" +
                 "    $content | Out-Printer -Name $printerName;\n" +
                 "    Write-Output \"SUCCESS\";\n" +
                 "  } catch {\n" +
@@ -1622,16 +1683,10 @@ if (-not $printer) {
   exit 1;
 }
 
-# Out-Printer ile düz metin yazdır (Windows'ın kendi yazdırma komutu)
-# Yazıcı ayarlarını optimize et - tam genişlik kullanımı için
+# ESC/POS binary dosyasını Latin1 ile okuyup Out-Printer'a gönder (UTF8 binary'yi bozar)
 try {
-  $content = Get-Content -Path $file -Encoding UTF8 -Raw;
-  
-  # Yazıcı ayarlarını kontrol et ve optimize et
-  $printerSettings = Get-PrinterProperty -PrinterName $printerName -PropertyName "PrinterDefault" -ErrorAction SilentlyContinue;
-  
-  # Out-Printer ile yazdır (yazıcı sürücüsü varsayılan ayarlarını kullanır)
-  # Not: Font ve genişlik ayarları yazıcı sürücüsüne bağlıdır
+  $bytes = [System.IO.File]::ReadAllBytes($file);
+  $content = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes);
   $content | Out-Printer -Name $printerName;
   Write-Output "SUCCESS";
 } catch {
