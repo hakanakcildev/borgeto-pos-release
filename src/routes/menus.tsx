@@ -11,7 +11,20 @@ import {
   updateCategory,
   deleteCategory,
 } from "@/lib/firebase/menus";
-import type { Menu, Category, MenuExtra } from "@/lib/firebase/types";
+import {
+  getRecipesByMenuId,
+  addRecipe,
+  updateRecipe,
+  deleteRecipe,
+  bulkAddRecipes,
+} from "@/lib/firebase/recipes";
+import { getAllStocksByCompany } from "@/lib/firebase/stocks";
+import type { Menu, Category, MenuExtra, Recipe, Stock } from "@/lib/firebase/types";
+import {
+  calculateMenuCost,
+  calculateIngredientCost,
+  getUnitDisplayName,
+} from "@/lib/utils/recipeUtils";
 import {
   Plus,
   Edit,
@@ -90,6 +103,19 @@ export function MenuManagementContent() {
     value: "",
   });
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+
+  // Recipe management states
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [selectedMenuForRecipe, setSelectedMenuForRecipe] = useState<Menu | null>(null);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [recipeForm, setRecipeForm] = useState({
+    stockItemId: "",
+    quantity: "",
+    unit: "gr" as "kg" | "lt" | "adet" | "gr" | "ml",
+  });
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
+  const [stockSearchTerm, setStockSearchTerm] = useState("");
 
   // Load data
   useEffect(() => {
@@ -429,6 +455,233 @@ export function MenuManagementContent() {
     const updatedExtras = currentExtras.filter((_, i) => i !== index);
     setMenuForm({ ...menuForm, extras: updatedExtras });
   };
+
+  // Recipe management handlers
+  const handleOpenRecipeModal = async (menu: Menu) => {
+    const effectiveCompanyId = companyId || userData?.companyId;
+    const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+    if (!effectiveCompanyId) {
+      customAlert("Şirket bilgisi bulunamadı", "Hata", "error");
+      return;
+    }
+
+    try {
+      setSelectedMenuForRecipe(menu);
+      setRecipeForm({
+        stockItemId: "",
+        quantity: "",
+        unit: "gr",
+      });
+      setStockSearchTerm("");
+      setEditingRecipe(null);
+
+      // Load recipes and stocks (sadece hammaddeleri göster)
+      const [recipesData, stocksData] = await Promise.all([
+        getRecipesByMenuId(effectiveCompanyId, menu.id!, effectiveBranchId),
+        getAllStocksByCompany(effectiveCompanyId, effectiveBranchId),
+      ]);
+
+      setRecipes(recipesData);
+      // Sadece hammadde olan ve fiyat/birim bilgisi olan stokları göster
+      setStocks(
+        stocksData.filter(
+          (s) =>
+            s.isActive &&
+            s.isIngredient &&
+            s.lastPurchasePrice &&
+            s.baseUnit
+        )
+      );
+      setShowRecipeModal(true);
+    } catch (error) {
+      customAlert("Reçete verileri yüklenirken hata oluştu", "Hata", "error");
+    }
+  };
+
+  const handleSaveRecipe = async () => {
+    if (!selectedMenuForRecipe) return;
+
+    const effectiveCompanyId = companyId || userData?.companyId;
+    const effectiveBranchId = branchId || userData?.assignedBranchId;
+
+    if (!effectiveCompanyId || !recipeForm.stockItemId || !recipeForm.quantity) {
+      customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
+      return;
+    }
+
+    const quantity = parseFloat(recipeForm.quantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      customAlert("Miktar geçerli bir sayı olmalıdır", "Uyarı", "warning");
+      return;
+    }
+
+    try {
+      const selectedStock = stocks.find((s) => s.id === recipeForm.stockItemId);
+      if (!selectedStock) {
+        customAlert("Stok bulunamadı", "Hata", "error");
+        return;
+      }
+
+      if (editingRecipe) {
+        // Update existing recipe
+        await updateRecipe(editingRecipe.id!, {
+          stockItemId: recipeForm.stockItemId,
+          stockItemName: selectedStock.name,
+          quantity,
+          unit: recipeForm.unit,
+        });
+        customAlert("Reçete güncellendi", "Başarılı", "success");
+      } else {
+        // Add new recipe
+        await addRecipe({
+          companyId: effectiveCompanyId,
+          branchId: effectiveBranchId || undefined,
+          menuId: selectedMenuForRecipe.id!,
+          menuName: selectedMenuForRecipe.name,
+          stockItemId: recipeForm.stockItemId,
+          stockItemName: selectedStock.name,
+          quantity,
+          unit: recipeForm.unit,
+          isActive: true,
+        });
+        customAlert("Reçete eklendi", "Başarılı", "success");
+      }
+
+      // Reload recipes
+      const recipesData = await getRecipesByMenuId(
+        effectiveCompanyId,
+        selectedMenuForRecipe.id!,
+        effectiveBranchId
+      );
+      setRecipes(recipesData);
+
+      // Otomatik maliyet hesapla ve menüye kaydet
+      await updateMenuCost(
+        effectiveCompanyId,
+        selectedMenuForRecipe.id!,
+        effectiveBranchId
+      );
+
+      // Reset form
+      setRecipeForm({
+        stockItemId: "",
+        quantity: "",
+        unit: "gr",
+      });
+      setStockSearchTerm("");
+      setEditingRecipe(null);
+    } catch (error) {
+      customAlert("Reçete kaydedilirken hata oluştu", "Hata", "error");
+    }
+  };
+
+  const handleEditRecipe = (recipe: Recipe) => {
+    setEditingRecipe(recipe);
+    setRecipeForm({
+      stockItemId: recipe.stockItemId,
+      quantity: recipe.quantity.toString(),
+      unit: recipe.unit,
+    });
+    setStockSearchTerm(recipe.stockItemName || "");
+  };
+
+  const handleDeleteRecipe = async (recipe: Recipe) => {
+    if (!confirm("Bu reçete öğesini silmek istediğinizden emin misiniz?")) {
+      return;
+    }
+
+    try {
+      await deleteRecipe(recipe.id!);
+
+      // Reload recipes
+      if (selectedMenuForRecipe) {
+        const effectiveCompanyId = companyId || userData?.companyId;
+        const effectiveBranchId = branchId || userData?.assignedBranchId;
+        const recipesData = await getRecipesByMenuId(
+          effectiveCompanyId!,
+          selectedMenuForRecipe.id!,
+          effectiveBranchId
+        );
+        setRecipes(recipesData);
+
+        // Otomatik maliyet hesapla ve menüye kaydet
+        await updateMenuCost(
+          effectiveCompanyId!,
+          selectedMenuForRecipe.id!,
+          effectiveBranchId
+        );
+      }
+
+      customAlert("Reçete silindi", "Başarılı", "success");
+    } catch (error) {
+      customAlert("Reçete silinirken hata oluştu", "Hata", "error");
+    }
+  };
+
+  // Otomatik maliyet hesaplama ve menüye kaydetme fonksiyonu
+  const updateMenuCost = async (
+    companyId: string,
+    menuId: string,
+    branchId?: string
+  ) => {
+    try {
+      // Reçeteleri ve stokları yükle
+      const [recipesData, stocksData] = await Promise.all([
+        getRecipesByMenuId(companyId, menuId, branchId),
+        getAllStocksByCompany(companyId, branchId),
+      ]);
+
+      // Sadece aktif reçeteleri kullan
+      const activeRecipes = recipesData.filter((r) => r.isActive);
+
+      // Maliyeti hesapla
+      const calculatedCost = calculateMenuCost(
+        activeRecipes.map((r) => ({
+          stockItemId: r.stockItemId,
+          quantity: r.quantity,
+          unit: r.unit,
+        })),
+        stocksData
+      );
+
+      // Menüyü güncelle (maliyet bilgisini kaydet)
+      await updateMenu(menuId, {
+        cost: calculatedCost > 0 ? calculatedCost : undefined,
+      });
+
+      // Menü listesini güncelle (UI'da görünmesi için)
+      setMenus((prevMenus) =>
+        prevMenus.map((m) =>
+          m.id === menuId ? { ...m, cost: calculatedCost > 0 ? calculatedCost : undefined } : m
+        )
+      );
+    } catch (error) {
+      console.error("Maliyet hesaplama hatası:", error);
+      // Hata olsa bile devam et, kullanıcıya gösterme
+    }
+  };
+
+  // Filter stocks for search (sadece hammaddeleri göster)
+  const filteredStocksForRecipe = stocks.filter(
+    (stock) =>
+      stock.isIngredient &&
+      stock.name.toLowerCase().includes(stockSearchTerm.toLowerCase())
+  );
+
+  // Calculate menu cost (sadece aktif reçeteler için)
+  const menuCost = selectedMenuForRecipe
+    ? calculateMenuCost(
+        recipes
+          .filter((r) => r.isActive)
+          .map((r) => ({
+            stockItemId: r.stockItemId,
+            quantity: r.quantity,
+            unit: r.unit,
+          })),
+        stocks
+      )
+    : 0;
 
   const handleDeleteMenu = async (menu: Menu) => {
     const effectiveBranchId = branchId || userData?.assignedBranchId;
@@ -849,17 +1102,34 @@ export function MenuManagementContent() {
                   </p>
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                    ₺{menu.price.toFixed(2)}
-                  </p>
+                  <div className="flex flex-col">
+                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                      ₺{menu.price.toFixed(2)}
+                    </p>
+                    {menu.cost !== undefined && menu.cost > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Maliyet: ₺{menu.cost.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex gap-1">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleEditMenu(menu)}
                       className="h-6 w-6 p-0"
+                      title="Düzenle"
                     >
                       <Edit className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenRecipeModal(menu)}
+                      className="h-6 w-6 p-0"
+                      title="Reçete Düzenle"
+                    >
+                      <ChefHat className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="outline"
@@ -1502,6 +1772,282 @@ export function MenuManagementContent() {
                   <Save className="h-4 w-4" />
                   Kaydet
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recipe Management Modal */}
+      {showRecipeModal && selectedMenuForRecipe && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Reçete Düzenle
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {selectedMenuForRecipe.name}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRecipeModal(false);
+                  setSelectedMenuForRecipe(null);
+                  setEditingRecipe(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Menu Cost Display */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Toplam Maliyet:
+                  </span>
+                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                    ₺{menuCost.toFixed(2)}
+                  </span>
+                </div>
+                {selectedMenuForRecipe.price > 0 && (
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      Satış Fiyatı:
+                    </span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      ₺{selectedMenuForRecipe.price.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {menuCost > 0 && selectedMenuForRecipe.price > 0 && (
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      Kar Marjı:
+                    </span>
+                    <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                      ₺{(selectedMenuForRecipe.price - menuCost).toFixed(2)} (
+                      {(
+                        ((selectedMenuForRecipe.price - menuCost) /
+                          selectedMenuForRecipe.price) *
+                        100
+                      ).toFixed(1)}
+                      %)
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Recipe Form */}
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {editingRecipe ? "Reçete Düzenle" : "Yeni Hammadde Ekle"}
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Hammadde *
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        value={stockSearchTerm}
+                        onChange={(e) => setStockSearchTerm(e.target.value)}
+                        placeholder="Hammadde ara..."
+                        className="pl-10 bg-white dark:bg-gray-700 mb-2"
+                      />
+                    </div>
+                    <div className="max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                      {filteredStocksForRecipe.length > 0 ? (
+                        filteredStocksForRecipe
+                          .filter((stock) => stock.isIngredient) // Sadece hammaddeleri göster
+                          .map((stock) => (
+                          <div
+                            key={stock.id}
+                            onClick={() => {
+                              setRecipeForm({
+                                ...recipeForm,
+                                stockItemId: stock.id!,
+                              });
+                              setStockSearchTerm(stock.name);
+                            }}
+                            className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                              recipeForm.stockItemId === stock.id
+                                ? "bg-blue-100 dark:bg-blue-900/30"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {stock.name}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {stock.baseUnit && stock.lastPurchasePrice
+                                    ? `₺${stock.lastPurchasePrice.toFixed(2)} / ${getUnitDisplayName(stock.baseUnit)}`
+                                    : "Fiyat bilgisi yok"}
+                                </p>
+                              </div>
+                              {recipeForm.stockItemId === stock.id && (
+                                <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 text-center">
+                          {stocks.filter((s) => s.isIngredient).length === 0
+                            ? "Reçete için uygun hammadde bulunamadı (Hammadde olarak işaretlenmiş ve alış fiyatı/birim bilgisi olan stoklar gösterilir)"
+                            : "Hammadde bulunamadı"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Miktar *
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={recipeForm.quantity}
+                        onChange={(e) =>
+                          setRecipeForm({
+                            ...recipeForm,
+                            quantity: e.target.value,
+                          })
+                        }
+                        className="bg-white dark:bg-gray-700"
+                        placeholder="Örn: 150"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Birim *
+                      </label>
+                      <select
+                        value={recipeForm.unit}
+                        onChange={(e) =>
+                          setRecipeForm({
+                            ...recipeForm,
+                            unit: e.target.value as
+                              | "kg"
+                              | "lt"
+                              | "adet"
+                              | "gr"
+                              | "ml",
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        <option value="gr">Gram (gr)</option>
+                        <option value="kg">Kilogram (kg)</option>
+                        <option value="ml">Mililitre (ml)</option>
+                        <option value="lt">Litre (lt)</option>
+                        <option value="adet">Adet</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-2">
+                    {editingRecipe && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingRecipe(null);
+                          setRecipeForm({
+                            stockItemId: "",
+                            quantity: "",
+                            unit: "gr",
+                          });
+                          setStockSearchTerm("");
+                        }}
+                      >
+                        İptal
+                      </Button>
+                    )}
+                    <Button onClick={handleSaveRecipe} className="flex items-center gap-2">
+                      <Save className="h-4 w-4" />
+                      {editingRecipe ? "Güncelle" : "Ekle"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recipe List */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  Reçete Listesi
+                </h3>
+                {recipes.length > 0 ? (
+                  <div className="space-y-2">
+                    {recipes.map((recipe) => {
+                      const stock = stocks.find(
+                        (s) => s.id === recipe.stockItemId
+                      );
+                      return (
+                        <div
+                          key={recipe.id}
+                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700"
+                        >
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {recipe.stockItemName || "Bilinmeyen Hammadde"}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {recipe.quantity} {getUnitDisplayName(recipe.unit)}
+                              {stock?.lastPurchasePrice &&
+                                stock?.baseUnit && (
+                                  <>
+                                    {" • "}
+                                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                                      ₺
+                                      {calculateIngredientCost(
+                                        recipe.quantity,
+                                        recipe.unit,
+                                        stock.lastPurchasePrice,
+                                        stock.baseUnit,
+                                        stock.wastePercentage
+                                      ).toFixed(2)}
+                                    </span>
+                                  </>
+                                )}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditRecipe(recipe)}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteRecipe(recipe)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    Henüz reçete eklenmemiş
+                  </div>
+                )}
               </div>
             </div>
           </div>

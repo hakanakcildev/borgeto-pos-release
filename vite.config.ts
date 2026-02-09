@@ -97,7 +97,7 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
   },
-  base: "./", // Use relative paths for Electron
+  base: "./", // Electron production (file://) için relative path
   build: {
     outDir: "dist",
     emptyOutDir: true,

@@ -69,7 +69,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
+    // İlk yüklemede hemen localStorage'dan oku
     loadSessionAuth();
+    
+    // Firebase auth state change listener'ı da başlat ama loading'i engelleme
+    // Çünkü Firebase auth async olabilir ama localStorage'dan okuma hızlı
   }, []);
 
   // Listen for storage changes (when login happens in another tab/window)
@@ -104,6 +108,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    // Firebase auth state change listener'ı başlat
+    // NOT: Bu listener loading state'ini etkilememeli çünkü localStorage'dan okuma zaten yapıldı
     const unsubscribe = onAuthStateChange(async (user) => {
       setCurrentUser(user);
 
@@ -146,7 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
 
     return unsubscribe;
-  }, []);
+  }, []); // Sadece mount'ta çalış - loading dependency kaldırıldı (sonsuz loop önleme)
 
   // Branch bilgisini yükle (branchId varsa ama branchData yoksa)
   useEffect(() => {

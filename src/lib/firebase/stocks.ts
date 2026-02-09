@@ -12,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Stock, StockMovement } from "./types";
+import { getRecipesByMenuId } from "./recipes";
+import { convertUnit } from "../utils/recipeUtils";
 
 const STOCKS_COLLECTION = "stocks";
 const STOCK_MOVEMENTS_COLLECTION = "stockMovements";
@@ -323,6 +325,7 @@ export const addStockMovement = async (
 };
 
 // Decrease stock when order is closed (called from order close)
+// Reçete sistemi: Menü ürünü satıldığında, reçetesindeki hammaddeler stoktan düşülür
 export const decreaseStockOnOrderClose = async (
   companyId: string,
   orderItems: Array<{ menuId: string; quantity: number }>,
@@ -337,38 +340,109 @@ export const decreaseStockOnOrderClose = async (
       menuQuantities.set(item.menuId, current + item.quantity);
     });
 
-    // For each menu item, find associated stock and decrease
-    for (const [menuId, quantity] of menuQuantities.entries()) {
-      const stock = await getStockByMenuId(companyId, menuId, branchId);
+    // For each menu item, process recipe-based stock decrease
+    for (const [menuId, menuQuantity] of menuQuantities.entries()) {
+      // Get recipes for this menu item
+      const recipes = await getRecipesByMenuId(companyId, menuId, branchId);
       
-      if (!stock || !stock.isActive) {
-        continue;
-      }
-      
-      // Decrease by quantity (items are already in item count)
-      const newQuantity = Math.max(0, stock.currentQuantity - quantity);
-      
-      await updateStock(stock.id!, {
-        currentQuantity: newQuantity,
-      });
+      if (recipes.length > 0) {
+        // Reçete sistemi: Reçetedeki hammaddeleri stoktan düş
+        for (const recipe of recipes) {
+          if (!recipe.isActive || !recipe.stockItemId) {
+            continue;
+          }
+          
+          const stock = await getStock(recipe.stockItemId);
+          
+          if (!stock || !stock.isActive) {
+            continue;
+          }
+          
+          // Reçetedeki miktarı menü miktarı ile çarp
+          const totalRecipeQuantity = recipe.quantity * menuQuantity;
+          
+          // Birim dönüştürmesi yap (reçetedeki birim -> stok birimi)
+          // Stok birimi baseUnit'dir (veya adet cinsinden)
+          let quantityToDecrease = totalRecipeQuantity;
+          
+          if (stock.baseUnit && recipe.unit !== "adet") {
+            try {
+              // Reçetedeki birimi stok birimine dönüştür
+              // Eğer stok baseUnit olarak kg tutuluyorsa ve reçete gr kullanıyorsa, dönüştür
+              quantityToDecrease = convertUnit(
+                totalRecipeQuantity,
+                recipe.unit,
+                stock.baseUnit
+              );
+            } catch (error) {
+              // Birim dönüştürme hatası, adet cinsinden düş
+              console.warn(
+                `Birim dönüştürme hatası (${recipe.unit} -> ${stock.baseUnit}):`,
+                error
+              );
+              // Adet cinsinden devam et (eski sistemle uyumluluk)
+            }
+          }
+          
+          // Stoktan düş (adet cinsinden)
+          // Not: currentQuantity her zaman adet cinsindendir
+          // baseUnit sadece alış fiyatı için kullanılır
+          const newQuantity = Math.max(0, stock.currentQuantity - quantityToDecrease);
+          
+          await updateStock(stock.id!, {
+            currentQuantity: newQuantity,
+          });
 
-      // Add movement record
-      await addStockMovement(
-        {
-          companyId: stock.companyId,
-          branchId: stock.branchId,
-          stockId: stock.id!,
-          type: "out",
-          quantity: quantity,
-          unitType: "item", // Satışta her zaman adet cinsinden
-          reason: "Satış",
-          createdBy: createdBy || "",
-        },
-        false // Don't update quantity again, we already did it
-      );
+          // Add movement record
+          await addStockMovement(
+            {
+              companyId: stock.companyId,
+              branchId: stock.branchId,
+              stockId: stock.id!,
+              type: "out",
+              quantity: quantityToDecrease,
+              unitType: "item", // Stok hareketi her zaman adet cinsinden
+              reason: `Satış (Reçete: ${recipe.menuName || menuId})`,
+              notes: `${menuQuantity} adet × ${recipe.quantity} ${recipe.unit} = ${quantityToDecrease} adet`,
+              createdBy: createdBy || "",
+            },
+            false // Don't update quantity again, we already did it
+          );
+        }
+      } else {
+        // Eski sistem: Birebir eşleşme (menuId ile stok eşleşmesi)
+        const stock = await getStockByMenuId(companyId, menuId, branchId);
+        
+        if (!stock || !stock.isActive) {
+          continue;
+        }
+        
+        // Decrease by quantity (items are already in item count)
+        const newQuantity = Math.max(0, stock.currentQuantity - menuQuantity);
+        
+        await updateStock(stock.id!, {
+          currentQuantity: newQuantity,
+        });
+
+        // Add movement record
+        await addStockMovement(
+          {
+            companyId: stock.companyId,
+            branchId: stock.branchId,
+            stockId: stock.id!,
+            type: "out",
+            quantity: menuQuantity,
+            unitType: "item", // Satışta her zaman adet cinsinden
+            reason: "Satış (Eski sistem - Birebir eşleşme)",
+            createdBy: createdBy || "",
+          },
+          false // Don't update quantity again, we already did it
+        );
+      }
     }
   } catch (error) {
     // Don't throw error - stock update shouldn't block order closing
+    console.error("Stok düşümü hatası:", error);
   }
 };
 

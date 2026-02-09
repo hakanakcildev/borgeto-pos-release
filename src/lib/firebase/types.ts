@@ -71,6 +71,7 @@ export interface Menu {
   image?: string;
   video?: string;
   price: number;
+  cost?: number; // Otomatik hesaplanan maliyet (reçete sisteminden)
   category: string;
   isAvailable: boolean;
   ingredients?: string[];
@@ -375,10 +376,30 @@ export interface Stock {
   minQuantity: number; // Minimum stok seviyesi (adet cinsinden, uyarı için)
   maxQuantity?: number; // Maksimum stok seviyesi (adet cinsinden, opsiyonel)
   category?: string; // Kategori (opsiyonel, menü kategorileriyle ilişkilendirilebilir)
-  menuId: string; // İlişkili menü ID'si (zorunlu, hangi menü ürünüyle eşleştiği)
+  menuId: string; // İlişkili menü ID'si (zorunlu, hangi menü ürünüyle eşleştiği - eski sistem için, reçete sistemi için opsiyonel)
   menuName?: string; // İlişkili menü adı (snapshot)
   cost?: number; // Birim maliyet (opsiyonel)
+  lastPurchasePrice?: number; // Son alış fiyatı (reçete sistemi için)
+  baseUnit?: "kg" | "lt" | "adet" | "gr" | "ml"; // Temel birim (reçete sistemi için)
+  wastePercentage?: number; // Fire yüzdesi (0-100 arası, opsiyonel)
+  isIngredient?: boolean; // Hammadde mi? (reçete sistemi için)
   location?: string; // Depo konumu (opsiyonel)
+  isActive: boolean; // Aktif mi?
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Reçete (Recipe) - Menü ürünü ile hammaddeler arasındaki ilişki
+export interface Recipe {
+  id?: string;
+  companyId: string;
+  branchId?: string;
+  menuId: string; // Hangi menü ürünü için reçete
+  menuName?: string; // Menü adı (snapshot)
+  stockItemId: string; // Hangi hammadde
+  stockItemName?: string; // Hammadde adı (snapshot)
+  quantity: number; // Miktar
+  unit: "kg" | "lt" | "adet" | "gr" | "ml"; // Birim
   isActive: boolean; // Aktif mi?
   createdAt: Date;
   updatedAt: Date;

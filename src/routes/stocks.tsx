@@ -67,6 +67,10 @@ function StockManagementContent() {
     itemsPerPackage: "",
     currentQuantity: "",
     menuId: "",
+    lastPurchasePrice: "", // Son alış fiyatı (reçete sistemi için)
+    baseUnit: "kg" as "kg" | "lt" | "adet" | "gr" | "ml", // Temel birim (reçete sistemi için)
+    wastePercentage: "", // Fire yüzdesi (opsiyonel)
+    isIngredient: false, // Hammadde mi? (reçete sistemi için)
   });
   const [menuSearchTerm, setMenuSearchTerm] = useState("");
 
@@ -161,6 +165,10 @@ function StockManagementContent() {
       itemsPerPackage: "",
       currentQuantity: "",
       menuId: "",
+      lastPurchasePrice: "",
+      baseUnit: "kg",
+      wastePercentage: "",
+      isIngredient: false,
     });
     setMenuSearchTerm("");
     setShowStockForm(true);
@@ -229,6 +237,40 @@ function StockManagementContent() {
       const menuName = selectedMenu?.name;
       const category = selectedMenu?.category;
 
+      // Alış fiyatı ve fire yüzdesi (opsiyonel)
+      const lastPurchasePrice = stockForm.lastPurchasePrice
+        ? parseFloat(stockForm.lastPurchasePrice)
+        : undefined;
+      const wastePercentage = stockForm.wastePercentage
+        ? parseFloat(stockForm.wastePercentage)
+        : undefined;
+
+      if (
+        lastPurchasePrice !== undefined &&
+        (isNaN(lastPurchasePrice) || lastPurchasePrice < 0)
+      ) {
+        customAlert(
+          "Alış fiyatı geçerli bir sayı olmalıdır",
+          "Uyarı",
+          "warning"
+        );
+        return;
+      }
+
+      if (
+        wastePercentage !== undefined &&
+        (isNaN(wastePercentage) ||
+          wastePercentage < 0 ||
+          wastePercentage > 100)
+      ) {
+        customAlert(
+          "Fire yüzdesi 0-100 arasında olmalıdır",
+          "Uyarı",
+          "warning"
+        );
+        return;
+      }
+
       const stockData: Omit<Stock, "id" | "createdAt" | "updatedAt"> = {
         companyId: effectiveCompanyId,
         branchId: effectiveBranchId || undefined,
@@ -240,6 +282,10 @@ function StockManagementContent() {
         category: category || undefined,
         menuId: stockForm.menuId,
         menuName,
+        lastPurchasePrice,
+        baseUnit: stockForm.baseUnit,
+        wastePercentage,
+        isIngredient: stockForm.isIngredient,
         isActive: true,
       };
 
@@ -757,7 +803,7 @@ function StockManagementContent() {
       {/* Stock Form Modal */}
       {showStockForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 Yeni Stok Ekle
@@ -902,6 +948,118 @@ function StockManagementContent() {
                   className="bg-white dark:bg-gray-700"
                   placeholder="0"
                 />
+              </div>
+
+              {/* Reçete Sistemi Alanları */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  Reçete Sistemi (Opsiyonel)
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Bu alanları doldurursanız, bu hammadde reçete sisteminde
+                  kullanılabilir ve maliyet hesaplamaları yapılabilir.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Son Alış Fiyatı (₺)
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={stockForm.lastPurchasePrice}
+                      onChange={(e) =>
+                        setStockForm({
+                          ...stockForm,
+                          lastPurchasePrice: e.target.value,
+                        })
+                      }
+                      className="bg-white dark:bg-gray-700"
+                      placeholder="Örn: 25.50"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Temel birim başına alış fiyatı (kg/lt/adet başına)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Temel Birim *
+                    </label>
+                    <select
+                      value={stockForm.baseUnit}
+                      onChange={(e) =>
+                        setStockForm({
+                          ...stockForm,
+                          baseUnit: e.target.value as
+                            | "kg"
+                            | "lt"
+                            | "adet"
+                            | "gr"
+                            | "ml",
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="kg">Kilogram (kg)</option>
+                      <option value="gr">Gram (gr)</option>
+                      <option value="lt">Litre (lt)</option>
+                      <option value="ml">Mililitre (ml)</option>
+                      <option value="adet">Adet</option>
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Stokta hangi birimle tutulduğu (reçetede farklı birim
+                      kullanılabilir)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Fire Yüzdesi (%)
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={stockForm.wastePercentage}
+                      onChange={(e) =>
+                        setStockForm({
+                          ...stockForm,
+                          wastePercentage: e.target.value,
+                        })
+                      }
+                      className="bg-white dark:bg-gray-700"
+                      placeholder="Örn: 10 (fire için)"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Fire yüzdesi (0-100 arası, opsiyonel)
+                    </p>
+                  </div>
+
+                  <div className="flex items-center pt-2">
+                    <input
+                      type="checkbox"
+                      id="isIngredient"
+                      checked={stockForm.isIngredient}
+                      onChange={(e) =>
+                        setStockForm({
+                          ...stockForm,
+                          isIngredient: e.target.checked,
+                        })
+                      }
+                      className="mr-2"
+                    />
+                    <label
+                      htmlFor="isIngredient"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      Hammadde (Reçete sisteminde kullanılabilir)
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-2 justify-end pt-4">

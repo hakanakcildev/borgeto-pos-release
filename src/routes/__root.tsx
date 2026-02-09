@@ -121,27 +121,36 @@ function RootComponent() {
     });
 
     // CRITICAL FIX: Eğer route bulunamadıysa ve auth loading bittiyse, login'e veya ana sayfaya yönlendir
+    // Ama router'ın hazır olmasını bekle
     if (!authLoading && router?.state) {
       const matchesCount = router.state.matches.length;
       const currentPath = location.pathname;
 
       // Eğer hiç match yoksa ve pathname geçerli değilse
+      // Ama router'ın biraz daha hazır olmasını bekle (route'lar yüklenene kadar)
       if (matchesCount === 0 && currentPath !== "/auth/login") {
-        console.warn("⚠️ Route bulunamadı, yönlendirme yapılıyor...", {
-          pathname: currentPath,
-          isAuthenticated,
-        });
+        // Router'ın route'ları yüklemesi için kısa bir süre bekle
+        const timer = setTimeout(() => {
+          if (router?.state && router.state.matches.length === 0) {
+            console.warn("⚠️ Route bulunamadı, yönlendirme yapılıyor...", {
+              pathname: currentPath,
+              isAuthenticated,
+            });
 
-        // Auth durumuna göre yönlendir
-        if (isAuthenticated) {
-          navigate({
-            to: "/",
-            replace: true,
-            search: { area: undefined, activeOnly: false },
-          });
-        } else {
-          navigate({ to: "/auth/login", replace: true });
-        }
+            // Auth durumuna göre yönlendir
+            if (isAuthenticated) {
+              navigate({
+                to: "/",
+                replace: true,
+                search: { area: undefined, activeOnly: false },
+              });
+            } else {
+              navigate({ to: "/auth/login", replace: true });
+            }
+          }
+        }, 100);
+
+        return () => clearTimeout(timer);
       }
     }
   }, [location.pathname, authLoading, isAuthenticated, router, navigate]);
@@ -149,13 +158,7 @@ function RootComponent() {
   // ÖNEMLİ: Eğer auth loading çok uzun sürerse, router'ın çalışmasını engelleme
   // Router'ın kendi mekanizmasına güven - auth loading bitmeden de çalışabilir
 
-  // ÖNEMLİ: Her zaman render et - loading state'i render'ı engellemesin
-  console.log("🎨 RootComponent rendering, Outlet çalışıyor mu?", {
-    hasRouter: !!router,
-    hasState: !!router?.state,
-    matchesCount: router?.state?.matches?.length || 0,
-  });
-
+  // Her zaman Outlet'i render et - loading ile bloklamayı kaldırdık (beyaz ekran sorunu)
   return (
     <>
       <NetworkStatus />
