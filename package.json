@@ -1,6 +1,6 @@
 {
   "name": "borgeto-pos-electron",
-  "version": "2.0.99",
+  "version": "2.0.117",
   "description": "Borgeto POS - Electron Desktop Application",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "build:win:minor": "node scripts/build.cjs --win --minor",
     "build:win:major": "node scripts/build.cjs --win --major",
     "build:electron": "npm run build && electron-builder",
-    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5174 && electron .\"",
     "electron:build": "npm run build:electron",
     "start": "electron-forge start",
     "package": "electron-forge package",

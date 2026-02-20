@@ -52,9 +52,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const posAuthStr = localStorage.getItem("posAuth");
         if (posAuthStr) {
           const posAuth = JSON.parse(posAuthStr);
+          let branchIdValue = posAuth.branchId;
+          if (posAuth.user && !branchIdValue) {
+            branchIdValue = posAuth.user.assignedBranchId || posAuth.user.id || null;
+            if (branchIdValue) {
+              posAuth.branchId = branchIdValue;
+              localStorage.setItem("posAuth", JSON.stringify(posAuth));
+            }
+          }
           setAuthType(posAuth.type);
           setCompanyId(posAuth.companyId);
-          setBranchId(posAuth.branchId);
+          setBranchId(branchIdValue || null);
           setUserData(posAuth.user || null);
           setBranchData(posAuth.branch || null);
           setCompanyData(posAuth.company || null);
@@ -131,9 +139,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (posAuthStr) {
           try {
             const posAuth = JSON.parse(posAuthStr);
+            let branchIdValue = posAuth.branchId;
+            if (posAuth.user && !branchIdValue) {
+              branchIdValue = posAuth.user.assignedBranchId || posAuth.user.id || null;
+              if (branchIdValue) {
+                posAuth.branchId = branchIdValue;
+                localStorage.setItem("posAuth", JSON.stringify(posAuth));
+              }
+            }
             setAuthType(posAuth.type);
             setCompanyId(posAuth.companyId);
-            setBranchId(posAuth.branchId);
+            setBranchId(branchIdValue || null);
             setUserData(posAuth.user || null);
             setBranchData(posAuth.branch || null);
             setCompanyData(posAuth.company || null);

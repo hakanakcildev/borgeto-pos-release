@@ -24,6 +24,8 @@ import { MenuManagementContent } from "@/routes/menus";
 import { PaymentMethodsManagementContent } from "@/routes/payment-methods";
 import { UsersManagementContent } from "@/routes/users";
 import { PrintersContent } from "@/routes/printers";
+import { clearOfflineStorage } from "@/lib/offline/offlineStorage";
+import { clearQueue } from "@/lib/offline/offlineQueue";
 
 export const Route = createFileRoute("/settings")({
   component: Settings,
@@ -492,6 +494,31 @@ function SettingsContent({
             </div>
           </button>
         </div>
+      </div>
+
+      {/* Cache Temizleme */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Cache Yönetimi
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Uygulama cache'ini temizleyerek veri senkronizasyon sorunlarını çözebilirsiniz.
+          Bu işlem offline verileri ve bekleyen işlemleri temizler.
+        </p>
+        <button
+          onClick={() => {
+            if (confirm("Cache'i temizlemek istediğinize emin misiniz? Bu işlem offline verileri ve bekleyen işlemleri silecektir.")) {
+              clearOfflineStorage();
+              clearQueue();
+              alert("Cache temizlendi! Sayfa yenilenecek...");
+              window.location.reload();
+            }
+          }}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Cache'i Temizle
+        </button>
       </div>
         </>
       )}

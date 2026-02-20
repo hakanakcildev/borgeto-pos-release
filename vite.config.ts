@@ -94,8 +94,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    strictPort: false,
+    port: 5174,
+    strictPort: true,
   },
   base: "./", // Electron production (file://) için relative path
   build: {

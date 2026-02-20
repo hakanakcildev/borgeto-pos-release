@@ -100,18 +100,22 @@ const calculateStatsFromOrders = (orders: Order[]) => {
   // Ödemesi alınan tüm ürünleri topla
   const allPaidItems = orders.flatMap(getPaidItemsForOrder);
 
-  // Toplam ürün sayısı: Ödemesi alınan tüm ürünler
-  const totalOrders = allPaidItems.reduce(
+  // Satılan ürün adedi (toplam quantity)
+  const totalItemsSold = allPaidItems.reduce(
     (sum, item) => sum + item.quantity,
     0
   );
+
+  // Ödemesi alınan sipariş sayısı
+  const totalOrders = orders.filter(
+    (order) => getPaidItemsForOrder(order).length > 0
+  ).length;
 
   // Toplam satışlar: Ödemesi alınan tüm ödemelerin toplamı (ikramlar hariç)
   let totalRevenue = 0;
   orders.forEach((order) => {
     if (order.payments && order.payments.length > 0) {
       order.payments.forEach((payment) => {
-        // İkram ödemelerini toplam ciraya dahil etme
         if (!payment.isGift) {
           totalRevenue += payment.amount;
         }
@@ -119,13 +123,8 @@ const calculateStatsFromOrders = (orders: Order[]) => {
     }
   });
 
-  // Ödemesi alınan sipariş sayısı (ortalama hesaplamak için)
-  const paidOrderCount = orders.filter(
-    (order) => getPaidItemsForOrder(order).length > 0
-  ).length;
-
   const averageOrderValue =
-    paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
+    totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   // Toplam indirim: Ödemesi alınan siparişlerdeki indirimlerin toplamı
   let totalDiscount = 0;
@@ -161,6 +160,7 @@ const calculateStatsFromOrders = (orders: Order[]) => {
 
   return {
     totalOrders,
+    totalItemsSold,
     totalRevenue,
     totalDiscount,
     averageOrderValue,
@@ -209,6 +209,7 @@ export const saveDailyStats = async (
     const statsData: Partial<SalesStats> = {
       companyId,
       branchId,
+      createdBy: branchId ?? undefined,
       date,
       period: "daily",
       ...stats,
@@ -268,6 +269,7 @@ export const saveWeeklyStats = async (
     const statsData: Partial<SalesStats> = {
       companyId,
       branchId,
+      createdBy: branchId ?? undefined,
       date: weekStartDate,
       period: "weekly",
       ...stats,
@@ -325,6 +327,7 @@ export const saveMonthlyStats = async (
     const statsData: Partial<SalesStats> = {
       companyId,
       branchId,
+      createdBy: branchId ?? undefined,
       date: monthDate,
       period: "monthly",
       ...stats,
@@ -406,42 +409,56 @@ export const updateStatsOnOrderClose = async (
   }
 };
 
-// Tüm istatistikleri temizle
+// Tüm istatistikleri temizle (veritabanından da siler: sales_stats, bills, orders)
 export const clearAllStatistics = async (companyId: string, branchId?: string): Promise<void> => {
-  try {
-    // Önce istatistikleri temizle
-    let statsQuery = query(
-      collection(db, COLLECTION_NAME),
-      where("companyId", "==", companyId)
-    );
+  const statsRef = collection(db, COLLECTION_NAME);
 
-    if (branchId) {
-      statsQuery = query(statsQuery, where("branchId", "==", branchId));
-    }
+  // 1. sales_stats: companyId (+ branchId varsa) ile sil; şube seçiliyse createdBy ile de eşleşenleri sil
+  const statsDocRefs = new Set<string>();
 
-    const statsSnapshot = await getDocs(statsQuery);
-    const deleteStatsPromises = statsSnapshot.docs.map((doc) => deleteDoc(doc.ref));
-    await Promise.all(deleteStatsPromises);
-
-    // Adisyonları temizle (en çok satılan ürünler bills'dan alınıyor)
-    await clearAllBills(companyId, branchId);
-
-    // Sonra tüm kapalı siparişleri temizle
-    const orders = await getOrdersByCompany(companyId, {
-      status: "closed",
-      branchId,
-    });
-
-    const ordersCollection = collection(db, "orders");
-    const deleteOrdersPromises = orders.map((order) => {
-      if (order.id) {
-        return deleteDoc(doc(ordersCollection, order.id));
-      }
-      return Promise.resolve();
-    });
-    await Promise.all(deleteOrdersPromises);
-  } catch (error) {
-    throw error;
+  let statsQuery = query(statsRef, where("companyId", "==", companyId));
+  if (branchId) {
+    statsQuery = query(statsRef, where("companyId", "==", companyId), where("branchId", "==", branchId));
   }
+  const statsSnapshot = await getDocs(statsQuery);
+  statsSnapshot.docs.forEach((d) => statsDocRefs.add(d.id));
+
+  if (branchId) {
+    const byCreatedBy = query(
+      statsRef,
+      where("companyId", "==", companyId),
+      where("createdBy", "==", branchId)
+    );
+    const snapCreatedBy = await getDocs(byCreatedBy);
+    snapCreatedBy.docs.forEach((d) => statsDocRefs.add(d.id));
+  }
+
+  const ordersCollection = collection(db, "orders");
+  await Promise.all(
+    Array.from(statsDocRefs).map((id) => deleteDoc(doc(db, COLLECTION_NAME, id)))
+  );
+
+  // 2. Adisyonları temizle (bills)
+  await clearAllBills(companyId, branchId);
+
+  // 3. Kapalı siparişleri sil
+  let orderIds: Set<string>;
+  if (branchId) {
+    const withBranch = await getOrdersByCompany(companyId, { status: "closed", branchId });
+    const allClosed = await getOrdersByCompany(companyId, { status: "closed" });
+    orderIds = new Set(withBranch.map((o) => o.id).filter((id): id is string => Boolean(id)));
+    allClosed.forEach((o) => {
+      const data = o as Order & { createdBy?: string };
+      if (data.createdBy === branchId || (o as Order).branchId === branchId) {
+        if (o.id) orderIds.add(o.id);
+      }
+    });
+  } else {
+    const orders = await getOrdersByCompany(companyId, { status: "closed" });
+    orderIds = new Set(orders.map((o) => o.id).filter((id): id is string => Boolean(id)));
+  }
+  await Promise.all(
+    Array.from(orderIds).map((id) => deleteDoc(doc(ordersCollection, id)))
+  );
 };
 

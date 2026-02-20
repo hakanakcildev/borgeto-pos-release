@@ -156,7 +156,56 @@ export function getUnitDisplayName(unit: string): string {
     lt: "Litre",
     ml: "Mililitre",
     adet: "Adet",
+    koli: "Koli",
+    paket: "Paket",
   };
 
   return unitNames[unit] || unit;
+}
+
+/**
+ * Stok biriminden temel birimi döndürür (reçete/maliyet için)
+ */
+export function getBaseUnitFromStockUnit(
+  stockUnit: string
+): "kg" | "lt" | "adet" {
+  if (stockUnit === "kg" || stockUnit === "gr") return "kg";
+  if (stockUnit === "lt" || stockUnit === "ml") return "lt";
+  return "adet"; // adet, koli, paket
+}
+
+/**
+ * Kullanıcı birimindeki miktarı temel birim miktarına çevirir (stok girişi için)
+ */
+export function stockQuantityToBase(
+  quantity: number,
+  stockUnit: string,
+  itemsPerPackage: number = 1
+): number {
+  if (stockUnit === "gr") return quantity * 0.001; // gr -> kg
+  if (stockUnit === "kg") return quantity;
+  if (stockUnit === "ml") return quantity * 0.001; // ml -> lt
+  if (stockUnit === "lt") return quantity;
+  if (stockUnit === "adet") return quantity;
+  if (stockUnit === "koli" || stockUnit === "paket")
+    return quantity * itemsPerPackage;
+  return quantity;
+}
+
+/**
+ * Temel birim miktarını stok birimine çevirir (gösterim için)
+ */
+export function baseQuantityToStock(
+  baseQuantity: number,
+  stockUnit: string,
+  itemsPerPackage: number = 1
+): number {
+  if (stockUnit === "gr") return baseQuantity * 1000; // kg -> gr
+  if (stockUnit === "kg") return baseQuantity;
+  if (stockUnit === "ml") return baseQuantity * 1000; // lt -> ml
+  if (stockUnit === "lt") return baseQuantity;
+  if (stockUnit === "adet") return baseQuantity;
+  if (stockUnit === "koli" || stockUnit === "paket")
+    return itemsPerPackage > 0 ? baseQuantity / itemsPerPackage : baseQuantity;
+  return baseQuantity;
 }

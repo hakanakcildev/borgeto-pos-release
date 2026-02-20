@@ -403,7 +403,8 @@ export const updateOrder = async (
 // Update order status
 export const updateOrderStatus = async (
   id: string,
-  status: OrderStatus
+  status: OrderStatus,
+  options?: { branchIdOverride?: string }
 ): Promise<void> => {
   try {
     const updates: Partial<Order> = { status };
@@ -416,8 +417,13 @@ export const updateOrderStatus = async (
       if (!order) {
         throw new Error("Order not found");
       }
+
+      const effectiveBranchId = order.branchId || options?.branchIdOverride;
+      if (!order.branchId && effectiveBranchId) {
+        updates.branchId = effectiveBranchId;
+      }
       
-      // Siparişi önce güncelle (closedAt ile birlikte)
+      // Siparişi güncelle (closedAt, ve gerekirse branchId)
       await updateOrder(id, updates);
       
       // Sonra masayı müsait yap ve currentOrderId'yi temizle
@@ -425,9 +431,9 @@ export const updateOrderStatus = async (
         await updateTableStatus(order.tableId, "available", undefined);
       }
       
-      // İstatistikleri güncelle (güncellenmiş order ile)
-      const updatedOrder = { ...order, ...updates, closedAt: new Date() };
-      await updateStatsOnOrderClose(order.companyId, updatedOrder, order.branchId).catch(() => {
+      // İstatistikleri güncelle (sales_stats'e branchId/createdBy yazılır)
+      const updatedOrder = { ...order, ...updates, closedAt: new Date(), branchId: effectiveBranchId || order.branchId };
+      await updateStatsOnOrderClose(order.companyId, updatedOrder, effectiveBranchId).catch(() => {
         // İstatistik hatası sipariş kapatmayı engellemesin
       });
 
@@ -463,7 +469,7 @@ export const updateOrderStatus = async (
           quantity,
         }));
         
-        await decreaseStockOnOrderClose(order.companyId, orderItems, order.branchId, order.createdBy).catch(() => {
+        await decreaseStockOnOrderClose(order.companyId, orderItems, effectiveBranchId || order.branchId, order.createdBy).catch(() => {
           // Stok hatası sipariş kapatmayı engellemesin
         });
       }

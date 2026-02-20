@@ -13,10 +13,37 @@ import {
 import { db } from "./firebase";
 import type { Stock, StockMovement } from "./types";
 import { getRecipesByMenuId } from "./recipes";
-import { convertUnit } from "../utils/recipeUtils";
+import {
+  convertUnit,
+  getBaseUnitFromStockUnit,
+} from "../utils/recipeUtils";
 
 const STOCKS_COLLECTION = "stocks";
 const STOCK_MOVEMENTS_COLLECTION = "stockMovements";
+
+/** Eski kayıtları yeni birim alanlarına uyumlu hale getirir */
+function normalizeStock(stock: Stock): Stock {
+  const stockUnit =
+    stock.stockUnit ??
+    (stock.packageType === "paket"
+      ? "paket"
+      : stock.packageType === "koli"
+        ? "koli"
+        : "adet");
+  const baseUnit =
+    stock.baseUnit ?? getBaseUnitFromStockUnit(stockUnit);
+  const itemsPerPackage =
+    stock.itemsPerPackage ?? (stock as any).itemsPerPackage ?? 1;
+  return {
+    ...stock,
+    stockUnit,
+    baseUnit,
+    itemsPerPackage:
+      stockUnit === "koli" || stockUnit === "paket" ? itemsPerPackage : undefined,
+    packageType:
+      stockUnit === "koli" ? "koli" : stockUnit === "paket" ? "paket" : stock.packageType,
+  };
+}
 
 // Convert Firestore timestamp to Date
 const convertTimestamp = (data: any) => ({
@@ -83,10 +110,10 @@ export const getAllStocksByCompany = async (
 
     let stocks = querySnapshot.docs.map(
       (doc) =>
-        ({
+        normalizeStock({
           id: doc.id,
           ...convertTimestamp(doc.data()),
-        }) as Stock
+        } as Stock)
     );
 
     // Client-side filtering by branchId if provided
@@ -110,10 +137,10 @@ export const getStock = async (id: string): Promise<Stock | null> => {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      return {
+      return normalizeStock({
         id: docSnap.id,
         ...convertTimestamp(docSnap.data()),
-      } as Stock;
+      } as Stock);
     }
     return null;
   } catch (error) {
@@ -138,13 +165,13 @@ export const getStockByMenuId = async (
 
     let stocks = querySnapshot.docs.map(
       (doc) =>
-        ({
+        normalizeStock({
           id: doc.id,
           ...convertTimestamp(doc.data()),
-        }) as Stock
+        } as Stock)
     );
 
-    // Client-side filtering by menuId
+    // Client-side filtering by menuId (boş menuId eşleşmez)
     stocks = stocks.filter((stock) => stock.menuId === menuId);
 
     // Client-side filtering by branchId if provided
@@ -166,7 +193,8 @@ export const addStock = async (
   stock: Omit<Stock, "id" | "createdAt" | "updatedAt">
 ): Promise<string> => {
   try {
-    const stockData = convertToFirestore(stock);
+    const normalized = normalizeStock(stock as Stock);
+    const stockData = convertToFirestore(normalized);
     const docRef = await addDoc(collection(db, STOCKS_COLLECTION), stockData);
     return docRef.id;
   } catch (error) {
@@ -289,12 +317,14 @@ export const addStockMovement = async (
       if (stock) {
         let quantityToAdd = 0;
         
-        // Calculate quantity based on unitType
+        // Miktar her zaman stokun baseUnit cinsinden (kg, lt veya adet)
         if (movement.unitType === "package") {
-          // Koli/paket cinsinden: quantity * itemsPerPackage
-          quantityToAdd = movement.quantity * stock.itemsPerPackage;
+          // Koli/paket girişi: quantity = koli/paket sayısı, adet = quantity * itemsPerPackage
+          const itemsPerPackage =
+            (stock.itemsPerPackage ?? 0) >= 1 ? stock.itemsPerPackage! : 1;
+          quantityToAdd = movement.quantity * itemsPerPackage;
         } else {
-          // Adet cinsinden: quantity
+          // item: miktar zaten temel birimde (kg, lt veya adet)
           quantityToAdd = movement.quantity;
         }
         

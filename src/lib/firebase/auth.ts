@@ -197,7 +197,7 @@ export const signInWithStaffCredentials = async (
     return {
       user,
       companyId: companyIdString,
-      branchId: user.assignedBranchId,
+      branchId: user.assignedBranchId || user.id,
     };
   } catch (error) {
     throw error;

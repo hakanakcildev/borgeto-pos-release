@@ -294,9 +294,11 @@ export interface SalesStats {
   id?: string;
   companyId: string;
   branchId?: string;
+  createdBy?: string; // Hangi şube/POS hesabından: branchId ile aynı (panel filtre için)
   date: string; // YYYY-MM-DD formatında
   period: "daily" | "weekly" | "monthly"; // Günlük, haftalık, aylık
-  totalOrders: number;
+  totalOrders: number; // Sipariş sayısı
+  totalItemsSold: number; // Satılan ürün adedi (toplam quantity)
   totalRevenue: number;
   totalDiscount: number; // Toplam indirim tutarı
   averageOrderValue: number;
@@ -350,14 +352,27 @@ export interface CustomerAccount {
 // Stok Yönetimi
 export type StockMovementType = "in" | "out" | "adjustment"; // Giriş, Çıkış, Düzeltme
 
+// Stok birimleri: ağırlık, hacim, adet, koli, paket
+export type StockUnit =
+  | "kg"
+  | "gr"
+  | "lt"
+  | "ml"
+  | "adet"
+  | "koli"
+  | "paket";
+
+// Reçete / maliyet hesaplama için temel birim (stok biriminden türetilir)
+export type StockBaseUnit = "kg" | "lt" | "adet";
+
 export interface StockMovement {
   id?: string;
   companyId: string;
   branchId?: string;
   stockId: string; // Hangi stok kalemine ait
   type: StockMovementType; // Giriş, çıkış veya düzeltme
-  quantity: number; // Miktar (pozitif değer)
-  unitType: "package" | "item"; // Koli/paket veya adet
+  quantity: number; // Miktar (temel birim cinsinden: kg, lt veya adet)
+  unitType: "package" | "item"; // package=koli/paket (miktar adet), item=temel birim (kg/lt/adet)
   reason?: string; // Sebep (örn: "Satış", "Alış", "Sayım düzeltmesi")
   notes?: string; // Notlar
   createdBy: string; // Kullanıcı ID'si
@@ -368,23 +383,32 @@ export interface Stock {
   id?: string;
   companyId: string;
   branchId?: string;
-  name: string; // Stok adı (örn: "Domates", "Peynir")
+  name: string; // Stok adı (örn: "Domates", "Süt", "Karpuz")
   description?: string; // Açıklama
-  packageType: "koli" | "paket"; // Koli veya paket
-  itemsPerPackage: number; // 1 kolide/pakette kaç adet ürün var
-  currentQuantity: number; // Mevcut miktar (adet cinsinden)
-  minQuantity: number; // Minimum stok seviyesi (adet cinsinden, uyarı için)
-  maxQuantity?: number; // Maksimum stok seviyesi (adet cinsinden, opsiyonel)
-  category?: string; // Kategori (opsiyonel, menü kategorileriyle ilişkilendirilebilir)
-  menuId: string; // İlişkili menü ID'si (zorunlu, hangi menü ürünüyle eşleştiği - eski sistem için, reçete sistemi için opsiyonel)
-  menuName?: string; // İlişkili menü adı (snapshot)
-  cost?: number; // Birim maliyet (opsiyonel)
-  lastPurchasePrice?: number; // Son alış fiyatı (reçete sistemi için)
-  baseUnit?: "kg" | "lt" | "adet" | "gr" | "ml"; // Temel birim (reçete sistemi için)
-  wastePercentage?: number; // Fire yüzdesi (0-100 arası, opsiyonel)
-  isIngredient?: boolean; // Hammadde mi? (reçete sistemi için)
-  location?: string; // Depo konumu (opsiyonel)
-  isActive: boolean; // Aktif mi?
+  /** Stokun takip edildiği birim: kg, gr, lt, ml, adet, koli, paket */
+  stockUnit: StockUnit;
+  /** Temel birim (reçete/maliyet): kg, lt veya adet. stockUnit'dan türetilir. */
+  baseUnit: StockBaseUnit;
+  /** Sadece stockUnit koli veya paket ise: 1 koli/pakette kaç adet */
+  itemsPerPackage?: number;
+  /** Eski alan: koli/paket seçimi. stockUnit koli ise "koli", paket ise "paket". Geriye uyumluluk için. */
+  packageType?: "koli" | "paket";
+  /** Mevcut miktar (baseUnit cinsinden: kg, lt veya adet) */
+  currentQuantity: number;
+  /** Minimum stok seviyesi (aynı birimde) */
+  minQuantity: number;
+  /** Maksimum stok seviyesi (opsiyonel) */
+  maxQuantity?: number;
+  category?: string;
+  /** İlişkili menü ID'si (opsiyonel; reçete veya satış eşleşmesi için) */
+  menuId?: string;
+  menuName?: string;
+  cost?: number;
+  lastPurchasePrice?: number; // Temel birim başına (baseUnit)
+  wastePercentage?: number;
+  isIngredient?: boolean;
+  location?: string;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

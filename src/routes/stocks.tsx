@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getAllStocksByCompany,
   addStock,
+  updateStock,
   deleteStock,
   addStockMovement,
   getAllStockMovementsByCompany,
@@ -16,8 +17,15 @@ import type {
   Stock,
   StockMovement,
   StockMovementType,
+  StockUnit,
 } from "@/lib/firebase/types";
 import type { Category, Menu } from "@/lib/firebase/types";
+import {
+  getUnitDisplayName,
+  getBaseUnitFromStockUnit,
+  baseQuantityToStock,
+  stockQuantityToBase,
+} from "@/lib/utils/recipeUtils";
 import {
   Plus,
   Trash2,
@@ -60,17 +68,17 @@ function StockManagementContent() {
 
   // Stock form states
   const [showStockForm, setShowStockForm] = useState(false);
-  const [_editingStock, setEditingStock] = useState<Stock | null>(null);
+  const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [stockForm, setStockForm] = useState({
     name: "",
-    packageType: "koli" as "koli" | "paket",
+    stockUnit: "kg" as StockUnit,
     itemsPerPackage: "",
     currentQuantity: "",
+    minQuantity: "",
     menuId: "",
-    lastPurchasePrice: "", // Son alış fiyatı (reçete sistemi için)
-    baseUnit: "kg" as "kg" | "lt" | "adet" | "gr" | "ml", // Temel birim (reçete sistemi için)
-    wastePercentage: "", // Fire yüzdesi (opsiyonel)
-    isIngredient: false, // Hammadde mi? (reçete sistemi için)
+    lastPurchasePrice: "",
+    wastePercentage: "",
+    isIngredient: false,
   });
   const [menuSearchTerm, setMenuSearchTerm] = useState("");
 
@@ -156,21 +164,59 @@ function StockManagementContent() {
     (stock) => stock.isActive && stock.currentQuantity <= stock.minQuantity
   );
 
+  // Stok kartında gösterilecek miktar (stok biriminde)
+  const getDisplayQuantity = (stock: Stock) => {
+    const q = baseQuantityToStock(
+      stock.currentQuantity,
+      stock.stockUnit,
+      stock.itemsPerPackage ?? 1
+    );
+    const unit = getUnitDisplayName(stock.stockUnit);
+    if (stock.stockUnit === "koli" || stock.stockUnit === "paket") {
+      const per = stock.itemsPerPackage ?? 1;
+      return { text: `${q.toFixed(1)} ${unit} (${stock.currentQuantity} adet)`, value: q };
+    }
+    return { text: `${q} ${unit}`, value: q };
+  };
+
   // Stock handlers
   const handleAddStock = () => {
     setEditingStock(null);
     setStockForm({
       name: "",
-      packageType: "koli",
+      stockUnit: "kg",
       itemsPerPackage: "",
       currentQuantity: "",
+      minQuantity: "0",
       menuId: "",
       lastPurchasePrice: "",
-      baseUnit: "kg",
       wastePercentage: "",
       isIngredient: false,
     });
     setMenuSearchTerm("");
+    setShowStockForm(true);
+  };
+
+  const handleEditStock = (stock: Stock) => {
+    setEditingStock(stock);
+    const displayQty = baseQuantityToStock(
+      stock.currentQuantity,
+      stock.stockUnit,
+      stock.itemsPerPackage ?? 1
+    );
+    setStockForm({
+      name: stock.name,
+      stockUnit: stock.stockUnit,
+      itemsPerPackage:
+        stock.itemsPerPackage?.toString() ?? "",
+      currentQuantity: displayQty.toString(),
+      minQuantity: (stock.minQuantity ?? 0).toString(),
+      menuId: stock.menuId ?? "",
+      lastPurchasePrice: stock.lastPurchasePrice?.toString() ?? "",
+      wastePercentage: stock.wastePercentage?.toString() ?? "",
+      isIngredient: stock.isIngredient ?? false,
+    });
+    setMenuSearchTerm(stock.menuName ?? "");
     setShowStockForm(true);
   };
 
@@ -185,113 +231,124 @@ function StockManagementContent() {
     const effectiveCompanyId = companyId || userData?.companyId;
     const effectiveBranchId = branchId || userData?.assignedBranchId;
 
-    // Yeni ürün eklerken menuId zorunlu
-    if (!stockForm.menuId) {
-      customAlert("Lütfen menü ürününü seçin", "Uyarı", "warning");
+    if (!effectiveCompanyId || !stockForm.name.trim()) {
+      customAlert("Lütfen ürün adını girin", "Uyarı", "warning");
       return;
     }
 
-    if (!effectiveCompanyId || !stockForm.name) {
-      customAlert("Lütfen tüm gerekli alanları doldurun", "Uyarı", "warning");
+    const isKoliOrPaket =
+      stockForm.stockUnit === "koli" || stockForm.stockUnit === "paket";
+    const itemsPerPackageNum = isKoliOrPaket
+      ? parseInt(stockForm.itemsPerPackage, 10)
+      : 1;
+
+    if (isKoliOrPaket) {
+      if (
+        !stockForm.itemsPerPackage.trim() ||
+        isNaN(itemsPerPackageNum) ||
+        itemsPerPackageNum < 1
+      ) {
+        customAlert(
+          "Koli/paket için birim başına adet girin (en az 1)",
+          "Uyarı",
+          "warning"
+        );
+        return;
+      }
+    }
+
+    const currentQtyInput = parseFloat(stockForm.currentQuantity);
+    const minQtyInput = parseFloat(stockForm.minQuantity || "0");
+    if (isNaN(currentQtyInput) || currentQtyInput < 0) {
+      customAlert("Mevcut miktar geçerli bir sayı olmalıdır", "Uyarı", "warning");
+      return;
+    }
+    if (isNaN(minQtyInput) || minQtyInput < 0) {
+      customAlert("Minimum miktar geçerli bir sayı olmalıdır", "Uyarı", "warning");
       return;
     }
 
-    if (!stockForm.itemsPerPackage || stockForm.itemsPerPackage.trim() === "") {
+    const baseUnit = getBaseUnitFromStockUnit(stockForm.stockUnit);
+    const currentQuantityBase = stockQuantityToBase(
+      currentQtyInput,
+      stockForm.stockUnit,
+      itemsPerPackageNum
+    );
+    const minQuantityBase = stockQuantityToBase(
+      minQtyInput,
+      stockForm.stockUnit,
+      itemsPerPackageNum
+    );
+
+    const lastPurchasePrice = stockForm.lastPurchasePrice
+      ? parseFloat(stockForm.lastPurchasePrice)
+      : undefined;
+    const wastePercentage = stockForm.wastePercentage
+      ? parseFloat(stockForm.wastePercentage)
+      : undefined;
+
+    if (
+      lastPurchasePrice !== undefined &&
+      (isNaN(lastPurchasePrice) || lastPurchasePrice < 0)
+    ) {
+      customAlert("Alış fiyatı geçerli bir sayı olmalıdır", "Uyarı", "warning");
+      return;
+    }
+    if (
+      wastePercentage !== undefined &&
+      (isNaN(wastePercentage) ||
+        wastePercentage < 0 ||
+        wastePercentage > 100)
+    ) {
       customAlert(
-        "1 kolide/pakette kaç adet olduğunu girin",
+        "Fire yüzdesi 0-100 arasında olmalıdır",
         "Uyarı",
         "warning"
       );
       return;
     }
 
-    if (!stockForm.currentQuantity || stockForm.currentQuantity.trim() === "") {
-      customAlert("Mevcut stok adedini girin", "Uyarı", "warning");
-      return;
-    }
-
-    const itemsPerPackage = parseInt(stockForm.itemsPerPackage);
-    const currentQuantity = parseFloat(stockForm.currentQuantity);
-
-    if (isNaN(itemsPerPackage) || itemsPerPackage < 1) {
-      customAlert(
-        "1 kolide/pakette en az 1 adet olmalıdır",
-        "Uyarı",
-        "warning"
-      );
-      return;
-    }
-
-    if (isNaN(currentQuantity) || currentQuantity < 0) {
-      customAlert(
-        "Mevcut stok adedi geçerli bir sayı olmalıdır",
-        "Uyarı",
-        "warning"
-      );
-      return;
-    }
+    const selectedMenu = stockForm.menuId
+      ? menus.find((m) => m.id === stockForm.menuId)
+      : null;
+    const menuName = selectedMenu?.name;
+    const category = selectedMenu?.category;
 
     try {
-      // Menü adını al
-      const selectedMenu = menus.find((m) => m.id === stockForm.menuId);
-      const menuName = selectedMenu?.name;
-      const category = selectedMenu?.category;
-
-      // Alış fiyatı ve fire yüzdesi (opsiyonel)
-      const lastPurchasePrice = stockForm.lastPurchasePrice
-        ? parseFloat(stockForm.lastPurchasePrice)
-        : undefined;
-      const wastePercentage = stockForm.wastePercentage
-        ? parseFloat(stockForm.wastePercentage)
-        : undefined;
-
-      if (
-        lastPurchasePrice !== undefined &&
-        (isNaN(lastPurchasePrice) || lastPurchasePrice < 0)
-      ) {
-        customAlert(
-          "Alış fiyatı geçerli bir sayı olmalıdır",
-          "Uyarı",
-          "warning"
-        );
-        return;
-      }
-
-      if (
-        wastePercentage !== undefined &&
-        (isNaN(wastePercentage) ||
-          wastePercentage < 0 ||
-          wastePercentage > 100)
-      ) {
-        customAlert(
-          "Fire yüzdesi 0-100 arasında olmalıdır",
-          "Uyarı",
-          "warning"
-        );
-        return;
-      }
-
       const stockData: Omit<Stock, "id" | "createdAt" | "updatedAt"> = {
         companyId: effectiveCompanyId,
         branchId: effectiveBranchId || undefined,
-        name: stockForm.name,
-        packageType: stockForm.packageType,
-        itemsPerPackage,
-        currentQuantity,
-        minQuantity: 0, // Varsayılan
+        name: stockForm.name.trim(),
+        stockUnit: stockForm.stockUnit,
+        baseUnit,
+        itemsPerPackage:
+          stockForm.stockUnit === "koli" || stockForm.stockUnit === "paket"
+            ? itemsPerPackageNum
+            : undefined,
+        packageType:
+          stockForm.stockUnit === "koli"
+            ? "koli"
+            : stockForm.stockUnit === "paket"
+              ? "paket"
+              : undefined,
+        currentQuantity: currentQuantityBase,
+        minQuantity: minQuantityBase,
+        maxQuantity: undefined,
         category: category || undefined,
-        menuId: stockForm.menuId,
+        menuId: stockForm.menuId || undefined,
         menuName,
         lastPurchasePrice,
-        baseUnit: stockForm.baseUnit,
         wastePercentage,
         isIngredient: stockForm.isIngredient,
         isActive: true,
       };
 
-      await addStock(stockData);
+      if (editingStock?.id) {
+        await updateStock(editingStock.id, stockData);
+      } else {
+        await addStock(stockData);
+      }
 
-      // Reload data
       const [stocksData, movementsData] = await Promise.all([
         getAllStocksByCompany(
           effectiveCompanyId,
@@ -308,7 +365,11 @@ function StockManagementContent() {
       setShowStockForm(false);
       setEditingStock(null);
       setMenuSearchTerm("");
-      customAlert("Stok eklendi", "Başarılı", "success");
+      customAlert(
+        editingStock ? "Stok güncellendi" : "Stok eklendi",
+        "Başarılı",
+        "success"
+      );
     } catch (error) {
       customAlert("Stok kaydedilirken bir hata oluştu", "Hata", "error");
     }
@@ -363,30 +424,33 @@ function StockManagementContent() {
       return;
     }
 
-    const quantity = parseFloat(movementForm.quantity);
-    if (isNaN(quantity) || quantity <= 0) {
+    const quantityInput = parseFloat(movementForm.quantity);
+    if (isNaN(quantityInput) || quantityInput <= 0) {
       customAlert("Lütfen geçerli bir miktar girin", "Uyarı", "warning");
       return;
     }
 
-    // Calculate actual quantity based on unitType
-    let actualQuantity = quantity;
-    let finalUnitType = movementForm.unitType;
+    // Kullanıcı girişini temel birime çevir (kg, lt veya adet)
+    const itemsPerPackage =
+      (selectedStockForMovement.itemsPerPackage ?? 0) >= 1
+        ? selectedStockForMovement.itemsPerPackage!
+        : 1;
+    const actualQuantity =
+      movementForm.unitType === "package"
+        ? quantityInput * itemsPerPackage // koli/paket sayısı → adet
+        : stockQuantityToBase(
+            quantityInput,
+            selectedStockForMovement.stockUnit,
+            itemsPerPackage
+          );
 
-    if (movementForm.unitType === "package") {
-      // Koli/paket cinsinden: quantity * itemsPerPackage
-      actualQuantity = quantity * selectedStockForMovement.itemsPerPackage;
-      // quantity artık adet cinsinden olduğu için unitType'ı "item" olarak kaydet
-      finalUnitType = "item";
-    }
-
-    // Check if out movement would result in negative quantity
     if (movementForm.type === "out") {
       const newQuantity =
         selectedStockForMovement.currentQuantity - actualQuantity;
       if (newQuantity < 0) {
+        const disp = getDisplayQuantity(selectedStockForMovement).text;
         customAlert(
-          `Yeterli stok yok. Mevcut stok: ${selectedStockForMovement.currentQuantity} adet`,
+          `Yeterli stok yok. Mevcut: ${disp}`,
           "Uyarı",
           "warning"
         );
@@ -400,8 +464,8 @@ function StockManagementContent() {
         branchId: effectiveBranchId || undefined,
         stockId: selectedStockForMovement.id!,
         type: movementForm.type,
-        quantity: actualQuantity, // Adet cinsinden hesaplanmış miktar
-        unitType: finalUnitType, // Adet cinsinden olduğu için "item"
+        quantity: actualQuantity, // Temel birim cinsinden
+        unitType: "item", // Backend her zaman temel birim kabul ediyor
         reason: movementForm.reason || undefined,
         notes: movementForm.notes || undefined,
         createdBy: userData?.id || "",
@@ -583,19 +647,7 @@ function StockManagementContent() {
                             : "text-blue-600 dark:text-blue-400"
                         }`}
                       >
-                        {stock.currentQuantity} adet
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
-                        {stock.packageType === "koli" ? "Koli" : "Paket"}:
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {Math.floor(
-                          stock.currentQuantity / stock.itemsPerPackage
-                        )}{" "}
-                        {stock.packageType}({stock.itemsPerPackage} adet/
-                        {stock.packageType})
+                        {getDisplayQuantity(stock).text}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -603,16 +655,26 @@ function StockManagementContent() {
                         Min:
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {stock.minQuantity} adet
+                        {baseQuantityToStock(
+                          stock.minQuantity,
+                          stock.stockUnit,
+                          stock.itemsPerPackage ?? 1
+                        )}{" "}
+                        {getUnitDisplayName(stock.stockUnit)}
                       </span>
                     </div>
-                    {stock.maxQuantity && (
+                    {stock.maxQuantity != null && stock.maxQuantity > 0 && (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-600 dark:text-gray-400">
                           Max:
                         </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {stock.maxQuantity} adet
+                          {baseQuantityToStock(
+                            stock.maxQuantity,
+                            stock.stockUnit,
+                            stock.itemsPerPackage ?? 1
+                          )}{" "}
+                          {getUnitDisplayName(stock.stockUnit)}
                         </span>
                       </div>
                     )}
@@ -623,14 +685,25 @@ function StockManagementContent() {
                     )}
                   </div>
 
-                  {stock.cost && (
+                  {(stock.cost != null || stock.lastPurchasePrice != null) && (
                     <div className="mb-2 text-xs text-gray-600 dark:text-gray-400">
-                      Maliyet: ₺{stock.cost.toFixed(2)}/adet
+                      Maliyet: ₺
+                      {(stock.cost ?? stock.lastPurchasePrice ?? 0).toFixed(2)}/
+                      {getUnitDisplayName(stock.baseUnit)}
                     </div>
                   )}
 
                   <div className="flex items-center justify-between gap-1 mt-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-wrap">
+                      <Button
+                        size="sm"
+                        onClick={() => handleEditStock(stock)}
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        title="Düzenle"
+                      >
+                        Düzenle
+                      </Button>
                       <Button
                         size="sm"
                         onClick={() => {
@@ -638,7 +711,11 @@ function StockManagementContent() {
                           setMovementForm({
                             type: "in",
                             quantity: "",
-                            unitType: "package",
+                            unitType:
+                              stock.stockUnit === "koli" ||
+                              stock.stockUnit === "paket"
+                                ? "package"
+                                : "item",
                             reason: "",
                             notes: "",
                           });
@@ -657,7 +734,11 @@ function StockManagementContent() {
                           setMovementForm({
                             type: "out",
                             quantity: "",
-                            unitType: "package",
+                            unitType:
+                              stock.stockUnit === "koli" ||
+                              stock.stockUnit === "paket"
+                                ? "package"
+                                : "item",
                             reason: "",
                             notes: "",
                           });
@@ -669,15 +750,15 @@ function StockManagementContent() {
                         <ArrowDown className="h-3 w-3 mr-1" />
                         Çıkar
                       </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleDeleteStock(stock)}
+                        className="bg-red-600 hover:bg-red-700 text-white border-0 h-7 w-7 p-0"
+                        title="Sil"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleDeleteStock(stock)}
-                      className="bg-red-600 hover:bg-red-700 text-white border-0 h-7 w-7 p-0"
-                      title="Sil"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
                   </div>
                 </div>
               );
@@ -768,13 +849,31 @@ function StockManagementContent() {
                           </span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {movement.quantity} adet
-                          {movement.unitType === "package" && stock && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                              ({movement.quantity / stock.itemsPerPackage}{" "}
-                              {stock.packageType})
-                            </span>
-                          )}
+                          {stock
+                            ? (() => {
+                                const q = baseQuantityToStock(
+                                  movement.quantity,
+                                  stock.stockUnit,
+                                  stock.itemsPerPackage ?? 1
+                                );
+                                const u = getUnitDisplayName(stock.stockUnit);
+                                const isDecimal = ["kg", "lt", "gr", "ml"].includes(
+                                  stock.stockUnit
+                                );
+                                return (
+                                  <>
+                                    {isDecimal ? q : Math.round(q)}{" "}
+                                    {u}
+                                    {(stock.stockUnit === "koli" ||
+                                      stock.stockUnit === "paket") && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                                        ({movement.quantity} adet)
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()
+                            : `${movement.quantity} adet`}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                           {movement.reason || "-"}
@@ -803,10 +902,10 @@ function StockManagementContent() {
       {/* Stock Form Modal */}
       {showStockForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                Yeni Stok Ekle
+                {editingStock ? "Stok Düzenle" : "Yeni Stok Ekle"}
               </h2>
               <button
                 onClick={() => {
@@ -836,23 +935,35 @@ function StockManagementContent() {
               </div>
 
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                    1
-                  </span>
-                  <select
-                    value={stockForm.packageType}
-                    onChange={(e) =>
-                      setStockForm({
-                        ...stockForm,
-                        packageType: e.target.value as "koli" | "paket",
-                      })
-                    }
-                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="koli">Koli</option>
-                    <option value="paket">Paket</option>
-                  </select>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Stok Birimi *
+                </label>
+                <select
+                  value={stockForm.stockUnit}
+                  onChange={(e) =>
+                    setStockForm({
+                      ...stockForm,
+                      stockUnit: e.target.value as StockUnit,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="kg">Kilogram (kg)</option>
+                  <option value="gr">Gram (gr)</option>
+                  <option value="lt">Litre (lt)</option>
+                  <option value="ml">Mililitre (ml)</option>
+                  <option value="adet">Adet</option>
+                  <option value="koli">Koli</option>
+                  <option value="paket">Paket</option>
+                </select>
+              </div>
+
+              {(stockForm.stockUnit === "koli" ||
+                stockForm.stockUnit === "paket") && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    1 {getUnitDisplayName(stockForm.stockUnit)} = kaç adet? *
+                  </label>
                   <Input
                     type="number"
                     min="1"
@@ -864,17 +975,14 @@ function StockManagementContent() {
                       })
                     }
                     className="bg-white dark:bg-gray-700"
-                    placeholder="12"
+                    placeholder="Örn: 12"
                   />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                    Adet *
-                  </span>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Menü Ürünü Eşleştir *
+                  Menü Ürünü Eşleştir (opsiyonel)
                 </label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -882,40 +990,57 @@ function StockManagementContent() {
                     type="text"
                     value={menuSearchTerm}
                     onChange={(e) => setMenuSearchTerm(e.target.value)}
-                    placeholder="Menü ürünü ara..."
+                    placeholder="Menü ürünü ara (opsiyonel)..."
                     className="pl-10 bg-white dark:bg-gray-700 mb-2"
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
                   {filteredMenus.length > 0 ? (
-                    filteredMenus.map((menu) => (
+                    <>
                       <div
-                        key={menu.id}
                         onClick={() => {
-                          setStockForm({ ...stockForm, menuId: menu.id! });
-                          setMenuSearchTerm(menu.name);
+                          setStockForm({ ...stockForm, menuId: "" });
+                          setMenuSearchTerm("");
                         }}
                         className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                          stockForm.menuId === menu.id
+                          !stockForm.menuId
                             ? "bg-blue-100 dark:bg-blue-900/30"
                             : ""
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {menu.name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {menu.category} - ₺{menu.price.toFixed(2)}
-                            </p>
-                          </div>
-                          {stockForm.menuId === menu.id && (
-                            <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                          )}
-                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          — Menüye bağlama —
+                        </p>
                       </div>
-                    ))
+                      {filteredMenus.map((menu) => (
+                        <div
+                          key={menu.id}
+                          onClick={() => {
+                            setStockForm({ ...stockForm, menuId: menu.id! });
+                            setMenuSearchTerm(menu.name);
+                          }}
+                          className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                            stockForm.menuId === menu.id
+                              ? "bg-blue-100 dark:bg-blue-900/30"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {menu.name}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {menu.category} - ₺{menu.price.toFixed(2)}
+                              </p>
+                            </div>
+                            {stockForm.menuId === menu.id && (
+                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </>
                   ) : (
                     <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 text-center">
                       Menü bulunamadı
@@ -932,11 +1057,11 @@ function StockManagementContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Mevcut Stok Adedi (Adet) *
+                  Mevcut Miktar ({getUnitDisplayName(stockForm.stockUnit)}) *
                 </label>
                 <Input
                   type="number"
-                  step="1"
+                  step={["kg", "lt", "gr", "ml"].includes(stockForm.stockUnit) ? "0.01" : "1"}
                   min="0"
                   value={stockForm.currentQuantity}
                   onChange={(e) =>
@@ -950,20 +1075,44 @@ function StockManagementContent() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Minimum Miktar ({getUnitDisplayName(stockForm.stockUnit)})
+                </label>
+                <Input
+                  type="number"
+                  step={["kg", "lt", "gr", "ml"].includes(stockForm.stockUnit) ? "0.01" : "1"}
+                  min="0"
+                  value={stockForm.minQuantity}
+                  onChange={(e) =>
+                    setStockForm({
+                      ...stockForm,
+                      minQuantity: e.target.value,
+                    })
+                  }
+                  className="bg-white dark:bg-gray-700"
+                  placeholder="0"
+                />
+              </div>
+
               {/* Reçete Sistemi Alanları */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  Reçete Sistemi (Opsiyonel)
+                  Reçete / Maliyet (Opsiyonel)
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                  Bu alanları doldurursanız, bu hammadde reçete sisteminde
-                  kullanılabilir ve maliyet hesaplamaları yapılabilir.
+                  Alış fiyatı ve hammadde işaretlendiğinde reçete ve maliyet
+                  hesaplarında kullanılır. Birim:{" "}
+                  {getUnitDisplayName(
+                    getBaseUnitFromStockUnit(stockForm.stockUnit)
+                  )}
+                  .
                 </p>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Son Alış Fiyatı (₺)
+                      Son Alış Fiyatı (₺ / {getUnitDisplayName(getBaseUnitFromStockUnit(stockForm.stockUnit))})
                     </label>
                     <Input
                       type="number"
@@ -979,40 +1128,6 @@ function StockManagementContent() {
                       className="bg-white dark:bg-gray-700"
                       placeholder="Örn: 25.50"
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Temel birim başına alış fiyatı (kg/lt/adet başına)
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Temel Birim *
-                    </label>
-                    <select
-                      value={stockForm.baseUnit}
-                      onChange={(e) =>
-                        setStockForm({
-                          ...stockForm,
-                          baseUnit: e.target.value as
-                            | "kg"
-                            | "lt"
-                            | "adet"
-                            | "gr"
-                            | "ml",
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    >
-                      <option value="kg">Kilogram (kg)</option>
-                      <option value="gr">Gram (gr)</option>
-                      <option value="lt">Litre (lt)</option>
-                      <option value="ml">Mililitre (ml)</option>
-                      <option value="adet">Adet</option>
-                    </select>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Stokta hangi birimle tutulduğu (reçetede farklı birim
-                      kullanılabilir)
-                    </p>
                   </div>
 
                   <div>
@@ -1032,11 +1147,8 @@ function StockManagementContent() {
                         })
                       }
                       className="bg-white dark:bg-gray-700"
-                      placeholder="Örn: 10 (fire için)"
+                      placeholder="Örn: 10"
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Fire yüzdesi (0-100 arası, opsiyonel)
-                    </p>
                   </div>
 
                   <div className="flex items-center pt-2">
@@ -1056,7 +1168,7 @@ function StockManagementContent() {
                       htmlFor="isIngredient"
                       className="text-sm font-medium text-gray-700 dark:text-gray-300"
                     >
-                      Hammadde (Reçete sisteminde kullanılabilir)
+                      Hammadde (reçetede kullanılabilir)
                     </label>
                   </div>
                 </div>
@@ -1078,7 +1190,7 @@ function StockManagementContent() {
                   className="flex items-center gap-2"
                 >
                   <Save className="h-4 w-4" />
-                  Stok Ürünü Oluştur
+                  {editingStock ? "Güncelle" : "Stok Ekle"}
                 </Button>
               </div>
             </div>
@@ -1111,22 +1223,7 @@ function StockManagementContent() {
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 <strong>Mevcut Miktar:</strong>{" "}
-                {selectedStockForMovement.currentQuantity} adet
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                <strong>
-                  {selectedStockForMovement.packageType === "koli"
-                    ? "Koli"
-                    : "Paket"}
-                  :
-                </strong>{" "}
-                {Math.floor(
-                  selectedStockForMovement.currentQuantity /
-                    selectedStockForMovement.itemsPerPackage
-                )}{" "}
-                {selectedStockForMovement.packageType}(
-                {selectedStockForMovement.itemsPerPackage} adet/
-                {selectedStockForMovement.packageType})
+                {getDisplayQuantity(selectedStockForMovement).text}
               </p>
             </div>
 
@@ -1187,63 +1284,73 @@ function StockManagementContent() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Birim Tipi *
-                </label>
-                <div className="flex gap-4 mb-3">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="unitType"
-                      value="package"
-                      checked={movementForm.unitType === "package"}
-                      onChange={() =>
-                        setMovementForm({
-                          ...movementForm,
-                          unitType: "package",
-                        })
-                      }
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {selectedStockForMovement.packageType === "koli"
-                        ? "Koli"
-                        : "Paket"}
-                    </span>
+              {(selectedStockForMovement.stockUnit === "koli" ||
+                selectedStockForMovement.stockUnit === "paket") && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Giriş birimi
                   </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="unitType"
-                      value="item"
-                      checked={movementForm.unitType === "item"}
-                      onChange={() =>
-                        setMovementForm({ ...movementForm, unitType: "item" })
-                      }
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Adet
-                    </span>
-                  </label>
+                  <div className="flex gap-4 mb-3">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="unitType"
+                        value="package"
+                        checked={movementForm.unitType === "package"}
+                        onChange={() =>
+                          setMovementForm({
+                            ...movementForm,
+                            unitType: "package",
+                          })
+                        }
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {getUnitDisplayName(selectedStockForMovement.stockUnit)}
+                      </span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="unitType"
+                        value="item"
+                        checked={movementForm.unitType === "item"}
+                        onChange={() =>
+                          setMovementForm({ ...movementForm, unitType: "item" })
+                        }
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Adet
+                      </span>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Miktar (
                   {movementForm.unitType === "package"
-                    ? selectedStockForMovement.packageType === "koli"
-                      ? "Koli"
-                      : "Paket"
-                    : "Adet"}
+                    ? getUnitDisplayName(selectedStockForMovement.stockUnit)
+                    : selectedStockForMovement.stockUnit === "koli" ||
+                        selectedStockForMovement.stockUnit === "paket"
+                      ? "Adet"
+                      : getUnitDisplayName(
+                          selectedStockForMovement.stockUnit
+                        )}
                   ) *
                 </label>
                 <Input
                   type="number"
-                  step={movementForm.unitType === "package" ? "1" : "1"}
-                  min="1"
+                  step={
+                    ["kg", "lt", "gr", "ml"].includes(
+                      selectedStockForMovement.stockUnit
+                    )
+                      ? "0.01"
+                      : "1"
+                  }
+                  min="0"
                   value={movementForm.quantity}
                   onChange={(e) =>
                     setMovementForm({
@@ -1253,17 +1360,27 @@ function StockManagementContent() {
                   }
                   className="bg-white dark:bg-gray-700"
                 />
-                {movementForm.unitType === "package" && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {movementForm.quantity
-                      ? `${parseFloat(movementForm.quantity) * selectedStockForMovement.itemsPerPackage} adet eklenecek/çıkarılacak`
-                      : ""}
-                  </p>
-                )}
+                {movementForm.unitType === "package" &&
+                  selectedStockForMovement.itemsPerPackage != null && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {movementForm.quantity &&
+                      !isNaN(parseFloat(movementForm.quantity))
+                        ? `= ${parseFloat(movementForm.quantity) * (selectedStockForMovement.itemsPerPackage ?? 1)} adet`
+                        : ""}
+                    </p>
+                  )}
                 {movementForm.type === "adjustment" && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Düzeltme tipinde miktar, yeni toplam miktarı temsil eder
-                    (adet cinsinden)
+                    Düzeltmede miktar = yeni toplam (
+                    {getUnitDisplayName(
+                      movementForm.unitType === "package"
+                        ? selectedStockForMovement.stockUnit
+                        : selectedStockForMovement.stockUnit === "koli" ||
+                            selectedStockForMovement.stockUnit === "paket"
+                          ? "adet"
+                          : selectedStockForMovement.stockUnit
+                    )}
+                    )
                   </p>
                 )}
               </div>

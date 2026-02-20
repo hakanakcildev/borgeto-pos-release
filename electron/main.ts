@@ -2097,7 +2097,7 @@ const createWindow = (): void => {
   // Load the app
   if (isDev) {
     // Development: Load from Vite dev server
-    const port = process.env.PORT || 5173;
+    const port = process.env.PORT || 5174;
     mainWindow.loadURL(`http://localhost:${port}`);
   } else {
     // Production: Load from built files

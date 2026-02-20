@@ -54,31 +54,51 @@ export function formatPrintContent(
   const companyName = additionalInfo?.companyName
     ? turkishToAscii(additionalInfo.companyName)
     : undefined;
-  const tableNum = String(tableNumber);
+  const tableNum = turkishToAscii(String(tableNumber));
   const isPaid = additionalInfo?.isPaid || type === "payment";
   const paperWidth = additionalInfo?.paperWidth || 48; // 80mm için 48 karakter
 
-  // ESC/POS komutları - Standart byte değerleri
+  // Tablo: Ürün | Adet (birim fiyat) | Toplam
+  const colAdet = 12;   // Birim fiyat için (örn. 170.00 TL)
+  const colToplam = 12;
+  const colUrun = Math.max(18, paperWidth - colAdet - colToplam);
+
+  const padRight = (s: string, w: number) =>
+    s.length >= w ? s.substring(0, w) : s + " ".repeat(w - s.length);
+  const padLeft = (s: string, w: number) =>
+    s.length >= w ? s.substring(0, w) : " ".repeat(w - s.length) + s;
+  const fullLine = () => "-".repeat(paperWidth);
+
   const ESC = String.fromCharCode(0x1b);
   const GS = String.fromCharCode(0x1d);
-  const LF = String.fromCharCode(0x0a); // Sadece LF kullan (ESC/POS standardı)
+  const LF = String.fromCharCode(0x0a);
+  // ESC d n = "feed n lines" — termal yazıcıda ardışık LF'ler bazen tek sayılır; bu komut kesin n satır boşluk verir
+  const feedLines = (n: number) =>
+    n <= 0 ? "" : ESC + "d" + String.fromCharCode(Math.min(255, n));
+  // Bir satır yazdıktan sonra: LF + feedLines(extra) — her satır arasında dikey boşluk
+  // extraLines=0 olsa bile en azından bir LF ver (satır aralığı ESC 3 ile ayarlanır)
+  // Bazı yazıcılarda ESC 3 yeterli olmayabilir, bu yüzden her satır sonunda en azından LF kullanıyoruz
+  const lineBreak = (extraLines: number) =>
+    LF + (extraLines > 0 ? feedLines(extraLines) : "");
 
   let content = "";
 
   // 1. Reset printer - Sadece bir kez başta (tüm ayarları sıfırla)
   content += ESC + "@";
+  // Reset'ten sonra üst boşluk olmaması için hemen ayarları yap
 
   // 2. Code page - ASCII (0) - Sadece bir kez
   content += ESC + "t" + String.fromCharCode(0x00);
 
-  // 3. Left alignment - Sadece bir kez
+  // 3. Left alignment - Başlangıçta sol (firma adı için ortaya geçeceğiz)
   content += ESC + "a" + String.fromCharCode(0x00);
 
   // 4. Normal font size - Sadece bir kez
   content += ESC + "!" + String.fromCharCode(0x00);
 
-  // 5. Line spacing - Minimum (0) - Üst margin'i minimize et
-  content += ESC + "3" + String.fromCharCode(0x00);
+  // 5. Satır aralığı: Başlangıçta 0 (ürün satırları bitişik olacak)
+  // Firma/masa/toplam sonrası manuel olarak boşluk ekleyeceğiz
+  content += ESC + "3" + String.fromCharCode(0);
 
   // 6. Character spacing - 0
   content += ESC + " " + String.fromCharCode(0x00);
@@ -95,28 +115,46 @@ export function formatPrintContent(
     String.fromCharCode(printWidth & 0xff) +
     String.fromCharCode((printWidth >> 8) & 0xff);
 
-  // Firma Adı - Büyük ve kalın
+  // Firma Adı - Büyük ve kalın, ortalanmış (üst boşluk yok)
   if (companyName) {
     const nameToPrint =
       companyName.length > paperWidth
         ? companyName.substring(0, paperWidth)
         : companyName;
-    // Double width + height
+    // Firma adını ortala
+    content += ESC + "a" + String.fromCharCode(0x01); // Ortala
     content += ESC + "!" + String.fromCharCode(0x30);
-    // Bold on
     content += ESC + "E" + String.fromCharCode(0x01);
     content += nameToPrint;
-    // Bold off
     content += ESC + "E" + String.fromCharCode(0x00);
-    // Normal size
     content += ESC + "!" + String.fromCharCode(0x00);
-    content += LF;
+    // Firma adından sonra boşluk: ESC 3 36 ile satır aralığı + feedLines
+    content += ESC + "3" + String.fromCharCode(36);
+    content += lineBreak(1);
+    content += feedLines(1);
+    // Sola dön ve ürün satırları için tekrar 0'a dön
+    content += ESC + "a" + String.fromCharCode(0x00); // Sola dön
+    content += ESC + "3" + String.fromCharCode(0);
   }
 
-  // Masa bilgisi
+  // Masa Adı (ç -> c vb. tableNum zaten turkishToAscii ile dönüştürüldü)
+  content += ESC + "!" + String.fromCharCode(0x20);
   content += `Masa ${tableNum}`;
-  content += LF;
-  content += LF;
+  content += ESC + "!" + String.fromCharCode(0x00);
+  // Masa adından sonra boşluk: ESC 3 36 ile satır aralığı + feedLines
+  content += ESC + "3" + String.fromCharCode(36);
+  content += lineBreak(1);
+  content += feedLines(1);
+  // Ürün satırları için tekrar 0'a dön
+  content += ESC + "3" + String.fromCharCode(0);
+
+  // Tablo başlığı: Ürün | Adet | Toplam (arada gereksiz boşluk yok)
+  content += ESC + "E" + String.fromCharCode(0x01);
+  content += padRight("Urun", colUrun) + padLeft("Adet", colAdet) + padLeft("Toplam", colToplam);
+  content += ESC + "E" + String.fromCharCode(0x00);
+  content += lineBreak(0);
+  content += fullLine();
+  content += lineBreak(0);
 
   // Ürünleri birleştir
   const mergedItems = new Map<
@@ -155,60 +193,45 @@ export function formatPrintContent(
     }
   }
 
-  // Ürünleri yazdır
+  // Ürün satırları (Ürün-Adet-Toplam ile Toplam arasında gereksiz boşluk yok)
   for (const { item, totalQuantity, totalSubtotal } of mergedItems.values()) {
-    // Tüm metinleri ASCII'ye çevir
     const itemName = turkishToAscii(item.menuName).toUpperCase();
-    const price = item.menuPrice || 0;
-
-    // Ürün satırı - Normal boyut, kalın
-    content += ESC + "E" + String.fromCharCode(0x01); // Bold on
-    content += `${totalQuantity}x ${itemName}`;
-    content += ESC + "E" + String.fromCharCode(0x00); // Bold off
-    content += LF;
-
-    // Fiyat satırı - Normal boyut
-    const priceText = `${price.toFixed(2)} TL x${totalQuantity} = ${totalSubtotal.toFixed(2)} TL`;
-    content += priceText;
-    content += LF;
-
-    // Ekstra malzemeler
+    const unitPrice = item.menuPrice ?? 0;
+    const left = padRight(`${totalQuantity}x ${itemName}`, colUrun);
+    const mid = padLeft(`${unitPrice.toFixed(2)} TL`, colAdet);
+    const right = padLeft(`${totalSubtotal.toFixed(2)} TL`, colToplam);
+    content += left + mid + right;
+    content += lineBreak(0);
     if (item.selectedExtras && item.selectedExtras.length > 0) {
       for (const extra of item.selectedExtras) {
-        const extraName = turkishToAscii(extra.name);
-        content += `  + ${extraName} +${extra.price.toFixed(2)} TL`;
-        content += LF;
+        content += padRight(`  + ${turkishToAscii(extra.name)}`, colUrun) + padLeft(`+${extra.price.toFixed(2)} TL`, colAdet) + padLeft("", colToplam);
+        content += lineBreak(0);
       }
     }
-
-    // Notlar
     if (item.notes && item.notes.trim()) {
-      const noteText = turkishToAscii(item.notes);
-      content += `  Not: ${noteText}`;
-      content += LF;
+      content += padRight(`  Not: ${turkishToAscii(item.notes)}`, paperWidth);
+      content += lineBreak(0);
     }
-
-    content += LF;
   }
 
-  // İptal edilen ürünler
+  content += fullLine();
+  content += lineBreak(0);
+
   if (
     additionalInfo?.canceledItems &&
     additionalInfo.canceledItems.length > 0
   ) {
+    content += lineBreak(3);
     content += "IPTAL EDILEN URUNLER";
-    content += LF;
+    content += lineBreak(3);
     for (const item of additionalInfo.canceledItems) {
-      const itemName = turkishToAscii(item.menuName).toUpperCase();
-      content += `${item.quantity}x ${itemName} (IPTAL)`;
-      content += LF;
+      content += `${item.quantity}x ${turkishToAscii(item.menuName).toUpperCase()} (IPTAL)`;
+      content += lineBreak(2);
       content += `${item.subtotal.toFixed(2)} TL`;
-      content += LF;
+      content += lineBreak(2);
     }
-    content += LF;
   }
 
-  // Toplam - Büyük ve kalın
   const total =
     additionalInfo?.total ||
     Array.from(mergedItems.values()).reduce(
@@ -216,41 +239,31 @@ export function formatPrintContent(
       0
     );
 
-  content += LF;
-  // Double width + height
-  content += ESC + "!" + String.fromCharCode(0x30);
-  // Bold on
+  // Toplam'dan önce satır aralığını artır
+  content += ESC + "3" + String.fromCharCode(36);
+  content += lineBreak(1);
   content += ESC + "E" + String.fromCharCode(0x01);
-  if (isPaid) {
-    content += `Toplam Tutar: ${total.toFixed(2)} TL - Odendi`;
-  } else {
-    content += `Toplam Fiyat: ${total.toFixed(2)} TL`;
-  }
-  // Bold off
+  content += `Toplam: ${total.toFixed(2)} TL`;
+  if (isPaid) content += " - Odendi";
   content += ESC + "E" + String.fromCharCode(0x00);
-  // Normal size
-  content += ESC + "!" + String.fromCharCode(0x00);
-  content += LF;
+  content += lineBreak(1); // Toplam yazısından sonra tek satır boşluk
 
-  // Ödeme yöntemi
   if (type === "payment" && additionalInfo?.paymentMethod) {
-    const paymentMethodText = turkishToAscii(additionalInfo.paymentMethod);
-    content += `Odeme Yontemi: ${paymentMethodText}`;
-    content += LF;
+    content += `Odeme: ${turkishToAscii(additionalInfo.paymentMethod)}`;
+    content += lineBreak(1);
   }
-
-  // İndirim
   if (additionalInfo?.discount && additionalInfo.discount > 0) {
     content += `Iskonto: -${additionalInfo.discount.toFixed(2)} TL`;
-    content += LF;
+    content += lineBreak(1);
   }
 
-  // Boş satırlar
-  content += LF;
-  content += "Tesekkur ederiz!";
-  content += LF;
-  content += LF;
-  content += LF;
+  // Afiyet Olsun ortada; altında kesim için bol boşluk (fiş uzun çıksın, kullanıcı rahat kessin)
+  content += lineBreak(1);
+  content += ESC + "a" + String.fromCharCode(0x01); // Ortala
+  content += "Afiyet Olsun";
+  content += ESC + "a" + String.fromCharCode(0x00); // Sola dön
+  // Çok satır boşluk: yazıcı kesimi "Afiyet olsun" altında olsun, Toplam hizasında kalmasın
+  content += lineBreak(40);
 
   return content;
 }

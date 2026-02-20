@@ -25,6 +25,9 @@ import {
   Loader2,
   ArrowLeft,
   WifiOff,
+  SlidersHorizontal,
+  X,
+  Minimize2,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { HomePage } from "@/components/HomePage";
@@ -53,78 +56,6 @@ function Index() {
     </ProtectedRoute>
   );
 }
-
-// Geniş ekranlarda kartın maksimum boyutu (boşluk kalmaması için daha fazla kolon)
-const MAX_CARD_SIZE = 160;
-// Çok geniş ekranlarda denenecek maksimum kolon sayısı
-const MAX_COLUMNS = 32;
-
-// Ekran boyutuna ve masa sayısına göre optimal grid yapısını hesapla
-const calculateOptimalGrid = (
-  tableCount: number,
-  width: number,
-  height: number
-) => {
-  if (tableCount === 0 || width === 0 || height === 0)
-    return { cols: 2, gap: 8, cardSize: 100 };
-
-  const paddingY = 10;
-  const availableWidth = width;
-  const availableHeight = height - paddingY;
-  const gap = 8;
-  const minCardSize = 80;
-
-  let bestCols = 2;
-  let bestCardSize = minCardSize;
-  let bestUnused = Infinity;
-
-  for (let cols = 2; cols <= MAX_COLUMNS; cols++) {
-    const rows = Math.ceil(tableCount / cols);
-    const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
-    const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
-    // Geniş ekranlarda kartları çok büyütme; max ile sınırla
-    const cardSize = Math.min(
-      MAX_CARD_SIZE,
-      Math.min(cardWidth, cardHeight)
-    );
-
-    if (cardSize < minCardSize) continue;
-
-    const requiredWidth = cols * cardSize + (cols - 1) * gap;
-    const requiredHeight = rows * cardSize + (rows - 1) * gap;
-
-    if (requiredWidth <= availableWidth && requiredHeight <= availableHeight) {
-      const unused =
-        availableWidth - requiredWidth + (availableHeight - requiredHeight);
-      // Aynı unused değerde geniş ekranı daha iyi dolduran (daha fazla kolon) seç
-      if (
-        unused < bestUnused ||
-        (unused === bestUnused && cols > bestCols)
-      ) {
-        bestUnused = unused;
-        bestCols = cols;
-        bestCardSize = cardSize;
-      }
-    }
-  }
-
-  if (bestUnused === Infinity) {
-    for (let cols = 2; cols <= MAX_COLUMNS; cols++) {
-      const rows = Math.ceil(tableCount / cols);
-      const cardWidth = (availableWidth - (cols - 1) * gap) / cols;
-      const cardHeight = (availableHeight - (rows - 1) * gap) / rows;
-      bestCardSize = Math.max(
-        minCardSize,
-        Math.min(MAX_CARD_SIZE, cardWidth, cardHeight)
-      );
-      bestCols = cols;
-      const requiredHeight = rows * bestCardSize + (rows - 1) * gap;
-      if (requiredHeight <= availableHeight) break;
-    }
-  }
-
-  return { cols: bestCols, gap, cardSize: bestCardSize };
-};
 
 // Masalar sayfası component'i
 function TablesView() {
@@ -189,24 +120,12 @@ function TablesView() {
         // Standart masaları arka planda oluştur (ilk yüklemede bloklamaz)
         if (!defaultTablesCreated) {
           setDefaultTablesCreated(true);
-          createDefaultTables(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          ).catch(() => {}).then(() => {});
+          createDefaultTables(effectiveCompanyId).catch(() => {}).then(() => {});
         }
 
         const [tablesData, ordersData] = await Promise.all([
-          getTablesByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          ).catch(() => {
-            return [];
-          }),
-          getOrdersByCompany(effectiveCompanyId, {
-            branchId: effectiveBranchId || undefined,
-          }).catch(() => {
-            return [];
-          }),
+          getTablesByCompany(effectiveCompanyId).catch(() => []),
+          getOrdersByCompany(effectiveCompanyId).catch(() => []),
         ]);
 
         const activeOrdersData = ordersData.filter(
@@ -233,10 +152,7 @@ function TablesView() {
         let uniqueTables: Table[];
         if (tablesToUpdate.length > 0) {
           await Promise.all(tablesToUpdate);
-          const updatedTables = await getTablesByCompany(
-            effectiveCompanyId,
-            effectiveBranchId || undefined
-          );
+          const updatedTables = await getTablesByCompany(effectiveCompanyId).catch(() => []);
           uniqueTables = removeDuplicateTables(updatedTables);
           setTables(uniqueTables);
         } else {
@@ -296,17 +212,8 @@ function TablesView() {
         const reloadData = async () => {
           try {
             const [tablesData, ordersData] = await Promise.all([
-              getTablesByCompany(
-                effectiveCompanyId,
-                effectiveBranchId || undefined
-              ).catch(() => {
-                return [];
-              }),
-              getOrdersByCompany(effectiveCompanyId, {
-                branchId: effectiveBranchId || undefined,
-              }).catch(() => {
-                return [];
-              }),
+              getTablesByCompany(effectiveCompanyId).catch(() => []),
+              getOrdersByCompany(effectiveCompanyId).catch(() => []),
             ]);
 
             const activeOrdersData = ordersData.filter(
@@ -333,10 +240,7 @@ function TablesView() {
 
             if (tablesToUpdate.length > 0) {
               await Promise.all(tablesToUpdate);
-              const updatedTables = await getTablesByCompany(
-                effectiveCompanyId,
-                effectiveBranchId || undefined
-              );
+              const updatedTables = await getTablesByCompany(effectiveCompanyId).catch(() => []);
               const uniqueTables = removeDuplicateTables(updatedTables);
               setTables(uniqueTables);
             } else {
@@ -537,7 +441,7 @@ function TablesView() {
           subtotal: 0,
           total: 0,
         });
-        await updateOrderStatus(sourceOrderId, "closed");
+        await updateOrderStatus(sourceOrderId, "closed", { branchIdOverride: effectiveBranchId || undefined });
         const sourceTable = await getTable(sourceTableId);
         if (sourceTable) {
           await updateTableStatus(sourceTableId, "available", undefined);
@@ -591,10 +495,8 @@ function TablesView() {
 
       // Masaları ve siparişleri yeniden yükle
       const [updatedTables, updatedOrders] = await Promise.all([
-        getTablesByCompany(effectiveCompanyId!, effectiveBranchId || undefined),
-        getOrdersByCompany(effectiveCompanyId!, {
-          branchId: effectiveBranchId || undefined,
-        }),
+        getTablesByCompany(effectiveCompanyId!).catch(() => []),
+        getOrdersByCompany(effectiveCompanyId!).catch(() => []),
       ]);
 
       const uniqueTables = removeDuplicateTables(updatedTables);
@@ -689,13 +591,11 @@ function TablesView() {
       }
 
       await updateTableStatus(sourceTable.id!, "available", undefined);
-      await updateOrderStatus(sourceOrder.id!, "closed");
+      await updateOrderStatus(sourceOrder.id!, "closed", { branchIdOverride: effectiveBranchId || undefined });
 
       const [updatedTables, updatedOrders] = await Promise.all([
-        getTablesByCompany(effectiveCompanyId!, effectiveBranchId || undefined),
-        getOrdersByCompany(effectiveCompanyId!, {
-          branchId: effectiveBranchId || undefined,
-        }),
+        getTablesByCompany(effectiveCompanyId!).catch(() => []),
+        getOrdersByCompany(effectiveCompanyId!).catch(() => []),
       ]);
 
       // Yinelenen masaları filtrele (removeDuplicateTables fonksiyonunu kullan)
@@ -853,80 +753,8 @@ function TablesView() {
   //   );
   // }).length;
 
-  // Ekran boyutunu algıla ve optimal grid yapısını hesapla
-  // Hook'lar her zaman return'den önce çağrılmalı!
-  const [containerSize, setContainerSize] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
-  const gridContainerRef = useRef<HTMLDivElement>(null);
-  const previousGridConfigRef = useRef<{
-    cols: number;
-    gap: number;
-    cardSize: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const updateSize = () => {
-      // Header yüksekliğini ve sidebar genişliğini hesaba kat
-      const headerHeight = 80;
-      const sidebarWidth = 192; // w-48 = 12rem = 192px
-      const paddingY = 40; // py-5 için (20px * 2)
-
-      const availableHeight = window.innerHeight - headerHeight - paddingY;
-      const availableWidth = window.innerWidth - sidebarWidth; // Padding'i hesaplamalardan çıkardık
-
-      setContainerSize({ width: availableWidth, height: availableHeight });
-    };
-
-    // İlk yüklemede hesapla
-    updateSize();
-    const timeoutId = setTimeout(updateSize, 100);
-
-    // Sadece window resize olduğunda güncelle
-    window.addEventListener("resize", updateSize);
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateSize);
-    };
-  }, []); // Boş dependency array - sadece mount ve unmount'ta çalışır
-
-  // Grid hesaplamasını memoize et - sadece TOPLAM masa sayısı veya container boyutu değiştiğinde yeniden hesapla
-  // NOT: Filtreleme sadece görünümü etkiler, grid boyutlarını etkilememelidir
-  // NOT: Bu hook loading check'inden önce olmalı (React Hooks kuralları)
-  const {
-    cols: optimalColumns,
-    gap,
-    cardSize,
-  } = useMemo(() => {
-    // Eğer containerSize henüz hesaplanmadıysa, önceki değeri kullan
-    if (
-      !containerSize ||
-      containerSize.width === 0 ||
-      containerSize.height === 0
-    ) {
-      if (previousGridConfigRef.current) {
-        return previousGridConfigRef.current;
-      }
-      // İlk render için default değerler
-      return { cols: 2, gap: 8, cardSize: 100 };
-    }
-
-    // Grid hesaplaması için TOPLAM masa sayısını kullan (filtrelenmiş değil)
-    // Bu sayede filtreleme değiştiğinde grid boyutları değişmez
-    const totalTableCount = tables.length;
-
-    const result = calculateOptimalGrid(
-      totalTableCount,
-      containerSize.width,
-      containerSize.height
-    );
-
-    // Önceki değeri güncelle
-    previousGridConfigRef.current = result;
-    return result;
-  }, [tables.length, containerSize]);
+  // Küçük ekranlarda sidebar kapalı; aç/kapa için
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) {
     return (
@@ -973,32 +801,67 @@ function TablesView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* Mobil: Filtreler butonu (sidebar aç/kapa) */}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition-colors"
+            title={sidebarOpen ? "Filtreleri kapat" : "Filtreler"}
+          >
+            <SlidersHorizontal className="h-5 w-5 text-white" />
+          </button>
+
           {/* Internet Durumu - Sadece internet kesildiğinde göster */}
           {!isOnline && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/90 backdrop-blur-sm">
-              <WifiOff className="h-4 w-4 text-white" />
-            <span className="text-sm text-white font-medium">
+            <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 backdrop-blur-sm">
+              <WifiOff className="h-4 w-4 text-white shrink-0" />
+              <span className="text-xs sm:text-sm text-white font-medium truncate max-w-[120px] sm:max-w-none">
                 İnternet bağlantısı yok
-            </span>
-          </div>
+              </span>
+            </div>
           )}
 
-          {/* Branch Info */}
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-              <p className="text-sm text-white font-medium">
+          {/* Branch Info + Masaüstüne Dön */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="px-2 sm:px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm truncate max-w-[100px] sm:max-w-[180px]">
+              <p className="text-sm text-white font-medium truncate">
                 {userData?.branchName || branchData?.name || ""}
               </p>
             </div>
+            <button
+              onClick={async () => {
+                if (window.electronAPI?.minimizeWindow) {
+                  try {
+                    await window.electronAPI.minimizeWindow();
+                  } catch (error) {
+                    console.error("Minimize error:", error);
+                  }
+                }
+              }}
+              className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              title="Masaüstüne Dön"
+            >
+              <Minimize2 className="h-5 w-5 text-white" />
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Ana içerik alanı - Sidebar ile birlikte */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Ana içerik */}
-        <div className="flex-1 overflow-y-auto">
+      {/* Ana içerik alanı - Sidebar ile birlikte, tam responsive */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Backdrop: mobilde sidebar açıkken grid'in üzerinde */}
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Filtreleri kapat"
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden fixed inset-0 bg-black/50 z-40"
+          />
+        )}
+
+        {/* Ana içerik - masalar grid'i, alanı doldurur, gerekirse scroll */}
+        <div className="flex-1 min-w-0 min-h-0 overflow-auto flex flex-col">
           {/* Masalar içeriği */}
           {filteredTables.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg p-8 sm:p-12 text-center shadow-sm border border-gray-200 dark:border-gray-700 mx-4 lg:mx-6">
@@ -1020,19 +883,9 @@ function TablesView() {
             </div>
           ) : (
             <div
-              ref={gridContainerRef}
-              className="flex-1 min-h-0 overflow-auto"
+              className="w-full p-3 grid gap-2 sm:gap-3"
               style={{
-                paddingTop: "10px",
-                paddingLeft: "10px",
-                paddingRight: "10px",
-                display: "grid",
-                gridTemplateColumns: `repeat(${optimalColumns}, minmax(${cardSize}px, 1fr))`,
-                gridAutoRows: `${cardSize}px`,
-                gap: `${gap}px`,
-                alignContent: "start",
-                width: "100%",
-                maxHeight: containerSize ? `${containerSize.height}px` : "100%",
+                gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
               }}
             >
               {filteredTables.map((table) => {
@@ -1058,11 +911,7 @@ function TablesView() {
                     }
                     onTouchEnd={() => handleLongPressEnd(table.id!)}
                     onTouchCancel={() => handleMouseLeave(table.id!)}
-                    className="relative w-full h-full min-w-0"
-                    style={{
-                      minWidth: `${cardSize}px`,
-                      minHeight: `${cardSize}px`,
-                    }}
+                    className="relative w-full overflow-hidden aspect-square"
                   >
                     <div
                       onClick={(e) => {
@@ -1132,16 +981,12 @@ function TablesView() {
                       }}
                       className={`${
                         isSelectedForMove
-                          ? "bg-blue-500 dark:bg-blue-600 border-blue-600 dark:border-blue-700 ring-4 ring-blue-300 dark:ring-blue-500"
+                          ? "bg-blue-500 dark:bg-blue-600 border-blue-600 dark:border-blue-700 ring-2 ring-blue-300 dark:ring-blue-500"
                           : getBackgroundColor(
                               table.status,
                               resolvedTheme === "dark"
                             )
-                      } ${getShadowEffect(table.status, order)} rounded-lg p-2 xl:p-3 border-2 ${
-                        isSelectedForMove
-                          ? "border-blue-600 dark:border-blue-700"
-                          : "border-white"
-                      } hover:shadow-xl transition-all duration-200 cursor-pointer block h-full w-full flex flex-col items-center justify-center ${
+                      } ${getShadowEffect(table.status, order)} rounded-lg p-2 border-2 border-white hover:shadow-xl transition-all duration-200 cursor-pointer h-full w-full flex flex-col items-center justify-center overflow-hidden ${
                         isSelectedForMove
                           ? "animate-pulse"
                           : table.status === "occupied" &&
@@ -1153,7 +998,7 @@ function TablesView() {
                     >
                       <div className="text-center space-y-1 xl:space-y-2">
                         <div
-                          className={`font-bold ${
+                          className={`text-sm sm:text-base font-bold leading-tight ${
                             isSelectedForMove ||
                             (table.status === "occupied" &&
                               order &&
@@ -1161,14 +1006,13 @@ function TablesView() {
                               ? "text-white"
                               : "text-gray-900 dark:text-white"
                           }`}
-                          style={{ fontSize: `${cardSize * 0.16}px` }}
                         >
                           {table.tableNumber}
                         </div>
 
-                        <div className="flex flex-col items-center gap-0.5 xl:gap-1">
+                        <div className="flex flex-col items-center gap-0.5">
                           <span
-                            className={`font-medium ${
+                            className={`text-xs font-medium ${
                               isSelectedForMove ||
                               (table.status === "occupied" &&
                                 order &&
@@ -1176,12 +1020,11 @@ function TablesView() {
                                 ? "text-white"
                                 : "text-gray-700 dark:text-gray-300"
                             }`}
-                            style={{ fontSize: `${cardSize * 0.10}px` }}
                           >
                             Toplam
                           </span>
                           <span
-                            className={`font-bold ${
+                            className={`text-xs sm:text-sm font-bold ${
                               isSelectedForMove
                                 ? "text-white"
                                 : order && order.total > 0
@@ -1190,7 +1033,6 @@ function TablesView() {
                                     : "text-blue-600 dark:text-blue-400"
                                   : "text-gray-400 dark:text-gray-500"
                             }`}
-                            style={{ fontSize: `${cardSize * 0.12}px` }}
                           >
                             {order && order.total > 0
                               ? `₺${order.total.toFixed(2)}`
@@ -1202,7 +1044,7 @@ function TablesView() {
                           const firstItem = getFirstAddedItem(order);
                           return firstItem?.addedAt ? (
                             <div
-                              className={`flex items-center justify-center gap-1 mt-0.5 xl:mt-1 ${
+                              className={`flex items-center justify-center gap-1 mt-0.5 text-[10px] sm:text-xs ${
                                 isSelectedForMove ||
                                 (table.status === "occupied" &&
                                   order &&
@@ -1210,19 +1052,8 @@ function TablesView() {
                                   ? "text-white font-medium"
                                   : "text-gray-500 dark:text-gray-400"
                               }`}
-                              style={{ fontSize: `${cardSize * 0.08}px` }}
                             >
-                              <Clock
-                                className={`${
-                                  isSelectedForMove ||
-                                  (table.status === "occupied" &&
-                                    order &&
-                                    order.total > 0)
-                                    ? "text-white"
-                                    : ""
-                                }`}
-                                style={{ width: `${cardSize * 0.08}px`, height: `${cardSize * 0.08}px` }}
-                              />
+                              <Clock className="w-3 h-3 shrink-0" />
                               <span className="truncate">
                                 {getTimeAgo(firstItem.addedAt)}
                               </span>
@@ -1245,10 +1076,26 @@ function TablesView() {
           )}
         </div>
 
-        {/* Sağ Sidebar - Filtre Butonları */}
-        <aside className="w-48 shrink-0 bg-black/20 backdrop-blur-sm overflow-y-auto">
-          <div className="p-3 pt-4">
-            <div className="flex flex-col gap-2">
+        {/* Sağ Sidebar - Filtre Butonları: mobilde overlay (header altından başlar), md+ sabit ve üstten hizalı */}
+        <aside
+          className={`fixed md:relative inset-y-0 right-0 z-50 w-56 sm:w-64 md:w-48 md:shrink-0 bg-gray-900 md:bg-black/20 backdrop-blur-sm overflow-y-auto shadow-xl md:shadow-none transition-transform duration-200 ease-out md:translate-x-0 top-[80px] md:top-0 ${
+            sidebarOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <div className="p-3 pt-4 flex flex-col gap-2">
+            {/* Mobil: kapat butonu */}
+            <div className="flex items-center justify-between md:hidden pb-2 border-b border-white/20">
+              <span className="text-sm font-medium text-white">Filtreler</span>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-white"
+                aria-label="Kapat"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 mt-1">
               <button
                 onClick={() => {
                   setSelectedArea("");
@@ -1259,7 +1106,7 @@ function TablesView() {
                     replace: true,
                   });
                 }}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
                   !selectedArea && !showActiveOnly
                     ? "bg-white/20 text-white shadow-md"
                     : "bg-white/10 text-white/80 hover:bg-white/15"
@@ -1284,7 +1131,7 @@ function TablesView() {
                             replace: true,
                           });
                         }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                        className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
                           selectedArea === area && !showActiveOnly
                             ? "bg-white/20 text-white shadow-md"
                             : "bg-white/10 text-white/80 hover:bg-white/15"
@@ -1305,7 +1152,7 @@ function TablesView() {
                     replace: true,
                   });
                 }}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
                   showActiveOnly
                     ? "bg-white/20 text-white shadow-md"
                     : "bg-white/10 text-white/80 hover:bg-white/15"
@@ -1327,7 +1174,7 @@ function TablesView() {
                           replace: true,
                         });
                       }}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                      className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
                         selectedArea === "Hızlı Satış" && !showActiveOnly
                           ? "bg-white/20 text-white shadow-md"
                           : "bg-white/10 text-white/80 hover:bg-white/15"
@@ -1351,7 +1198,7 @@ function TablesView() {
                           replace: true,
                         });
                       }}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                      className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
                         selectedArea === "Paket" && !showActiveOnly
                           ? "bg-white/20 text-white shadow-md"
                           : "bg-white/10 text-white/80 hover:bg-white/15"

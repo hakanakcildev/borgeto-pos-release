@@ -126,6 +126,7 @@ function TableDetailContent() {
   const { tableId } = Route.useParams();
   const navigate = useNavigate();
   const { userData, companyId, branchId, currentUser, companyData } = useAuth();
+  const effectiveBranchId = (branchId || userData?.assignedBranchId || userData?.id) ?? undefined;
   const [currentTable, setCurrentTable] = useState<Table>(table);
 
   // Anasayfaya yönlendirirken search params'ı koru
@@ -2033,7 +2034,7 @@ function TableDetailContent() {
           "id" | "createdAt" | "updatedAt" | "closedAt"
         > = {
           companyId: effectiveCompanyId,
-          branchId: effectiveBranchId || currentTable.branchId,
+          branchId: effectiveBranchId || currentTable.branchId || userData?.id,
           tableId: currentTable.id!,
           tableNumber: currentTable.tableNumber,
           orderNumber: "",
@@ -2061,7 +2062,7 @@ function TableDetailContent() {
             ...(updatedOrder || {}),
             id: orderId,
             companyId: effectiveCompanyId,
-            branchId: effectiveBranchId || currentTable.branchId,
+            branchId: effectiveBranchId || currentTable.branchId || userData?.id,
             tableId: currentTable.id!,
             tableNumber: currentTable.tableNumber,
             orderNumber: updatedOrder?.orderNumber ?? `ORD-${Date.now()}`,
@@ -3754,7 +3755,7 @@ function TableDetailContent() {
               }
             }
 
-            await updateOrderStatus(updatedOrder.id!, "closed");
+            await updateOrderStatus(updatedOrder.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
             // Masa durumunu güncelle
             try {
               await updateTableStatus(currentTable.id, "available", undefined);
@@ -4133,7 +4134,7 @@ function TableDetailContent() {
           }
 
           // Sonra siparişi kapat (updateOrderStatus zaten masayı güncelliyor ama emin olmak için)
-          await updateOrderStatus(order.id!, "closed");
+          await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
 
           // Masayı yeniden yükle
           if (currentTable.id) {
@@ -4363,7 +4364,7 @@ function TableDetailContent() {
           if (currentTable.id) {
             try {
               await updateTableStatus(currentTable.id, "available", undefined);
-              await updateOrderStatus(orderToUse.id!, "closed");
+              await updateOrderStatus(orderToUse.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
               const updatedTable = await getTable(currentTable.id);
               if (updatedTable) {
                 setCurrentTable(updatedTable);
@@ -4641,7 +4642,7 @@ function TableDetailContent() {
           if (updatedItems.length === 0) {
             // Hiç ürün kalmadıysa siparişi kapat
             await updateTableStatus(currentTable.id!, "available", undefined);
-            await updateOrderStatus(order.id!, "closed");
+            await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
             setOrder(null);
             setSelectedItems(new Set());
             setShowMoveModal(false);
@@ -4955,7 +4956,7 @@ function TableDetailContent() {
           if (updatedItems.length === 0) {
             // Hiç ürün kalmadıysa siparişi kapat
             await updateTableStatus(currentTable.id!, "available", undefined);
-            await updateOrderStatus(order.id!, "closed");
+            await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
             // MovedItems'ı kaydet
             await updateOrder(order.id!, { movedItems: movedItems });
             setOrder(null);
@@ -5221,7 +5222,7 @@ function TableDetailContent() {
 
           // Masa durumunu güncelle ve siparişi kapat
           await updateTableStatus(currentTable.id!, "available", undefined);
-          await updateOrderStatus(order.id!, "closed");
+          await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
 
           // Order state'ini güncelle
           setOrder(null);
@@ -5481,7 +5482,7 @@ function TableDetailContent() {
             total: 0,
           });
           await updateTableStatus(currentTable.id!, "available", undefined);
-          await updateOrderStatus(order.id!, "closed");
+          await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
           setOrder(null);
         }
 
@@ -5629,7 +5630,7 @@ function TableDetailContent() {
             });
 
             // Masa durumunu güncelle ve siparişi kapat
-            await updateOrderStatus(order.id!, "closed");
+            await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
             await updateTableStatus(currentTable.id!, "available", undefined);
 
             // Müşterinin lastOrderAt alanını güncelle
@@ -7598,7 +7599,7 @@ function TableDetailContent() {
                             "available",
                             undefined
                           );
-                          await updateOrderStatus(order.id!, "closed");
+                          await updateOrderStatus(order.id!, "closed", { branchIdOverride: branchId || userData?.assignedBranchId });
                           const updatedTable = await getTable(currentTable.id);
                           if (updatedTable) {
                             setCurrentTable(updatedTable);

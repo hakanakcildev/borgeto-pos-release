@@ -176,11 +176,12 @@ export async function addPayment(
  */
 export async function updateOrderStatus(
   orderId: string,
-  status: "active" | "closed"
+  status: "active" | "closed",
+  options?: { branchIdOverride?: string }
 ): Promise<void> {
   if (isOnline()) {
     try {
-      await firebaseUpdateOrderStatus(orderId, status as any);
+      await firebaseUpdateOrderStatus(orderId, status as any, options);
       const order = await firebaseGetOrder(orderId);
       if (order) {
         updateOrderOffline(order);
@@ -286,6 +287,8 @@ export async function getOrder(orderId: string): Promise<Order | null> {
 
 /**
  * Orders getir (offline-aware)
+ * Ödeme sonrası Firebase gecikmeli güncellense bile yerelde "closed" olan siparişler
+ * kazanır; böylece Masalar sayfasında masa ödendikten sonra eski tutar görünmez.
  */
 export async function getOrdersByCompany(
   companyId: string,
@@ -293,12 +296,45 @@ export async function getOrdersByCompany(
 ): Promise<Order[]> {
   if (isOnline()) {
     try {
-      const orders = await firebaseGetOrdersByCompany(companyId, options);
-      saveOrdersOffline(orders);
-      return orders;
+      const firebaseOrders = await firebaseGetOrdersByCompany(companyId, options);
+      const localOrders = loadOrdersOffline();
+      const filteredLocal = localOrders.filter((o) => {
+        if (o.companyId !== companyId) return false;
+        if (options?.branchId && o.branchId !== options.branchId) return false;
+        return true;
+      });
+      
+      // Firebase sonucunu base al, ama local'deki "closed" siparişleri önceliklendir
+      const firebaseOrderMap = new Map(firebaseOrders.map((o) => [o.id, o]));
+      const localOrderMap = new Map(filteredLocal.map((o) => [o.id, o]));
+      
+      const merged: Order[] = [];
+      const processedIds = new Set<string>();
+      
+      // Önce Firebase siparişlerini ekle (ama local'de "closed" ise local'i kullan)
+      firebaseOrders.forEach((o) => {
+        if (o.id) {
+          processedIds.add(o.id);
+          const local = localOrderMap.get(o.id);
+          if (local && local.status === "closed" && o.status !== "closed") {
+            merged.push(local);
+          } else {
+            merged.push(o);
+          }
+        }
+      });
+      
+      // Firebase'de olmayan local siparişleri ekle
+      filteredLocal.forEach((o) => {
+        if (o.id && !processedIds.has(o.id)) {
+          merged.push(o);
+        }
+      });
+      
+      saveOrdersOffline(merged);
+      return merged;
     } catch (error) {
       console.warn("⚠️ Firebase error, loading from offline storage:", error);
-      // Offline storage'dan yükle ve filtrele
       const allOrders = loadOrdersOffline();
       let filtered = allOrders.filter((o) => o.companyId === companyId);
       if (options?.branchId) {
@@ -307,7 +343,6 @@ export async function getOrdersByCompany(
       return filtered;
     }
   } else {
-    // Offline durumunda localStorage'dan yükle
     const allOrders = loadOrdersOffline();
     let filtered = allOrders.filter((o) => o.companyId === companyId);
     if (options?.branchId) {
@@ -319,6 +354,8 @@ export async function getOrdersByCompany(
 
 /**
  * Tables getir (offline-aware)
+ * Ödeme sonrası masa "available" yerelde güncellenmişse, Firebase gecikmeli olsa bile
+ * yerel durum kazanır; böylece Masalar sayfasında masa doğru görünür.
  */
 export async function getTablesByCompany(
   companyId: string,
@@ -326,12 +363,45 @@ export async function getTablesByCompany(
 ): Promise<Table[]> {
   if (isOnline()) {
     try {
-      const tables = await firebaseGetTablesByCompany(companyId, branchId);
-      saveTablesOffline(tables);
-      return tables;
+      const firebaseTables = await firebaseGetTablesByCompany(companyId, branchId);
+      const localTables = loadTablesOffline();
+      const filteredLocal = localTables.filter((t) => {
+        if (t.companyId !== companyId) return false;
+        if (branchId && t.branchId !== branchId) return false;
+        return true;
+      });
+      
+      // Firebase sonucunu base al, ama local'deki "available" masaları önceliklendir (ödeme sonrası)
+      const firebaseTableMap = new Map(firebaseTables.map((t) => [t.id, t]));
+      const localTableMap = new Map(filteredLocal.map((t) => [t.id, t]));
+      
+      const merged: Table[] = [];
+      const processedIds = new Set<string>();
+      
+      // Önce Firebase masalarını ekle (ama local'de "available" ise ve Firebase'de "occupied" ise local'i kullan)
+      firebaseTables.forEach((t) => {
+        if (t.id) {
+          processedIds.add(t.id);
+          const local = localTableMap.get(t.id);
+          if (local && local.status === "available" && t.status === "occupied") {
+            merged.push(local);
+          } else {
+            merged.push(t);
+          }
+        }
+      });
+      
+      // Firebase'de olmayan local masaları ekle (tüm masalar görünmeli)
+      filteredLocal.forEach((t) => {
+        if (t.id && !processedIds.has(t.id)) {
+          merged.push(t);
+        }
+      });
+      
+      saveTablesOffline(merged);
+      return merged;
     } catch (error) {
       console.warn("⚠️ Firebase error, loading from offline storage:", error);
-      // Offline storage'dan yükle ve filtrele
       const allTables = loadTablesOffline();
       let filtered = allTables.filter((t) => t.companyId === companyId);
       if (branchId) {
@@ -340,7 +410,6 @@ export async function getTablesByCompany(
       return filtered;
     }
   } else {
-    // Offline durumunda localStorage'dan yükle
     const allTables = loadTablesOffline();
     let filtered = allTables.filter((t) => t.companyId === companyId);
     if (branchId) {
