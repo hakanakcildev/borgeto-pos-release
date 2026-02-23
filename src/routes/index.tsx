@@ -154,15 +154,15 @@ function TablesView() {
           }
         });
 
-        let uniqueTables: Table[];
+        // Önce masaları hemen göster (kullanıcı beklemez)
+        const uniqueTables = removeDuplicateTables(tablesData);
+        setTables(uniqueTables);
+
+        // Masa durumu güncellemelerini arka planda yap, bittiğinde listeyi yenile
         if (tablesToUpdate.length > 0) {
-          await Promise.all(tablesToUpdate);
-          const updatedTables = await getTablesByCompany(effectiveCompanyId).catch(() => []);
-          uniqueTables = removeDuplicateTables(updatedTables);
-          setTables(uniqueTables);
-        } else {
-          uniqueTables = removeDuplicateTables(tablesData);
-          setTables(uniqueTables);
+          void Promise.all(tablesToUpdate)
+            .then(() => getTablesByCompany(effectiveCompanyId).catch(() => []))
+            .then((updated) => setTables(removeDuplicateTables(updated)));
         }
 
         // Sadece ilk yüklemede ve URL'de area yoksa ve selectedArea boşsa otomatik alan seç
@@ -713,14 +713,20 @@ function TablesView() {
     });
   };
 
-  const areas = Array.from(
-    new Set(
-      tables
-        .filter((t) => t.area !== "Cari") // Cari masaları filtrele
-        .map((t) => t.area)
-        .filter((area) => area && area.trim() !== "")
-    )
-  ).sort();
+  const areas = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tables
+            .filter((t) => t.area !== "Cari")
+            .map((t) => t.area)
+            .filter((area): area is string =>
+              Boolean(area && area.trim() !== "")
+            )
+        )
+      ).sort(),
+    [tables]
+  );
 
   // Filtrelenmiş masaları memoize et - sadece tables, selectedArea, showActiveOnly veya activeOrders değiştiğinde yeniden hesapla
   const filteredTables = useMemo(() => {
@@ -805,6 +811,15 @@ function TablesView() {
     return () => ro.disconnect();
   }, [updateGridLayout]);
 
+  const gridLayoutStyle = useMemo(
+    () => ({
+      gridTemplateColumns: `repeat(${gridLayout.cols}, 1fr)` as const,
+      gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)` as const,
+      gap: `${gridLayout.gap}px`,
+    }),
+    [gridLayout.cols, gridLayout.rows, gridLayout.gap]
+  );
+
   // Aktif masa sayısını tüm masalardan hesapla (sadece filtrelenmiş masalardan değil)
   // const activeTableCount = tables.filter((table) => {
   //   return activeOrders.some(
@@ -816,17 +831,6 @@ function TablesView() {
   //   );
   // }).length;
 
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Yükleniyor...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-[100dvh] bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
@@ -1010,8 +1014,15 @@ function TablesView() {
           ref={gridContainerRef}
           className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col p-3"
         >
-          {/* Masalar içeriği */}
-          {filteredTables.length === 0 ? (
+          {/* Masalar içeriği - yükleme sadece grid alanında, layout hep görünür */}
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center min-h-0">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-600 dark:border-blue-400 border-t-transparent mx-auto mb-3" />
+                <p className="text-sm text-gray-600 dark:text-gray-400">Yükleniyor...</p>
+              </div>
+            </div>
+          ) : filteredTables.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg p-8 sm:p-12 text-center shadow-sm border border-gray-200 dark:border-gray-700 mx-4 lg:mx-6">
               <Utensils className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -1032,11 +1043,7 @@ function TablesView() {
           ) : (
             <div
               className="w-full h-full min-w-0 min-h-0 grid"
-              style={{
-                gridTemplateColumns: `repeat(${gridLayout.cols}, 1fr)`,
-                gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)`,
-                gap: `${gridLayout.gap}px`,
-              }}
+              style={gridLayoutStyle}
             >
               {filteredTables.map((table) => {
                 const order = getTableOrder(table.id!);

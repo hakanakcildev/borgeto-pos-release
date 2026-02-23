@@ -1118,19 +1118,16 @@ function TableDetailContent() {
     table?.id,
   ]);
 
-  // Seçili kategorinin ürünlerini filtrele
-  // menu.category alanı kategori adını (name) tutuyor, ID değil
-  const filteredMenus = selectedCategoryName
-    ? menus.filter((menu) => {
-        // Kategori adını karşılaştır (case-insensitive)
-        return (
-          menu.category &&
-          selectedCategoryName &&
-          menu.category.trim().toLowerCase() ===
-            selectedCategoryName.trim().toLowerCase()
-        );
-      })
-    : menus;
+  // Seçili kategorinin ürünlerini filtrele (memoize - her render'da filtreleme yapma)
+  const filteredMenus = useMemo(() => {
+    if (!selectedCategoryName) return menus;
+    const name = selectedCategoryName.trim().toLowerCase();
+    return menus.filter(
+      (menu) =>
+        menu.category &&
+        menu.category.trim().toLowerCase() === name
+    );
+  }, [menus, selectedCategoryName]);
 
   // Ürün grid'i için dinamik hesaplama
   const [productGridSize, setProductGridSize] = useState<{
@@ -1242,41 +1239,41 @@ function TableDetailContent() {
     return { cols: bestCols, gap, cardSize: Math.floor(bestCardSize) };
   };
 
-  // Ürün grid boyutunu güncelle (sidebar genişliğini dikkate al)
+  // Ürün grid boyutunu güncelle (resize throttle ile performans)
   useEffect(() => {
-    const updateProductGridSize = () => {
-      if (productGridContainerRef.current) {
-        // Container'ın genişliğini ve yüksekliğini al (sidebar zaten dikkate alınmış)
-        // Yüksekliği daha doğru hesapla - parent container'ın tam yüksekliğini kullan
-        const rect = productGridContainerRef.current.getBoundingClientRect();
-        const parentRect =
-          productGridContainerRef.current.parentElement?.getBoundingClientRect();
-        const height = parentRect ? parentRect.height : rect.height;
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    const RESIZE_THROTTLE_MS = 120;
 
-        setProductGridSize({
-          width: rect.width,
-          height: height,
-        });
-      }
+    const updateProductGridSize = () => {
+      if (!productGridContainerRef.current) return;
+      const rect = productGridContainerRef.current.getBoundingClientRect();
+      const parentRect =
+        productGridContainerRef.current.parentElement?.getBoundingClientRect();
+      const height = parentRect ? parentRect.height : rect.height;
+      setProductGridSize({ width: rect.width, height });
     };
 
-    // İlk hesaplama
+    const onResize = () => {
+      if (resizeTimeout !== null) return;
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
+        updateProductGridSize();
+      }, RESIZE_THROTTLE_MS);
+    };
+
     updateProductGridSize();
+    const t1 = setTimeout(updateProductGridSize, 100);
+    const t2 = setTimeout(updateProductGridSize, 350);
 
-    // Kısa bir gecikme ile tekrar hesapla (layout tamamlanması için)
-    const timeoutId1 = setTimeout(updateProductGridSize, 100);
-    const timeoutId2 = setTimeout(updateProductGridSize, 300);
-    const timeoutId3 = setTimeout(updateProductGridSize, 500);
-
-    window.addEventListener("resize", updateProductGridSize);
+    window.addEventListener("resize", onResize);
 
     return () => {
-      clearTimeout(timeoutId1);
-      clearTimeout(timeoutId2);
-      clearTimeout(timeoutId3);
-      window.removeEventListener("resize", updateProductGridSize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      window.removeEventListener("resize", onResize);
     };
-  }, [filteredMenus.length]); // Kategori değiştiğinde de yeniden hesapla
+  }, [filteredMenus.length]);
 
   // Optimal grid yapısını hesapla
   const productGridConfig = useMemo(() => {
@@ -1289,6 +1286,19 @@ function TableDetailContent() {
       productGridSize.height
     );
   }, [filteredMenus.length, productGridSize]);
+
+  // Grid container style - referans sabit kalsın (gereksiz re-render azaltır)
+  const productGridStyle = useMemo(
+    () => ({
+      display: "grid" as const,
+      gridTemplateColumns: `repeat(${productGridConfig.cols}, ${productGridConfig.cardSize}px)`,
+      gap: `${productGridConfig.gap}px`,
+      alignContent: "start" as const,
+      justifyContent: "start" as const,
+      overflow: "hidden" as const,
+    }),
+    [productGridConfig.cols, productGridConfig.cardSize, productGridConfig.gap]
+  );
 
   // Sepete ürün ekle (not ile birlikte) - kullanılmıyor
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1329,9 +1339,6 @@ function TableDetailContent() {
   // Ürün ekleme butonuna tıklandığında ekstra malzeme kontrolü yap
   const handleAddToCart = useCallback(
     (menu: Menu, quantity?: number) => {
-      // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
-      if (isRefreshingOrder) return;
-
       // Eğer quantity belirtilmemişse, seçili numerik tuşu kullan
       const finalQuantity =
         quantity ??
@@ -1374,15 +1381,12 @@ function TableDetailContent() {
       // Ürün eklendikten sonra numerik tuş seçimini temizle
       setSelectedNumericKey(null);
     },
-    [isRefreshingOrder, selectedNumericKey]
+    [selectedNumericKey]
   );
 
   // Ekstra malzemeleri seçip sepete ekle (yeni ürün eklerken)
   const handleAddToCartWithExtras = useCallback(() => {
     if (!selectedMenuForExtra) return;
-
-    // Eğer refresh işlemi devam ediyorsa ürün eklemeyi engelle
-    if (isRefreshingOrder) return;
 
     const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
       .map((extraId) => {
@@ -1430,7 +1434,7 @@ function TableDetailContent() {
     setSelectedCartItemForExtra(null);
     setSelectedExtras(new Set());
     setShowCart(true);
-  }, [selectedMenuForExtra, selectedExtras, isRefreshingOrder]);
+  }, [selectedMenuForExtra, selectedExtras]);
 
   // Long press başlat (miktar/fiyat girme modalı için)
   const handleLongPressStart = useCallback((menu: Menu) => {
@@ -3823,12 +3827,11 @@ function TableDetailContent() {
               discount: 0,
             });
 
-            // Tam ödeme alındıysa hemen order state'ini null yap - UI'ı temizle
+            // Tam ödeme alındıysa hemen order state'ini null yap - UI bloklanmaz (refresh arka planda)
             if (isFullyPaidCheck) {
-              setIsRefreshingOrder(true);
-              setOrder(null); // Hemen null yap ki eski ürünler görünmesin
-              setCart([]); // Cart'ı da temizle
-              setNotes(""); // Notes'u da temizle
+              setOrder(null);
+              setCart([]);
+              setNotes("");
             }
 
             // Modal'ı kapat
@@ -3838,11 +3841,59 @@ function TableDetailContent() {
             setAppliedPayments([]);
           }
 
-          // Her ödeme alındığında (kısmi veya tam) masayı refresh et ve masada kal
-          // Eğer tam ödeme alındıysa, önce refresh yap sonra masaya dön
+          // Tam ödeme: refresh arka planda, hemen yönlendir (kullanıcı beklemez)
+          if (isFullyPaidCheck) {
+            const runRefreshInBackground = async () => {
+              try {
+                if (currentTable.id) {
+                  try {
+                    const refreshedTable = await getTable(currentTable.id);
+                    if (refreshedTable) setCurrentTable(refreshedTable);
+                  } catch {
+                    // ignore
+                  }
+                }
+                await getOrdersByCompany(
+                  companyId || userData?.companyId || "",
+                  { branchId: branchId || userData?.assignedBranchId || undefined }
+                ).catch(() => []);
+              } catch {
+                // ignore
+              } finally {
+                setIsRefreshingOrder(false);
+              }
+            };
+            void runRefreshInBackground();
+
+            const navSettings = localStorage.getItem("navigationSettings");
+            let shouldReturnAfterPayment = false;
+            if (navSettings) {
+              try {
+                const settings = JSON.parse(navSettings);
+                shouldReturnAfterPayment = settings.returnAfterPayment === true;
+              } catch {
+                // ignore
+              }
+            }
+            if (shouldReturnAfterPayment) {
+              setTimeout(() => navigateToHome(), 50);
+            } else {
+              navigate({
+                to: "/table/$tableId",
+                params: { tableId: tableId },
+                search: (prev) => ({
+                  area: prev?.area ?? undefined,
+                  activeOnly: prev?.activeOnly ?? false,
+                  payment: undefined,
+                }),
+                replace: true,
+              });
+            }
+            return;
+          }
+
+          // Kısmi ödeme: masayı refresh et (kullanıcı masada kalıyor)
           try {
-            // Önce güncel order'ı al (updatedOrder zaten güncel)
-            // Eğer updatedOrder varsa onu kullan, yoksa getOrdersByCompany ile al
             let finalOrder: Order | null = null;
 
             if (
@@ -3850,10 +3901,8 @@ function TableDetailContent() {
               updatedOrder.items &&
               updatedOrder.items.length > 0
             ) {
-              // updatedOrder güncel, onu kullan
               finalOrder = updatedOrder;
             } else {
-              // updatedOrder yoksa veya items boşsa, getOrdersByCompany ile kontrol et
               const allOrders = await getOrdersByCompany(
                 companyId || userData?.companyId || "",
                 {
@@ -8034,14 +8083,7 @@ function TableDetailContent() {
         <div
           ref={productGridRef}
           className="flex-1 p-3 lg:p-4 relative min-h-0 overflow-hidden"
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${productGridConfig.cols}, ${productGridConfig.cardSize}px)`,
-            gap: `${productGridConfig.gap}px`,
-            alignContent: "start",
-            justifyContent: "start",
-            overflow: "hidden",
-          }}
+          style={productGridStyle}
         >
           {filteredMenus.length === 0 ? (
             <div className="text-center py-12 col-span-full">
@@ -8055,23 +8097,19 @@ function TableDetailContent() {
                 <div
                   key={menu.id}
                   className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer flex flex-col items-center justify-center"
-                  onClick={() => !isRefreshingOrder && handleAddToCart(menu)}
-                  onMouseDown={() =>
-                    !isRefreshingOrder && handleLongPressStart(menu)
-                  }
+                  onClick={() => handleAddToCart(menu)}
+                  onMouseDown={() => handleLongPressStart(menu)}
                   onMouseUp={handleLongPressEnd}
                   onMouseLeave={handleLongPressEnd}
-                  onTouchStart={() =>
-                    !isRefreshingOrder && handleLongPressStart(menu)
-                  }
+                  onTouchStart={() => handleLongPressStart(menu)}
                   onTouchEnd={handleLongPressEnd}
                   onTouchCancel={handleLongPressEnd}
                   style={{
                     width: `${productGridConfig.cardSize}px`,
                     height: `${productGridConfig.cardSize}px`,
                     padding: `${productGridConfig.cardSize * 0.05}px`,
-                    pointerEvents: isRefreshingOrder ? "none" : "auto",
-                    opacity: isRefreshingOrder ? 0.5 : 1,
+                    pointerEvents: "auto",
+                    opacity: 1,
                   }}
                 >
                   <h3
@@ -8218,19 +8256,11 @@ function TableDetailContent() {
                   setPackageCount("1");
                   setChangeAmount("0");
                   setAppliedPayments([]);
-                  // Order'ı refresh et ki ödeme al butonu görünsün
+                  // Order'ı arka planda yenile
                   if (order?.id) {
-                    setIsRefreshingOrder(true);
-                    try {
-                      const refreshedOrder = await getOrder(order.id);
-                      if (refreshedOrder) {
-                        setOrder(refreshedOrder);
-                      }
-                    } catch (err) {
-                      console.error("Order refresh error:", err);
-                    } finally {
-                      setIsRefreshingOrder(false);
-                    }
+                    void getOrder(order.id).then((refreshed) => {
+                      if (refreshed) setOrder(refreshed);
+                    }).catch(() => {});
                   }
                 }}
               />
@@ -8514,19 +8544,11 @@ function TableDetailContent() {
                             }),
                             replace: true,
                           });
-                          // Order'ı refresh et ki ödeme al butonu görünsün
+                          // Order'ı arka planda yenile (modal hemen kapansın)
                           if (order?.id) {
-                            setIsRefreshingOrder(true);
-                            try {
-                              const refreshedOrder = await getOrder(order.id);
-                              if (refreshedOrder) {
-                                setOrder(refreshedOrder);
-                              }
-                            } catch (err) {
-                              console.error("Order refresh error:", err);
-                            } finally {
-                              setIsRefreshingOrder(false);
-                            }
+                            void getOrder(order.id).then((refreshed) => {
+                              if (refreshed) setOrder(refreshed);
+                            }).catch(() => {});
                           }
                         }}
                         className="h-10 w-10 p-0 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center"
