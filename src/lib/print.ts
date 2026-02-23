@@ -57,6 +57,9 @@ export function formatPrintContent(
   const tableNum = turkishToAscii(String(tableNumber));
   const isPaid = additionalInfo?.isPaid || type === "payment";
   const paperWidth = additionalInfo?.paperWidth || 48; // 80mm için 48 karakter
+  const now = new Date();
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const formattedDateTime = `${pad2(now.getDate())}.${pad2(now.getMonth() + 1)}.${now.getFullYear()} - ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 
   // Tablo: Ürün | Adet (birim fiyat) | Toplam
   const colAdet = 12;   // Birim fiyat için (örn. 170.00 TL)
@@ -137,9 +140,14 @@ export function formatPrintContent(
     content += ESC + "3" + String.fromCharCode(0);
   }
 
-  // Masa Adı (ç -> c vb. tableNum zaten turkishToAscii ile dönüştürüldü)
+  // Masa ve tarih bilgisi
   content += ESC + "!" + String.fromCharCode(0x20);
-  content += `Masa ${tableNum}`;
+  content += `Masa: ${tableNum}`;
+  content += ESC + "!" + String.fromCharCode(0x00);
+  content += lineBreak(0);
+  // Tarih, ürünlerle aynı küçük boyutta
+  content += ESC + "!" + String.fromCharCode(0x00);
+  content += `Tarih: ${formattedDateTime}`;
   content += ESC + "!" + String.fromCharCode(0x00);
   // Masa adından sonra boşluk: ESC 3 36 ile satır aralığı + feedLines
   content += ESC + "3" + String.fromCharCode(36);
@@ -149,12 +157,15 @@ export function formatPrintContent(
   content += ESC + "3" + String.fromCharCode(0);
 
   // Tablo başlığı: Ürün | Adet | Toplam (arada gereksiz boşluk yok)
+  // Başlıkları eski boyuta döndür
+  content += ESC + "!" + String.fromCharCode(0x00);
   content += ESC + "E" + String.fromCharCode(0x01);
   content += padRight("Urun", colUrun) + padLeft("Adet", colAdet) + padLeft("Toplam", colToplam);
   content += ESC + "E" + String.fromCharCode(0x00);
   content += lineBreak(0);
   content += fullLine();
   content += lineBreak(0);
+  content += ESC + "!" + String.fromCharCode(0x00);
 
   // Ürünleri birleştir
   const mergedItems = new Map<
@@ -242,10 +253,12 @@ export function formatPrintContent(
   // Toplam'dan önce satır aralığını artır
   content += ESC + "3" + String.fromCharCode(36);
   content += lineBreak(1);
+  content += ESC + "!" + String.fromCharCode(0x10);
   content += ESC + "E" + String.fromCharCode(0x01);
   content += `Toplam: ${total.toFixed(2)} TL`;
   if (isPaid) content += " - Odendi";
   content += ESC + "E" + String.fromCharCode(0x00);
+  content += ESC + "!" + String.fromCharCode(0x00);
   content += lineBreak(1); // Toplam yazısından sonra tek satır boşluk
 
   if (type === "payment" && additionalInfo?.paymentMethod) {
@@ -260,10 +273,13 @@ export function formatPrintContent(
   // Afiyet Olsun ortada; altında kesim için bol boşluk (fiş uzun çıksın, kullanıcı rahat kessin)
   content += lineBreak(1);
   content += ESC + "a" + String.fromCharCode(0x01); // Ortala
+  content += ESC + "!" + String.fromCharCode(0x10);
   content += "Afiyet Olsun";
+  content += ESC + "!" + String.fromCharCode(0x00);
+  content += lineBreak(0); // Merkez hizalamayı bu satırda uygula
   content += ESC + "a" + String.fromCharCode(0x00); // Sola dön
-  // Çok satır boşluk: yazıcı kesimi "Afiyet olsun" altında olsun, Toplam hizasında kalmasın
-  content += lineBreak(40);
+  // Orta seviye alt boşluk
+  content += lineBreak(24);
 
   return content;
 }

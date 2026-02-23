@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -25,8 +25,6 @@ import {
   Loader2,
   ArrowLeft,
   WifiOff,
-  SlidersHorizontal,
-  X,
   Minimize2,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
@@ -100,6 +98,13 @@ function TablesView() {
   const longPressCompletedRef = useRef<boolean>(false);
   const pressingTableIdRef = useRef<string | null>(null);
   const longPressEndTimeRef = useRef<number>(0);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [gridLayout, setGridLayout] = useState<{
+    cardSize: number;
+    cols: number;
+    rows: number;
+    gap: number;
+  }>({ cardSize: 120, cols: 4, rows: 3, gap: 12 });
   const [_isMovingTable, setIsMovingTable] = useState(false);
   const [targetTableIdForMove, setTargetTableIdForMove] = useState<
     string | null
@@ -742,6 +747,64 @@ function TablesView() {
     return filtered;
   }, [tables, selectedArea, showActiveOnly, activeOrders]);
 
+  // Grid: Tüm kartlar ekrana tam sığar — ne alta ne sağa taşma, scroll yok. Kolon sayısı ekrana göre.
+  const GRID_PADDING = 24; // p-3
+  const SAFETY = 4; // taşma/rounding için pay
+  const updateGridLayout = useCallback(() => {
+    const el = gridContainerRef.current;
+    if (!el || filteredTables.length === 0) return;
+    const width = Math.max(0, el.clientWidth - GRID_PADDING - SAFETY);
+    const height = Math.max(0, el.clientHeight - GRID_PADDING - SAFETY);
+    const gap = 12;
+    const minCard = 56;
+    const n = filteredTables.length;
+    let best = { cardSize: minCard, cols: 1, rows: 1 };
+    // Tüm satır sayılarını dene; kart boyutunu maksimize et, kolon sayısı sınırı yok (ekrana göre)
+    for (let rows = 1; rows <= n; rows++) {
+      const cols = Math.ceil(n / rows);
+      const cardByWidth = (width - (cols - 1) * gap) / cols;
+      const cardByHeight = (height - (rows - 1) * gap) / rows;
+      const rawSize = Math.min(cardByWidth, cardByHeight);
+      const cardSize = Math.floor(rawSize);
+      if (cardSize >= minCard && cardSize > best.cardSize) {
+        best = { cardSize, cols, rows, gap };
+      }
+    }
+    if (best.cardSize === minCard && best.cols === 1 && best.rows === 1) {
+      const cols = Math.max(1, Math.floor((width + gap) / (minCard + gap)));
+      const rows = Math.max(1, Math.ceil(n / cols));
+      const cardByWidth = (width - (cols - 1) * gap) / cols;
+      const cardByHeight = (height - (rows - 1) * gap) / rows;
+      best = {
+        cardSize: Math.floor(Math.min(cardByWidth, cardByHeight)),
+        cols,
+        rows,
+        gap,
+      };
+    }
+    // Kesin sığdır: hem genişlik hem yükseklik taşmasın (tam sayı pixel)
+    let cardSize = Math.max(minCard, Math.floor(best.cardSize));
+    const totalW = best.cols * cardSize + (best.cols - 1) * best.gap;
+    const totalH = best.rows * cardSize + (best.rows - 1) * best.gap;
+    if (totalW > width && best.cols > 0) {
+      cardSize = Math.min(cardSize, Math.floor((width - (best.cols - 1) * best.gap) / best.cols));
+    }
+    if (totalH > height && best.rows > 0) {
+      cardSize = Math.min(cardSize, Math.floor((height - (best.rows - 1) * best.gap) / best.rows));
+    }
+    cardSize = Math.max(minCard, cardSize);
+    setGridLayout({ ...best, cardSize });
+  }, [filteredTables.length]);
+
+  useEffect(() => {
+    updateGridLayout();
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateGridLayout);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateGridLayout]);
+
   // Aktif masa sayısını tüm masalardan hesapla (sadece filtrelenmiş masalardan değil)
   // const activeTableCount = tables.filter((table) => {
   //   return activeOrders.some(
@@ -753,8 +816,6 @@ function TablesView() {
   //   );
   // }).length;
 
-  // Küçük ekranlarda sidebar kapalı; aç/kapa için
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) {
     return (
@@ -802,16 +863,6 @@ function TablesView() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Mobil: Filtreler butonu (sidebar aç/kapa) */}
-          <button
-            type="button"
-            onClick={() => setSidebarOpen((o) => !o)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition-colors"
-            title={sidebarOpen ? "Filtreleri kapat" : "Filtreler"}
-          >
-            <SlidersHorizontal className="h-5 w-5 text-white" />
-          </button>
-
           {/* Internet Durumu - Sadece internet kesildiğinde göster */}
           {!isOnline && (
             <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 backdrop-blur-sm">
@@ -848,20 +899,117 @@ function TablesView() {
         </div>
       </header>
 
-      {/* Ana içerik alanı - Sidebar ile birlikte, tam responsive */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Backdrop: mobilde sidebar açıkken grid'in üzerinde */}
-        {sidebarOpen && (
+      {/* Ana içerik: üstte yatay filtreler, altta masa grid'i %100 alan, scroll yok */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        {/* Yatay filtre çubuğu - masa kartlarının üstünde */}
+        <div className="shrink-0 px-3 pt-3 pb-2 flex flex-wrap items-center gap-2 bg-gray-900/30 dark:bg-black/20 border-b border-white/10">
           <button
-            type="button"
-            aria-label="Filtreleri kapat"
-            onClick={() => setSidebarOpen(false)}
-            className="md:hidden fixed inset-0 bg-black/50 z-40"
-          />
-        )}
+            onClick={() => {
+              setSelectedArea("");
+              setShowActiveOnly(false);
+              navigate({
+                to: "/",
+                search: { area: "all", activeOnly: false },
+                replace: true,
+              });
+            }}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              !selectedArea && !showActiveOnly
+                ? "bg-white/20 text-white shadow-md"
+                : "bg-white/10 text-white/80 hover:bg-white/15"
+            }`}
+          >
+            Tüm Masalar
+          </button>
+          {areas.length > 0 &&
+            areas
+              .filter((a) => a !== "Paket" && a !== "Hızlı Satış")
+              .map((area) => (
+                <button
+                  key={area}
+                  onClick={() => {
+                    setSelectedArea(area);
+                    setShowActiveOnly(false);
+                    navigate({
+                      to: "/",
+                      search: { area, activeOnly: false },
+                      replace: true,
+                    });
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    selectedArea === area && !showActiveOnly
+                      ? "bg-white/20 text-white shadow-md"
+                      : "bg-white/10 text-white/80 hover:bg-white/15"
+                  }`}
+                >
+                  {area}
+                </button>
+              ))}
+          <button
+            onClick={() => {
+              setShowActiveOnly(true);
+              setSelectedArea("");
+              navigate({
+                to: "/",
+                search: { area: undefined, activeOnly: true },
+                replace: true,
+              });
+            }}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              showActiveOnly
+                ? "bg-white/20 text-white shadow-md"
+                : "bg-white/10 text-white/80 hover:bg-white/15"
+            }`}
+          >
+            Aktif Masalar
+          </button>
+          {areas.includes("Hızlı Satış") && (
+            <button
+              onClick={() => {
+                setSelectedArea("Hızlı Satış");
+                setShowActiveOnly(false);
+                navigate({
+                  to: "/",
+                  search: { area: "Hızlı Satış", activeOnly: false },
+                  replace: true,
+                });
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedArea === "Hızlı Satış" && !showActiveOnly
+                  ? "bg-white/20 text-white shadow-md"
+                  : "bg-white/10 text-white/80 hover:bg-white/15"
+              }`}
+            >
+              Hızlı Satış
+            </button>
+          )}
+          {areas.includes("Paket") && (
+            <button
+              onClick={() => {
+                setSelectedArea("Paket");
+                setShowActiveOnly(false);
+                navigate({
+                  to: "/",
+                  search: { area: "Paket", activeOnly: false },
+                  replace: true,
+                });
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedArea === "Paket" && !showActiveOnly
+                  ? "bg-white/20 text-white shadow-md"
+                  : "bg-white/10 text-white/80 hover:bg-white/15"
+              }`}
+            >
+              Paket
+            </button>
+          )}
+        </div>
 
-        {/* Ana içerik - masalar grid'i, alanı doldurur, gerekirse scroll */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-auto flex flex-col">
+        {/* Masa kartları grid'i - kalan alanın %100'ü, scroll yok */}
+        <div
+          ref={gridContainerRef}
+          className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col p-3"
+        >
           {/* Masalar içeriği */}
           {filteredTables.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg p-8 sm:p-12 text-center shadow-sm border border-gray-200 dark:border-gray-700 mx-4 lg:mx-6">
@@ -883,9 +1031,11 @@ function TablesView() {
             </div>
           ) : (
             <div
-              className="w-full p-3 grid gap-2 sm:gap-3"
+              className="w-full h-full min-w-0 min-h-0 grid"
               style={{
-                gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+                gridTemplateColumns: `repeat(${gridLayout.cols}, 1fr)`,
+                gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)`,
+                gap: `${gridLayout.gap}px`,
               }}
             >
               {filteredTables.map((table) => {
@@ -911,7 +1061,7 @@ function TablesView() {
                     }
                     onTouchEnd={() => handleLongPressEnd(table.id!)}
                     onTouchCancel={() => handleMouseLeave(table.id!)}
-                    className="relative w-full overflow-hidden aspect-square"
+                    className="relative w-full h-full min-w-0 min-h-0 overflow-hidden"
                   >
                     <div
                       onClick={(e) => {
@@ -1075,142 +1225,6 @@ function TablesView() {
             </div>
           )}
         </div>
-
-        {/* Sağ Sidebar - Filtre Butonları: mobilde overlay (header altından başlar), md+ sabit ve üstten hizalı */}
-        <aside
-          className={`fixed md:relative inset-y-0 right-0 z-50 w-56 sm:w-64 md:w-48 md:shrink-0 bg-gray-900 md:bg-black/20 backdrop-blur-sm overflow-y-auto shadow-xl md:shadow-none transition-transform duration-200 ease-out md:translate-x-0 top-[80px] md:top-0 ${
-            sidebarOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="p-3 pt-4 flex flex-col gap-2">
-            {/* Mobil: kapat butonu */}
-            <div className="flex items-center justify-between md:hidden pb-2 border-b border-white/20">
-              <span className="text-sm font-medium text-white">Filtreler</span>
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white"
-                aria-label="Kapat"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-2 mt-1">
-              <button
-                onClick={() => {
-                  setSelectedArea("");
-                  setShowActiveOnly(false);
-                  navigate({
-                    to: "/",
-                    search: { area: "all", activeOnly: false },
-                    replace: true,
-                  });
-                }}
-                className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
-                  !selectedArea && !showActiveOnly
-                    ? "bg-white/20 text-white shadow-md"
-                    : "bg-white/10 text-white/80 hover:bg-white/15"
-                }`}
-              >
-                Tüm Masalar
-              </button>
-
-              {areas.length > 0 &&
-                areas
-                  .filter((area) => area !== "Paket" && area !== "Hızlı Satış")
-                  .map((area) => {
-                    return (
-                      <button
-                        key={area}
-                        onClick={() => {
-                          setSelectedArea(area);
-                          setShowActiveOnly(false);
-                          navigate({
-                            to: "/",
-                            search: { area, activeOnly: false },
-                            replace: true,
-                          });
-                        }}
-                        className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
-                          selectedArea === area && !showActiveOnly
-                            ? "bg-white/20 text-white shadow-md"
-                            : "bg-white/10 text-white/80 hover:bg-white/15"
-                        }`}
-                      >
-                        {area}
-                      </button>
-                    );
-                  })}
-
-              <button
-                onClick={() => {
-                  setShowActiveOnly(true);
-                  setSelectedArea("");
-                  navigate({
-                    to: "/",
-                    search: { area: undefined, activeOnly: true },
-                    replace: true,
-                  });
-                }}
-                className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
-                  showActiveOnly
-                    ? "bg-white/20 text-white shadow-md"
-                    : "bg-white/10 text-white/80 hover:bg-white/15"
-                }`}
-              >
-                Aktif Masalar
-              </button>
-
-              {areas.includes("Hızlı Satış") &&
-                (() => {
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedArea("Hızlı Satış");
-                        setShowActiveOnly(false);
-                        navigate({
-                          to: "/",
-                          search: { area: "Hızlı Satış", activeOnly: false },
-                          replace: true,
-                        });
-                      }}
-                      className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
-                        selectedArea === "Hızlı Satış" && !showActiveOnly
-                          ? "bg-white/20 text-white shadow-md"
-                          : "bg-white/10 text-white/80 hover:bg-white/15"
-                      }`}
-                    >
-                      Hızlı Satış
-                    </button>
-                  );
-                })()}
-
-              {areas.includes("Paket") &&
-                (() => {
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedArea("Paket");
-                        setShowActiveOnly(false);
-                        navigate({
-                          to: "/",
-                          search: { area: "Paket", activeOnly: false },
-                          replace: true,
-                        });
-                      }}
-                      className={`px-3 py-4 rounded-lg text-sm font-medium transition-all text-left ${
-                        selectedArea === "Paket" && !showActiveOnly
-                          ? "bg-white/20 text-white shadow-md"
-                          : "bg-white/10 text-white/80 hover:bg-white/15"
-                      }`}
-                    >
-                      Paket
-                    </button>
-                  );
-                })()}
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   );

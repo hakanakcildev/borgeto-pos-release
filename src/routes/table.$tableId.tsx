@@ -167,11 +167,23 @@ function TableDetailContent() {
   );
 
   // Miktar girme modalı için state'ler
-  const [, setShowQuantityModal] = useState(false);
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [selectedMenuForQuantity, setSelectedMenuForQuantity] =
     useState<Menu | null>(null);
   const [quantityInput, setQuantityInput] = useState("");
+  const [customPriceInput, setCustomPriceInput] = useState(""); // Opsiyonel birim fiyat (boşsa menü fiyatı)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sipariş listesinde ürün fiyatı güncelleme (basılı tutunca)
+  const [showOrderItemPriceModal, setShowOrderItemPriceModal] = useState(false);
+  const [orderItemForPriceEdit, setOrderItemForPriceEdit] = useState<{
+    orderId: string;
+    item: OrderItem;
+    indices: number[];
+  } | null>(null);
+  const [orderItemNewPriceInput, setOrderItemNewPriceInput] = useState("");
+  const orderItemLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orderItemLongPressFiredRef = useRef(false);
 
   // Ekstra malzeme seçimi için state'ler
   const [showExtraModal, setShowExtraModal] = useState(false);
@@ -1420,11 +1432,12 @@ function TableDetailContent() {
     setShowCart(true);
   }, [selectedMenuForExtra, selectedExtras, isRefreshingOrder]);
 
-  // Long press başlat (miktar girme modalı için)
+  // Long press başlat (miktar/fiyat girme modalı için)
   const handleLongPressStart = useCallback((menu: Menu) => {
     longPressTimerRef.current = setTimeout(() => {
       setSelectedMenuForQuantity(menu);
       setQuantityInput("");
+      setCustomPriceInput("");
       // Eğer üründe ekstra malzeme varsa zorunlu olanları otomatik seç
       if (menu.extras && menu.extras.length > 0) {
         const requiredExtras = new Set(
@@ -1448,21 +1461,18 @@ function TableDetailContent() {
     }
   }, []);
 
-  // Miktar girme modalından ürün ekle (kullanılmıyor)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _handleAddWithQuantity = useCallback(() => {
-    if (!selectedMenuForQuantity || !quantityInput) return;
+  // Miktar/fiyat modalından ürün ekle (ondalıklı adet opsiyonel [boş=1], opsiyonel özel birim fiyat)
+  const handleAddWithQuantity = useCallback(() => {
+    if (!selectedMenuForQuantity) return;
 
-    // Virgülü noktaya çevir
-    const normalizedInput = quantityInput.replace(",", ".");
-    const quantity = parseFloat(normalizedInput);
+    const normalizedQty = quantityInput.trim() === "" ? "1" : quantityInput.replace(",", ".");
+    const quantity = parseFloat(normalizedQty);
 
     if (isNaN(quantity) || quantity <= 0) {
-      customAlert("Geçerli bir miktar girin", "Uyarı", "warning");
+      customAlert("Geçerli bir miktar girin (örn: boş=1 adet, 1.5, 1.25)", "Uyarı", "warning");
       return;
     }
 
-    // Eğer ekstra malzeme seçildiyse onları kullan, yoksa boş
     const selectedExtrasList: SelectedExtra[] = Array.from(selectedExtras)
       .map((extraId) => {
         const extra = selectedMenuForQuantity.extras?.find(
@@ -1482,7 +1492,20 @@ function TableDetailContent() {
       (sum, extra) => sum + extra.price,
       0
     );
-    const itemPrice = selectedMenuForQuantity.price + extrasTotal;
+    // Özel birim fiyat girilmişse kullan, yoksa menü fiyatı + ekstralar
+    let unitPrice: number;
+    if (customPriceInput.trim() !== "") {
+      const customPrice = parseFloat(customPriceInput.replace(",", "."));
+      if (isNaN(customPrice) || customPrice < 0) {
+        customAlert("Geçerli bir fiyat girin", "Uyarı", "warning");
+        return;
+      }
+      unitPrice = customPrice + extrasTotal;
+    } else {
+      unitPrice = selectedMenuForQuantity.price + extrasTotal;
+    }
+
+    const subtotal = unitPrice * quantity;
 
     setCart((prev) => {
       const cartItemId = `${selectedMenuForQuantity.id}-${Date.now()}-${Math.random()}`;
@@ -1492,9 +1515,9 @@ function TableDetailContent() {
           cartItemId,
           menuId: selectedMenuForQuantity.id!,
           menuName: selectedMenuForQuantity.name,
-          menuPrice: selectedMenuForQuantity.price,
-          quantity: quantity,
-          subtotal: itemPrice * quantity,
+          menuPrice: unitPrice - extrasTotal,
+          quantity,
+          subtotal,
           selectedExtras:
             selectedExtrasList.length > 0 ? selectedExtrasList : undefined,
           addedAt: new Date(),
@@ -1502,14 +1525,44 @@ function TableDetailContent() {
       ];
     });
 
-    // Modal'ı kapat
     setShowQuantityModal(false);
     setSelectedMenuForQuantity(null);
     setQuantityInput("");
+    setCustomPriceInput("");
     setSelectedExtras(new Set());
-    // Sepeti göster
     setShowCart(true);
-  }, [selectedMenuForQuantity, quantityInput, selectedExtras]);
+  }, [selectedMenuForQuantity, quantityInput, customPriceInput, selectedExtras]);
+
+  // Sipariş listesinde ürün fiyatını güncelle (basılı tutunca açılan modal'dan)
+  const handleSaveOrderItemPrice = useCallback(async () => {
+    if (!orderItemForPriceEdit) return;
+    const raw = orderItemNewPriceInput.replace(",", ".").trim();
+    const newPrice = raw === "" ? NaN : parseFloat(raw);
+    if (isNaN(newPrice) || newPrice < 0) {
+      customAlert("Geçerli bir fiyat girin", "Uyarı", "warning");
+      return;
+    }
+    const currentOrder = await getOrder(orderItemForPriceEdit.orderId);
+    if (!currentOrder?.items) return;
+    const { indices } = orderItemForPriceEdit;
+    const updatedItems = currentOrder.items.map((it, idx) =>
+      indices.includes(idx)
+        ? { ...it, menuPrice: newPrice, subtotal: newPrice * it.quantity }
+        : it
+    );
+    const newSubtotal = updatedItems.reduce((s, it) => s + it.subtotal, 0);
+    const newTotal = newSubtotal - (currentOrder.discount ?? 0);
+    await updateOrder(orderItemForPriceEdit.orderId, {
+      items: updatedItems,
+      subtotal: newSubtotal,
+      total: newTotal,
+    });
+    const updatedOrder = await getOrder(orderItemForPriceEdit.orderId);
+    if (updatedOrder) setOrder(updatedOrder);
+    setShowOrderItemPriceModal(false);
+    setOrderItemForPriceEdit(null);
+    setOrderItemNewPriceInput("");
+  }, [orderItemForPriceEdit, orderItemNewPriceInput]);
 
   // Sepetteki ürün miktarını güncelle (cartItemId ile) - kullanılmıyor
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -6614,7 +6667,53 @@ function TableDetailContent() {
                                                   }`}
                                                 >
                                                   <div
+                                                    onMouseDown={() => {
+                                                      if (isUnsent) return;
+                                                      orderItemLongPressTimerRef.current = setTimeout(() => {
+                                                        orderItemLongPressFiredRef.current = true;
+                                                        setOrderItemForPriceEdit({ orderId: order.id!, item, indices });
+                                                        setOrderItemNewPriceInput(String(item.menuPrice?.toFixed(2) ?? "0"));
+                                                        setShowOrderItemPriceModal(true);
+                                                      }, 500);
+                                                    }}
+                                                    onMouseUp={() => {
+                                                      if (orderItemLongPressTimerRef.current) {
+                                                        clearTimeout(orderItemLongPressTimerRef.current);
+                                                        orderItemLongPressTimerRef.current = null;
+                                                      }
+                                                    }}
+                                                    onMouseLeave={() => {
+                                                      if (orderItemLongPressTimerRef.current) {
+                                                        clearTimeout(orderItemLongPressTimerRef.current);
+                                                        orderItemLongPressTimerRef.current = null;
+                                                      }
+                                                    }}
+                                                    onTouchStart={() => {
+                                                      if (isUnsent) return;
+                                                      orderItemLongPressTimerRef.current = setTimeout(() => {
+                                                        orderItemLongPressFiredRef.current = true;
+                                                        setOrderItemForPriceEdit({ orderId: order.id!, item, indices });
+                                                        setOrderItemNewPriceInput(String(item.menuPrice?.toFixed(2) ?? "0"));
+                                                        setShowOrderItemPriceModal(true);
+                                                      }, 500);
+                                                    }}
+                                                    onTouchEnd={() => {
+                                                      if (orderItemLongPressTimerRef.current) {
+                                                        clearTimeout(orderItemLongPressTimerRef.current);
+                                                        orderItemLongPressTimerRef.current = null;
+                                                      }
+                                                    }}
+                                                    onTouchCancel={() => {
+                                                      if (orderItemLongPressTimerRef.current) {
+                                                        clearTimeout(orderItemLongPressTimerRef.current);
+                                                        orderItemLongPressTimerRef.current = null;
+                                                      }
+                                                    }}
                                                     onClick={() => {
+                                                      if (orderItemLongPressFiredRef.current) {
+                                                        orderItemLongPressFiredRef.current = false;
+                                                        return;
+                                                      }
                                                       // Eğer gönderilmemiş ürünse, seçim yapma, sadece butonlara tıklanabilir
                                                       if (isUnsent) return;
 
@@ -10827,6 +10926,114 @@ function TableDetailContent() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Miktar / Fiyat girme modalı (ürüne basılı tutunca) */}
+      {showQuantityModal && selectedMenuForQuantity && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
+              {selectedMenuForQuantity.name}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              Varsayılan: ₺{selectedMenuForQuantity.price.toFixed(2)}
+            </p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Adet (opsiyonel, boş = 1; 1.5 girersen toplam 1.5× fiyat)
+                </label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Boş bırak = 1 adet"
+                  value={quantityInput}
+                  onChange={(e) => setQuantityInput(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Birim fiyat (opsiyonel)
+                </label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={selectedMenuForQuantity.price.toFixed(2)}
+                  value={customPriceInput}
+                  onChange={(e) => setCustomPriceInput(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowQuantityModal(false);
+                  setSelectedMenuForQuantity(null);
+                  setQuantityInput("");
+                  setCustomPriceInput("");
+                }}
+              >
+                İptal
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleAddWithQuantity}
+              >
+                Ekle
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sipariş ürünü fiyat güncelleme modalı (sipariş listesinde basılı tutunca) */}
+      {showOrderItemPriceModal && orderItemForPriceEdit && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+              Fiyat güncelle
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              {orderItemForPriceEdit.item.menuName}
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Yeni birim fiyat (₺)
+              </label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder={orderItemForPriceEdit.item.menuPrice?.toFixed(2)}
+                value={orderItemNewPriceInput}
+                onChange={(e) => setOrderItemNewPriceInput(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowOrderItemPriceModal(false);
+                  setOrderItemForPriceEdit(null);
+                  setOrderItemNewPriceInput("");
+                }}
+              >
+                İptal
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleSaveOrderItemPrice}
+              >
+                Kaydet
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
