@@ -140,11 +140,12 @@ export function formatPrintContent(
     content += ESC + "3" + String.fromCharCode(0);
   }
 
-  // Masa ve tarih bilgisi
+  // Masa ve tarih bilgisi (masa ile tarih arasında bir satır boşluk)
   content += ESC + "!" + String.fromCharCode(0x20);
   content += `Masa: ${tableNum}`;
   content += ESC + "!" + String.fromCharCode(0x00);
-  content += lineBreak(0);
+  content += lineBreak(1);
+  content += feedLines(1);
   // Tarih, ürünlerle aynı küçük boyutta
   content += ESC + "!" + String.fromCharCode(0x00);
   content += `Tarih: ${formattedDateTime}`;

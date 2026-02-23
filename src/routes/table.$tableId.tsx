@@ -349,6 +349,7 @@ function TableDetailContent() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [, _setProcessingPaymentMethodId] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [, setIsMovingItems] = useState(false);
 
   // Yazıcılar için state
@@ -5962,9 +5963,11 @@ function TableDetailContent() {
                   Taşı
                 </Button>
                 <Button
+                  type="button"
+                  disabled={isPrinting}
                   onClick={async () => {
-                    if (!order || order.items.length === 0) return;
-
+                    if (!order || order.items.length === 0 || isPrinting) return;
+                    setIsPrinting(true);
                     try {
                       // Tüm iptal edilmemiş ürünleri al
                       const itemsToPrint = order.items.filter(
@@ -6008,7 +6011,7 @@ function TableDetailContent() {
                         }
                       );
 
-                      // Yazdır
+                      // Yazdır (tek seferde tek çıktı)
                       const success = await printToPrinter(
                         defaultPrinter.name,
                         printContent,
@@ -6035,12 +6038,18 @@ function TableDetailContent() {
                         "Hata",
                         "error"
                       );
+                    } finally {
+                      setIsPrinting(false);
                     }
                   }}
                   className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1"
                 >
-                  <Printer className="h-3 w-3" />
-                  Yazdır
+                  {isPrinting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Printer className="h-3 w-3" />
+                  )}
+                  {isPrinting ? "Yazdırılıyor..." : "Yazdır"}
                 </Button>
               </div>
             )}

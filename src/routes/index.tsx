@@ -619,7 +619,20 @@ function TablesView() {
     }
   };
 
-  const getBackgroundColor = (status: Table["status"], isDark: boolean) => {
+  // Masada en az bir ürün (iptal edilmemiş) varsa true
+  const hasTableProducts = (order: Order | undefined) =>
+    !!order?.items?.length &&
+    order.items.some((item) => !item.canceledAt);
+
+  const getBackgroundColor = (
+    status: Table["status"],
+    isDark: boolean,
+    order: Order | undefined
+  ) => {
+    // Ürün olan masalar istisnasız yeşil
+    if (hasTableProducts(order)) {
+      return isDark ? "bg-green-600/60" : "bg-green-300";
+    }
     if (isDark) {
       switch (status) {
         case "available":
@@ -650,10 +663,10 @@ function TablesView() {
   };
 
   const getShadowEffect = (
-    status: Table["status"],
+    _status: Table["status"],
     order: Order | undefined
   ) => {
-    if (status === "occupied" && order && order.total > 0) {
+    if (hasTableProducts(order)) {
       return "shadow-lg"; // Daha belirgin gölge
     }
     return "shadow-sm";
@@ -764,7 +777,7 @@ function TablesView() {
     const gap = 12;
     const minCard = 56;
     const n = filteredTables.length;
-    let best = { cardSize: minCard, cols: 1, rows: 1 };
+    let best = { cardSize: minCard, cols: 1, rows: 1, gap };
     // Tüm satır sayılarını dene; kart boyutunu maksimize et, kolon sayısı sınırı yok (ekrana göre)
     for (let rows = 1; rows <= n; rows++) {
       const cols = Math.ceil(n / rows);
@@ -1141,14 +1154,13 @@ function TablesView() {
                           ? "bg-blue-500 dark:bg-blue-600 border-blue-600 dark:border-blue-700 ring-2 ring-blue-300 dark:ring-blue-500"
                           : getBackgroundColor(
                               table.status,
-                              resolvedTheme === "dark"
+                              resolvedTheme === "dark",
+                              order
                             )
                       } ${getShadowEffect(table.status, order)} rounded-lg p-2 border-2 border-white hover:shadow-xl transition-all duration-200 cursor-pointer h-full w-full flex flex-col items-center justify-center overflow-hidden ${
                         isSelectedForMove
                           ? "animate-pulse"
-                          : table.status === "occupied" &&
-                              order &&
-                              order.total > 0
+                          : hasTableProducts(order)
                             ? "animate-pulse-subtle"
                             : ""
                       }`}
@@ -1156,10 +1168,7 @@ function TablesView() {
                       <div className="text-center space-y-1 xl:space-y-2">
                         <div
                           className={`text-sm sm:text-base font-bold leading-tight ${
-                            isSelectedForMove ||
-                            (table.status === "occupied" &&
-                              order &&
-                              order.total > 0)
+                            isSelectedForMove || hasTableProducts(order)
                               ? "text-white"
                               : "text-gray-900 dark:text-white"
                           }`}
@@ -1170,10 +1179,7 @@ function TablesView() {
                         <div className="flex flex-col items-center gap-0.5">
                           <span
                             className={`text-xs font-medium ${
-                              isSelectedForMove ||
-                              (table.status === "occupied" &&
-                                order &&
-                                order.total > 0)
+                              isSelectedForMove || hasTableProducts(order)
                                 ? "text-white"
                                 : "text-gray-700 dark:text-gray-300"
                             }`}
@@ -1184,10 +1190,8 @@ function TablesView() {
                             className={`text-xs sm:text-sm font-bold ${
                               isSelectedForMove
                                 ? "text-white"
-                                : order && order.total > 0
-                                  ? table.status === "occupied"
-                                    ? "text-white"
-                                    : "text-blue-600 dark:text-blue-400"
+                                : hasTableProducts(order)
+                                  ? "text-white"
                                   : "text-gray-400 dark:text-gray-500"
                             }`}
                           >
@@ -1202,10 +1206,7 @@ function TablesView() {
                           return firstItem?.addedAt ? (
                             <div
                               className={`flex items-center justify-center gap-1 mt-0.5 text-[10px] sm:text-xs ${
-                                isSelectedForMove ||
-                                (table.status === "occupied" &&
-                                  order &&
-                                  order.total > 0)
+                                isSelectedForMove || hasTableProducts(order)
                                   ? "text-white font-medium"
                                   : "text-gray-500 dark:text-gray-400"
                               }`}
