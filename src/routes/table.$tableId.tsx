@@ -37,7 +37,8 @@ import type { Courier, CustomerAccount } from "@/lib/firebase/types";
 import {
   formatPrintContent,
   printToPrinter,
-  getPrintersForCategories,
+  getPrintersForAllMovement,
+  getPrintersForCategory,
   getDefaultPrinter,
 } from "@/lib/print";
 import { customAlert } from "@/components/ui/alert-dialog";
@@ -2187,15 +2188,87 @@ function TableDetailContent() {
           console.error("Masa güncellenirken hata:", err);
         }
 
-        // Yeni eklenen ürünleri yazdır (kategori yazıcılarına - tek adisyon)
+        // Yeni eklenen ürünleri yazdır: "Tüm Hareket" ve "Ürün Girişi" (kategori) yazıcılarına
         try {
           if (newItems.length > 0) {
-            // Kategorilere göre grupla
-            const itemsByCategory = new Map<string, OrderItem[]>();
+            const allPrinters = getPrintersForAllMovement(printers);
+            for (const printer of allPrinters) {
+              const allMode = printer.allPrintMode ?? "together";
+              if (
+                allMode === "by_group" &&
+                printer.printGroups &&
+                printer.printGroups.length > 0
+              ) {
+                // Ayrı yazdır: her grup için ayrı fiş
+                for (const group of printer.printGroups) {
+                  const itemsInGroup = newItems.filter((item) => {
+                    const menuItem = menus.find((m) => m.id === item.menuId);
+                    if (!menuItem?.category) return false;
+                    const cat = categories.find(
+                      (c) => c.name === menuItem.category
+                    );
+                    return cat && group.categoryIds.includes(cat.id || "");
+                  });
+                  if (itemsInGroup.length > 0) {
+                    const printContent = formatPrintContent(
+                      "order",
+                      itemsInGroup,
+                      currentTable.tableNumber,
+                      undefined,
+                      {
+                        companyName: companyData?.name || "",
+                        isPaid: false,
+                      }
+                    );
+                    await printToPrinter(printer.name, printContent, "order");
+                  }
+                }
+                // Hiçbir gruba dahil olmayan ürünler tek fişte
+                const ungrouped = newItems.filter((item) => {
+                  const menuItem = menus.find((m) => m.id === item.menuId);
+                  if (!menuItem?.category) return true;
+                  const cat = categories.find(
+                    (c) => c.name === menuItem.category
+                  );
+                  const inAny = printer.printGroups?.some(
+                    (g) => cat && g.categoryIds.includes(cat.id || "")
+                  );
+                  return !inAny;
+                });
+                if (ungrouped.length > 0) {
+                  const printContent = formatPrintContent(
+                    "order",
+                    ungrouped,
+                    currentTable.tableNumber,
+                    undefined,
+                    {
+                      companyName: companyData?.name || "",
+                      isPaid: false,
+                    }
+                  );
+                  await printToPrinter(printer.name, printContent, "order");
+                }
+              } else {
+                // Birlikte yazdır: tüm ürünler tek fişte
+                const printContent = formatPrintContent(
+                  "order",
+                  newItems,
+                  currentTable.tableNumber,
+                  undefined,
+                  {
+                    companyName: companyData?.name || "",
+                    isPaid: false,
+                  }
+                );
+                await printToPrinter(printer.name, printContent, "order");
+              }
+            }
 
+            // Kategorilere göre grupla; "Ürün Girişi" ve bu kategori atanmış yazıcılar
+            const itemsByCategory = new Map<string, OrderItem[]>();
             for (const item of newItems) {
               const menuItem = menus.find((m) => m.id === item.menuId);
-              if (menuItem && menuItem.category) {
+              if (menuItem?.category) {
                 const category = categories.find(
                   (c) => c.name === menuItem.category
                 );
@@ -2208,36 +2281,23 @@ function TableDetailContent() {
                 }
               }
             }
-
-            // Her kategori için o kategorideki tüm ürünleri tek adisyonda yazdır
-            for (const [
-              categoryId,
-              categoryItems,
-            ] of itemsByCategory.entries()) {
-              const category = categories.find((c) => c.id === categoryId);
-              if (category) {
-                // Bu kategoriye atanmış yazıcıları bul
-                const categoryPrinters = getPrintersForCategories(
-                  printers,
-                  categories,
-                  [categoryId]
+            for (const [categoryId, categoryItems] of itemsByCategory.entries()) {
+              const categoryPrinters = getPrintersForCategory(
+                printers,
+                categoryId
+              );
+              for (const printer of categoryPrinters) {
+                const printContent = formatPrintContent(
+                  "order",
+                  categoryItems,
+                  currentTable.tableNumber,
+                  undefined,
+                  {
+                    companyName: companyData?.name || "",
+                    isPaid: false,
+                  }
                 );
-
-                // Her yazıcıya bu kategorideki TÜM ürünleri tek adisyonda yazdır
-                for (const printer of categoryPrinters) {
-                  // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
-                  const printContent = formatPrintContent(
-                    "order",
-                    categoryItems, // Tüm ürünler tek adisyonda
-                    currentTable.tableNumber,
-                    undefined, // Sipariş no gösterilmeyecek
-                    {
-                      companyName: companyData?.name || "",
-                      isPaid: false, // Gönderilen ürünler henüz ödenmedi
-                    }
-                  );
-                  await printToPrinter(printer.name, printContent, "order");
-                }
+                await printToPrinter(printer.name, printContent, "order");
               }
             }
           }
@@ -4165,36 +4225,35 @@ function TableDetailContent() {
       // Eğer hiç ürün kalmadıysa siparişi kapat ve masayı müsait yap
       if (updatedItems.length === 0) {
         try {
-          // İptal edilen ürünü yazdır (kategori yazıcılarına) - sipariş kapanmadan önce
+          // İptal edilen ürünü yazdır: "Tüm Hareket" + "Ürün Girişi" (bu kategori) yazıcılarına
           try {
-            const menuItem = menus.find((m) => m.id === canceledItem.menuId);
-            if (menuItem && menuItem.category) {
+            const allPrinters = getPrintersForAllMovement(printers);
+            const categoryId = (() => {
+              const menuItem = menus.find((m) => m.id === canceledItem.menuId);
+              if (!menuItem?.category) return "";
               const category = categories.find(
                 (c) => c.name === menuItem.category
               );
-              if (category) {
-                // Bu kategoriye atanmış yazıcıları bul
-                const categoryPrinters = getPrintersForCategories(
-                  printers,
-                  categories,
-                  [category.id || ""]
-                );
-
-                // Her yazıcıya yazdır
-                for (const printer of categoryPrinters) {
-                  // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
-                  const printContent = formatPrintContent(
-                    "cancel",
-                    [canceledItem],
-                    currentTable.tableNumber,
-                    order.orderNumber,
-                    {
-                      companyName: companyData?.name || "",
-                    }
-                  );
-                  await printToPrinter(printer.name, printContent, "cancel");
-                }
-              }
+              return category?.id || "";
+            })();
+            const categoryPrinters = categoryId
+              ? getPrintersForCategory(printers, categoryId)
+              : [];
+            const printersToUse = [
+              ...allPrinters,
+              ...categoryPrinters.filter(
+                (p) => !allPrinters.some((a) => a.id === p.id)
+              ),
+            ];
+            for (const printer of printersToUse) {
+              const printContent = formatPrintContent(
+                "cancel",
+                [canceledItem],
+                currentTable.tableNumber,
+                order.orderNumber,
+                { companyName: companyData?.name || "" }
+              );
+              await printToPrinter(printer.name, printContent, "cancel");
             }
           } catch {
             // Yazdırma hatası iptal işlemini etkilemesin
@@ -4277,34 +4336,35 @@ function TableDetailContent() {
         total: total,
       });
 
-      // İptal edilen ürünü yazdır (kategori yazıcılarına)
+      // İptal edilen ürünü yazdır: "Tüm Hareket" + "Ürün Girişi" (bu kategori)
       try {
-        const menuItem = menus.find((m) => m.id === canceledItem.menuId);
-        if (menuItem && menuItem.category) {
-          const category = categories.find((c) => c.name === menuItem.category);
-          if (category) {
-            // Bu kategoriye atanmış yazıcıları bul
-            const categoryPrinters = getPrintersForCategories(
-              printers,
-              categories,
-              [category.id || ""]
-            );
-
-            // Her yazıcıya yazdır
-            for (const printer of categoryPrinters) {
-              // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
-              const printContent = formatPrintContent(
-                "cancel",
-                [canceledItem],
-                currentTable.tableNumber,
-                order.orderNumber,
-                {
-                  companyName: companyData?.name || "",
-                }
-              );
-              await printToPrinter(printer.name, printContent, "cancel");
-            }
-          }
+        const allPrinters = getPrintersForAllMovement(printers);
+        const categoryId = (() => {
+          const menuItem = menus.find((m) => m.id === canceledItem.menuId);
+          if (!menuItem?.category) return "";
+          const category = categories.find(
+            (c) => c.name === menuItem.category
+          );
+          return category?.id || "";
+        })();
+        const categoryPrinters = categoryId
+          ? getPrintersForCategory(printers, categoryId)
+          : [];
+        const printersToUse = [
+          ...allPrinters,
+          ...categoryPrinters.filter(
+            (p) => !allPrinters.some((a) => a.id === p.id)
+          ),
+        ];
+        for (const printer of printersToUse) {
+          const printContent = formatPrintContent(
+            "cancel",
+            [canceledItem],
+            currentTable.tableNumber,
+            order.orderNumber,
+            { companyName: companyData?.name || "" }
+          );
+          await printToPrinter(printer.name, printContent, "cancel");
         }
       } catch {
         // Yazdırma hatası iptal işlemini etkilemesin
@@ -4498,36 +4558,39 @@ function TableDetailContent() {
           total: total,
         });
 
-        // İptal edilen ürünleri yazdır (kategori yazıcılarına)
+        // İptal edilen ürünleri yazdır: "Tüm Hareket" + "Ürün Girişi" (kategori)
         try {
           if (itemsToCancel.length > 0) {
+            const allPrinters = getPrintersForAllMovement(printers);
             for (const canceledItem of itemsToCancel) {
-              const menuItem = menus.find((m) => m.id === canceledItem.menuId);
-              if (menuItem && menuItem.category) {
+              const categoryId = (() => {
+                const menuItem = menus.find(
+                  (m) => m.id === canceledItem.menuId
+                );
+                if (!menuItem?.category) return "";
                 const category = categories.find(
                   (c) => c.name === menuItem.category
                 );
-                if (category) {
-                  const categoryPrinters = getPrintersForCategories(
-                    printers,
-                    categories,
-                    [category.id || ""]
-                  );
-
-                  for (const printer of categoryPrinters) {
-                    // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
-                    const printContent = formatPrintContent(
-                      "cancel",
-                      [canceledItem],
-                      currentTable.tableNumber,
-                      orderToUse.orderNumber,
-                      {
-                        companyName: companyData?.name || "",
-                      }
-                    );
-                    await printToPrinter(printer.name, printContent, "cancel");
-                  }
-                }
+                return category?.id || "";
+              })();
+              const categoryPrinters = categoryId
+                ? getPrintersForCategory(printers, categoryId)
+                : [];
+              const printersToUse = [
+                ...allPrinters,
+                ...categoryPrinters.filter(
+                  (p) => !allPrinters.some((a) => a.id === p.id)
+                ),
+              ];
+              for (const printer of printersToUse) {
+                const printContent = formatPrintContent(
+                  "cancel",
+                  [canceledItem],
+                  currentTable.tableNumber,
+                  orderToUse.orderNumber,
+                  { companyName: companyData?.name || "" }
+                );
+                await printToPrinter(printer.name, printContent, "cancel");
               }
             }
           }
@@ -7785,42 +7848,43 @@ function TableDetailContent() {
                       total: total,
                     });
 
-                    // İptal edilen ürünleri yazdır
+                    // İptal edilen ürünleri yazdır: "Tüm Hareket" + "Ürün Girişi" (kategori)
                     try {
                       if (itemsToCancel.length > 0) {
+                        const allPrinters = getPrintersForAllMovement(printers);
                         for (const canceledItem of itemsToCancel) {
-                          const menuItem = menus.find(
-                            (m) => m.id === canceledItem.menuId
-                          );
-                          if (menuItem && menuItem.category) {
+                          const categoryId = (() => {
+                            const menuItem = menus.find(
+                              (m) => m.id === canceledItem.menuId
+                            );
+                            if (!menuItem?.category) return "";
                             const category = categories.find(
                               (c) => c.name === menuItem.category
                             );
-                            if (category) {
-                              const categoryPrinters = getPrintersForCategories(
-                                printers,
-                                categories,
-                                [category.id || ""]
-                              );
-
-                              for (const printer of categoryPrinters) {
-                                // Kağıt genişliği kaldırıldı - 80mm için sabit 48 karakter kullanılıyor
-                                const printContent = formatPrintContent(
-                                  "cancel",
-                                  [canceledItem],
-                                  currentTable.tableNumber,
-                                  order.orderNumber,
-                                  {
-                                    companyName: companyData?.name || "",
-                                  }
-                                );
-                                await printToPrinter(
-                                  printer.name,
-                                  printContent,
-                                  "cancel"
-                                );
-                              }
-                            }
+                            return category?.id || "";
+                          })();
+                          const categoryPrinters = categoryId
+                            ? getPrintersForCategory(printers, categoryId)
+                            : [];
+                          const printersToUse = [
+                            ...allPrinters,
+                            ...categoryPrinters.filter(
+                              (p) => !allPrinters.some((a) => a.id === p.id)
+                            ),
+                          ];
+                          for (const printer of printersToUse) {
+                            const printContent = formatPrintContent(
+                              "cancel",
+                              [canceledItem],
+                              currentTable.tableNumber,
+                              order.orderNumber,
+                              { companyName: companyData?.name || "" }
+                            );
+                            await printToPrinter(
+                              printer.name,
+                              printContent,
+                              "cancel"
+                            );
                           }
                         }
                       }

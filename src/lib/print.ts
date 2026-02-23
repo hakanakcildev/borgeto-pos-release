@@ -1,6 +1,18 @@
 import type { OrderItem, Category } from "@/lib/firebase/types";
 
-interface PrinterDevice {
+export type PrintTrigger = "all" | "categories" | "manual_only";
+
+/** Tüm Hareket modunda: birlikte = tek fiş, by_group = gruplara göre ayrı fişler */
+export type AllPrintMode = "together" | "by_group";
+
+/** Yazdırma grubu (Ayrı yazdır): örn. Mutfak = [waffle, kumpir, tatlılar], Bar = [sıcak içecek, soğuk içecek] */
+export interface PrintGroup {
+  id: string;
+  name: string;
+  categoryIds: string[];
+}
+
+export interface PrinterDevice {
   id: string;
   name: string;
   type: "serial" | "usb" | "network" | "system";
@@ -8,7 +20,13 @@ interface PrinterDevice {
   vendorId?: number;
   productId?: number;
   isConnected: boolean;
-  assignedCategories?: string[]; // Kategori ID'leri
+  /** Ne zaman otomatik yazdırılsın: all = tüm hareket, categories = sadece seçili kategoriler, manual_only = sadece yazdır butonu */
+  printTrigger?: PrintTrigger;
+  /** Tüm Hareket seçiliyken: "together" = hepsi tek fiş, "by_group" = her grup ayrı fiş */
+  allPrintMode?: AllPrintMode;
+  /** allPrintMode === "by_group" iken: her grup ayrı adisyon (örn. Mutfak grubu, Bar grubu) */
+  printGroups?: PrintGroup[];
+  assignedCategories?: string[]; // Kategori ID'leri (printTrigger === "categories" iken kullanılır)
   paperWidth?: number; // Kağıt genişliği (karakter sayısı)
   paperType?: string; // Kağıt tipi (örn: "80mm", "58mm", "110mm")
   options?: {
@@ -513,7 +531,42 @@ export async function printToPrinter(
   }
 }
 
-// Kategoriye göre yazıcıları bul
+// Otomatik yazdırma: "Tüm Hareket" veya "Ürün Girişi" (kategori eşleşen) yazıcıları döndürür. "Sadece yazdır butonu" olanlar dahil edilmez.
+export function getPrintersForAutoPrint(
+  printers: PrinterDevice[],
+  itemCategoryIds: string[]
+): PrinterDevice[] {
+  return printers.filter((p) => {
+    const trigger = p.printTrigger ?? "manual_only";
+    if (trigger === "manual_only") return false;
+    if (trigger === "all") return true;
+    if (trigger === "categories" && p.assignedCategories?.length) {
+      return itemCategoryIds.some((id) => p.assignedCategories!.includes(id));
+    }
+    return false;
+  });
+}
+
+// "Tüm Hareket" seçili yazıcılar (giriş/iptal hepsini alır)
+export function getPrintersForAllMovement(
+  printers: PrinterDevice[]
+): PrinterDevice[] {
+  return printers.filter((p) => (p.printTrigger ?? "manual_only") === "all");
+}
+
+// "Ürün Girişi" seçili ve bu kategori atanmış yazıcılar
+export function getPrintersForCategory(
+  printers: PrinterDevice[],
+  categoryId: string
+): PrinterDevice[] {
+  return printers.filter(
+    (p) =>
+      (p.printTrigger ?? "manual_only") === "categories" &&
+      p.assignedCategories?.includes(categoryId)
+  );
+}
+
+// Kategoriye göre yazıcıları bul (geriye uyumluluk; otomatik yazdırma için getPrintersForAutoPrint kullanın)
 export function getPrintersForCategories(
   printers: PrinterDevice[],
   _categories: Category[],
