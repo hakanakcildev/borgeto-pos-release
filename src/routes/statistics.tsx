@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
+import { getDayBoundariesNow, getDayEndSettings } from "@/lib/utils/dayEndSettings";
 
 export const Route = createFileRoute("/statistics")({
   component: Statistics,
@@ -96,7 +97,7 @@ function StatisticsContent() {
   const [showWaiterDetail, setShowWaiterDetail] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
 
-  // Tarih aralığını hesapla
+  // Tarih aralığını hesapla (günlük için ayarlardaki açılış/kapanış saati kullanılır)
   const getDateRange = useCallback(
     (period: PeriodType): { start: Date; end: Date } => {
       const end = new Date();
@@ -104,7 +105,10 @@ function StatisticsContent() {
       let start = new Date();
 
       if (period === "daily") {
-        start.setHours(0, 0, 0, 0);
+        const settings = getDayEndSettings();
+        const boundaries = getDayBoundariesNow(settings);
+        start = boundaries.start;
+        end.setTime(boundaries.end.getTime());
       } else if (period === "weekly") {
         start.setDate(start.getDate() - 7);
         start.setHours(0, 0, 0, 0);
@@ -745,7 +749,7 @@ function StatisticsContent() {
 
   const stats = calculateStats();
 
-  // Period'a göre tarih aralığı hesapla (modal için)
+  // Period'a göre tarih aralığı hesapla (modal için; günlük = gün sonu ayarı)
   const getDateRangeForPeriod = useCallback(
     (period: PeriodType): { start: Date; end: Date } => {
       const end = new Date();
@@ -753,7 +757,9 @@ function StatisticsContent() {
       let start = new Date();
 
       if (period === "daily") {
-        start.setHours(0, 0, 0, 0);
+        const boundaries = getDayBoundariesNow(getDayEndSettings());
+        start = boundaries.start;
+        end.setTime(boundaries.end.getTime());
       } else if (period === "weekly") {
         start.setDate(start.getDate() - 7);
         start.setHours(0, 0, 0, 0);

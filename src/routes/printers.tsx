@@ -8,8 +8,6 @@ import {
   X,
   AlertCircle,
   Settings,
-  Plus,
-  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { POSLayout } from "@/components/layouts/POSLayout";
@@ -17,11 +15,8 @@ import { getCategoriesByCompany } from "@/lib/firebase/menus";
 import type { Category } from "@/lib/firebase/types";
 import {
   formatPrintContent,
-  getExamplePrintOutput,
   type PrinterDevice as PrinterDeviceType,
   type PrintTrigger,
-  type AllPrintMode,
-  type PrintGroup,
 } from "@/lib/print";
 import { getCompany } from "@/lib/firebase/companies";
 import { customAlert } from "@/components/ui/alert-dialog";
@@ -52,6 +47,8 @@ export function PrintersContent() {
   const [showAddNetworkPrinter, setShowAddNetworkPrinter] = useState(false);
   const [networkPrinterIP, setNetworkPrinterIP] = useState("");
   const [networkPrinterName, setNetworkPrinterName] = useState("");
+
+  const effectiveCompanyId = companyId || userData?.companyId;
 
   // Kaydedilmiş yazıcı ayarlarını yükle
   useEffect(() => {
@@ -807,139 +804,8 @@ export function PrintersContent() {
             ...p,
             printTrigger: trigger,
             ...(trigger !== "categories" ? { assignedCategories: [] } : {}),
-            ...(trigger !== "all"
-              ? { allPrintMode: undefined as AllPrintMode | undefined, printGroups: [] }
-              : { allPrintMode: p.allPrintMode ?? "together" }),
+            ...(trigger !== "all" ? { allPrintMode: undefined, assignedGroupIds: [] } : {}),
           };
-        });
-        const effectiveCompanyId = companyId || userData?.companyId;
-        if (effectiveCompanyId) {
-          localStorage.setItem(
-            `printers_${effectiveCompanyId}`,
-            JSON.stringify(updated)
-          );
-        }
-        return updated;
-      });
-    },
-    [companyId, userData?.companyId]
-  );
-
-  // Tüm Hareket alt modu: birlikte yazdır / ayrı yazdır (gruplar)
-  const updatePrinterAllPrintMode = useCallback(
-    (printerId: string, mode: AllPrintMode) => {
-      setPrinters((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id !== printerId) return p;
-          return {
-            ...p,
-            allPrintMode: mode,
-            ...(mode === "together" ? { printGroups: [] } : {}),
-          };
-        });
-        const effectiveCompanyId = companyId || userData?.companyId;
-        if (effectiveCompanyId) {
-          localStorage.setItem(
-            `printers_${effectiveCompanyId}`,
-            JSON.stringify(updated)
-          );
-        }
-        return updated;
-      });
-    },
-    [companyId, userData?.companyId]
-  );
-
-  // Ayrı yazdır: grup ekle
-  const addPrintGroup = useCallback(
-    (printerId: string, name: string) => {
-      const newGroup: PrintGroup = {
-        id: `group_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        name: name.trim() || "Yeni Grup",
-        categoryIds: [],
-      };
-      setPrinters((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id !== printerId) return p;
-          const groups = p.printGroups ?? [];
-          return { ...p, printGroups: [...groups, newGroup] };
-        });
-        const effectiveCompanyId = companyId || userData?.companyId;
-        if (effectiveCompanyId) {
-          localStorage.setItem(
-            `printers_${effectiveCompanyId}`,
-            JSON.stringify(updated)
-          );
-        }
-        return updated;
-      });
-    },
-    [companyId, userData?.companyId]
-  );
-
-  // Ayrı yazdır: grup sil
-  const removePrintGroup = useCallback(
-    (printerId: string, groupId: string) => {
-      setPrinters((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id !== printerId) return p;
-          const groups = (p.printGroups ?? []).filter((g) => g.id !== groupId);
-          return { ...p, printGroups: groups };
-        });
-        const effectiveCompanyId = companyId || userData?.companyId;
-        if (effectiveCompanyId) {
-          localStorage.setItem(
-            `printers_${effectiveCompanyId}`,
-            JSON.stringify(updated)
-          );
-        }
-        return updated;
-      });
-    },
-    [companyId, userData?.companyId]
-  );
-
-  // Ayrı yazdır: grup adı güncelle
-  const updatePrintGroupName = useCallback(
-    (printerId: string, groupId: string, name: string) => {
-      setPrinters((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id !== printerId) return p;
-          const groups = (p.printGroups ?? []).map((g) =>
-            g.id === groupId ? { ...g, name: name.trim() || g.name } : g
-          );
-          return { ...p, printGroups: groups };
-        });
-        const effectiveCompanyId = companyId || userData?.companyId;
-        if (effectiveCompanyId) {
-          localStorage.setItem(
-            `printers_${effectiveCompanyId}`,
-            JSON.stringify(updated)
-          );
-        }
-        return updated;
-      });
-    },
-    [companyId, userData?.companyId]
-  );
-
-  // Ayrı yazdır: gruba kategori ekle/çıkar
-  const togglePrintGroupCategory = useCallback(
-    (printerId: string, groupId: string, categoryId: string) => {
-      setPrinters((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id !== printerId) return p;
-          const groups = (p.printGroups ?? []).map((g) => {
-            if (g.id !== groupId) return g;
-            const has = g.categoryIds.includes(categoryId);
-            return {
-              ...g,
-              categoryIds: has
-                ? g.categoryIds.filter((id) => id !== categoryId)
-                : [...g.categoryIds, categoryId],
-            };
-          });
-          return { ...p, printGroups: groups };
         });
         const effectiveCompanyId = companyId || userData?.companyId;
         if (effectiveCompanyId) {
@@ -1336,10 +1202,6 @@ export function PrintersContent() {
                       {(printer.printTrigger ?? "manual_only") === "all" && (
                         <span className="text-xs text-green-600 dark:text-green-400">
                           Tüm Hareket
-                          {(printer.allPrintMode ?? "together") === "by_group" &&
-                          (printer.printGroups?.length ?? 0) > 0
-                            ? ` (${printer.printGroups!.length} grup)`
-                            : " (birlikte)"}
                         </span>
                       )}
                       {(printer.printTrigger ?? "manual_only") === "categories" && (
@@ -1435,139 +1297,6 @@ export function PrintersContent() {
                         <strong>Tüm Hareket</strong> — Giriş yapılan ve iptal edilen tüm ürünler bu yazıcıdan çıkar
                       </span>
                     </label>
-                    {(printer.printTrigger ?? "manual_only") === "all" && (
-                      <div className="ml-6 mt-2 mb-3 space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-600">
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          Nasıl yazdırılsın?
-                        </p>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`all-mode-${printer.id}`}
-                            checked={(printer.allPrintMode ?? "together") === "together"}
-                            onChange={() =>
-                              updatePrinterAllPrintMode(printer.id, "together")
-                            }
-                            className="rounded-full border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            <strong>Birlikte yazdır</strong> — Tüm ürünler tek fişte
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`all-mode-${printer.id}`}
-                            checked={(printer.allPrintMode ?? "together") === "by_group"}
-                            onChange={() =>
-                              updatePrinterAllPrintMode(printer.id, "by_group")
-                            }
-                            className="rounded-full border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            <strong>Ayrı yazdır</strong> — Gruplara göre ayrı fişler (örn. mutfak / bar)
-                          </span>
-                        </label>
-                        {(printer.allPrintMode ?? "together") === "by_group" && (
-                          <div className="mt-3 space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  addPrintGroup(printer.id, "Yeni Grup")
-                                }
-                                className="text-green-600 dark:text-green-400"
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Grup Ekle
-                              </Button>
-                            </div>
-                            {(printer.printGroups ?? []).length > 0 ? (
-                              <div className="space-y-3">
-                                {(printer.printGroups ?? []).map((group) => (
-                                  <div
-                                    key={group.id}
-                                    className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50 dark:bg-gray-800/50"
-                                  >
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <input
-                                        type="text"
-                                        value={group.name}
-                                        onChange={(e) =>
-                                          updatePrintGroupName(
-                                            printer.id,
-                                            group.id,
-                                            e.target.value
-                                          )}
-                                        className="flex-1 px-2 py-1 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                        placeholder="Grup adı (örn. Mutfak)"
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          removePrintGroup(printer.id, group.id)
-                                        }
-                                        className="text-red-600 dark:text-red-400 shrink-0"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                      Bu gruba dahil kategoriler:
-                                    </p>
-                                    {categories.length > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {categories.map((category) => {
-                                          const isIn =
-                                            group.categoryIds.includes(
-                                              category.id || ""
-                                            );
-                                          return (
-                                            <button
-                                              key={category.id}
-                                              type="button"
-                                              onClick={() =>
-                                                togglePrintGroupCategory(
-                                                  printer.id,
-                                                  group.id,
-                                                  category.id || ""
-                                                )
-                                              }
-                                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                                isIn
-                                                  ? "bg-blue-100 dark:bg-blue-900/30 border border-blue-500 dark:border-blue-400 text-blue-700 dark:text-blue-300"
-                                                  : "bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400"
-                                              }`}
-                                            >
-                                              {isIn && (
-                                                <Check className="h-3 w-3 inline mr-1" />
-                                              )}
-                                              {category.name}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <p className="text-xs text-gray-500">
-                                        Önce kategori ekleyin.
-                                      </p>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Grup ekleyin; her grup ayrı fiş olarak yazdırılır (örn. Mutfak, Bar).
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -1661,34 +1390,6 @@ export function PrintersContent() {
         </div>
       )}
 
-      {/* Örnek Çıktı Önizlemesi - Her zaman görünür */}
-      <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          Örnek Çıktı Önizlemesi
-        </h3>
-        <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded border border-gray-300 dark:border-gray-600 font-mono text-sm whitespace-pre overflow-x-auto">
-          <div className="min-w-max">
-            {(() => {
-              let companyName = "";
-              if (companyId) {
-                // Firma adını al (async olmadan, sadece gösterim için)
-                try {
-                  // Burada sadece örnek gösteriyoruz, gerçek firma adı test yazdırmada alınacak
-                  companyName = "Firma Adi";
-                } catch {
-                  // Error loading company name
-                }
-              }
-              return getExamplePrintOutput(companyName || "Firma Adi");
-            })()}
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-          Bu örnek çıktı yazıcıdan nasıl görüneceğini gösterir. Türkçe
-          karakterler ASCII karşılıklarına çevrilir.
-        </p>
-      </div>
-
       {/* Test Yazdırma Butonu */}
       {selectedPrinter && (
         <div className="mt-4">
@@ -1701,6 +1402,7 @@ export function PrintersContent() {
           </Button>
         </div>
       )}
+
     </div>
   );
 }

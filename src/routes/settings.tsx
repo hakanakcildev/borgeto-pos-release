@@ -26,6 +26,12 @@ import { UsersManagementContent } from "@/routes/users";
 import { PrintersContent } from "@/routes/printers";
 import { clearOfflineStorage } from "@/lib/offline/offlineStorage";
 import { clearQueue } from "@/lib/offline/offlineQueue";
+import {
+  getDayEndSettings,
+  setDayEndSettings,
+  type DayEndSettings,
+} from "@/lib/utils/dayEndSettings";
+import { customAlert } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/settings")({
   component: Settings,
@@ -206,6 +212,13 @@ function SettingsContent({
   const [_downloadProgress, setDownloadProgress] = useState(0);
   const [_updateDownloaded, setUpdateDownloaded] = useState(false);
 
+  // Gün sonu ayarları (günlük istatistik için açılış/kapanış saati)
+  const [dayEndSettings, setDayEndSettingsState] = useState<DayEndSettings>({
+    openingTime: "09:00",
+    closingTime: "03:00",
+  });
+  const [dayEndSaved, setDayEndSaved] = useState(false);
+
   // Navigation settings
   const [navSettings, setNavSettings] = useState<NavigationSettings>({
     returnAfterProductAdd: true,
@@ -216,6 +229,9 @@ function SettingsContent({
   });
 
   useEffect(() => {
+    // Gün sonu ayarlarını yükle
+    setDayEndSettingsState(getDayEndSettings());
+
     // Navigation ayarlarını yükle
     const storedNavSettings = localStorage.getItem("navigationSettings");
     if (storedNavSettings) {
@@ -374,6 +390,63 @@ function SettingsContent({
             Garson hesapları bu IP adresi ile eşleşmelidir
           </p>
         </div>
+      </div>
+
+      {/* Gün sonu ayarı - günlük istatistik için günün başlangıç/bitiş saatleri */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Gün sonu ayarı
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Günlük istatistiklerde bir gün, aşağıdaki açılış–kapanış saatleri arasında sayılır (örn. 09:00–03:00 = bir gün).
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="dayEndOpening" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Açılış saati
+            </label>
+            <input
+              id="dayEndOpening"
+              type="time"
+              value={dayEndSettings.openingTime}
+              onChange={(e) => {
+                setDayEndSettingsState((prev) => ({ ...prev, openingTime: e.target.value }));
+                setDayEndSaved(false);
+              }}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 min-w-[120px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="dayEndClosing" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Kapanış saati
+            </label>
+            <input
+              id="dayEndClosing"
+              type="time"
+              value={dayEndSettings.closingTime}
+              onChange={(e) => {
+                setDayEndSettingsState((prev) => ({ ...prev, closingTime: e.target.value }));
+                setDayEndSaved(false);
+              }}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 min-w-[120px]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDayEndSettings(dayEndSettings);
+              setDayEndSaved(true);
+              customAlert("Gün sonu ayarı kaydedildi. Günlük istatistikler bu saatlere göre hesaplanacak.", "Kaydedildi", "success");
+            }}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors flex items-center gap-2"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Kaydet
+          </button>
+        </div>
+        {dayEndSaved && (
+          <p className="text-sm text-green-600 dark:text-green-400 mt-2">Gün sonu ayarı kaydedildi.</p>
+        )}
       </div>
 
       {/* Tema Ayarları */}

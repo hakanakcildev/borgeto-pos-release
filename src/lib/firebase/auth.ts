@@ -157,10 +157,13 @@ export const signInWithStaffCredentials = async (
       throw new Error("Sadece manager rolündeki kullanıcılar giriş yapabilir");
     }
 
-    // Şifre kontrolü
+    // Şifre kontrolü (panelden passwordHash ile kaydedilmiş olmalı)
     if (!user.passwordHash) {
       console.error("[signInWithStaffCredentials] Şifre hash yok");
-      throw new Error("Kullanıcı şifresi yapılandırılmamış");
+      throw new Error(
+        "Bu kullanıcının şifresi panelde (POS Yönetimi) henüz ayarlanmamış veya eski formatta. " +
+        "Panelden şifre değiştir (Şifre Değiştir) ile yeni şifre kaydedin; ardından POS’ta giriş yapabilirsiniz."
+      );
     }
 
     console.log("[signInWithStaffCredentials] Şifre doğrulanıyor...");

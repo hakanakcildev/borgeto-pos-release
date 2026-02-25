@@ -5,11 +5,16 @@ export type PrintTrigger = "all" | "categories" | "manual_only";
 /** Tüm Hareket modunda: birlikte = tek fiş, by_group = gruplara göre ayrı fişler */
 export type AllPrintMode = "together" | "by_group";
 
-/** Yazdırma grubu (Ayrı yazdır): örn. Mutfak = [waffle, kumpir, tatlılar], Bar = [sıcak içecek, soğuk içecek] */
+/** Yazdırma grubu (yazıcı ayarları sayfasında tanımlanır; tüm yazıcılar için kullanılabilir) */
 export interface PrintGroup {
   id: string;
   name: string;
   categoryIds: string[];
+}
+
+/** Yazıcı ayarları sayfasındaki global grupların localStorage anahtarı */
+export function getGlobalPrintGroupsKey(companyId: string | undefined): string {
+  return `printGroups_${companyId || ""}`;
 }
 
 export interface PrinterDevice {
@@ -24,8 +29,8 @@ export interface PrinterDevice {
   printTrigger?: PrintTrigger;
   /** Tüm Hareket seçiliyken: "together" = hepsi tek fiş, "by_group" = her grup ayrı fiş */
   allPrintMode?: AllPrintMode;
-  /** allPrintMode === "by_group" iken: her grup ayrı adisyon (örn. Mutfak grubu, Bar grubu) */
-  printGroups?: PrintGroup[];
+  /** allPrintMode === "by_group" iken: yazıcı ayarları sayfasındaki gruplardan atanmış grup id'leri */
+  assignedGroupIds?: string[];
   assignedCategories?: string[]; // Kategori ID'leri (printTrigger === "categories" iken kullanılır)
   paperWidth?: number; // Kağıt genişliği (karakter sayısı)
   paperType?: string; // Kağıt tipi (örn: "80mm", "58mm", "110mm")
@@ -67,6 +72,8 @@ export function formatPrintContent(
     paperWidth?: number;
     canceledItems?: OrderItem[];
     isPaid?: boolean;
+    /** Alt metin (örn. "Yeni Sipariş"); yoksa "Afiyet Olsun" */
+    footerText?: string;
   }
 ): string {
   const companyName = additionalInfo?.companyName
@@ -289,11 +296,14 @@ export function formatPrintContent(
     content += lineBreak(1);
   }
 
-  // Afiyet Olsun ortada; altında kesim için bol boşluk (fiş uzun çıksın, kullanıcı rahat kessin)
+  // Alt metin ortada (yeni siparişte "Yeni Sipariş", ödeme sonrası "Afiyet Olsun")
+  const footerLabel = additionalInfo?.footerText
+    ? turkishToAscii(additionalInfo.footerText)
+    : "Afiyet Olsun";
   content += lineBreak(1);
   content += ESC + "a" + String.fromCharCode(0x01); // Ortala
   content += ESC + "!" + String.fromCharCode(0x10);
-  content += "Afiyet Olsun";
+  content += footerLabel;
   content += ESC + "!" + String.fromCharCode(0x00);
   content += lineBreak(0); // Merkez hizalamayı bu satırda uygula
   content += ESC + "a" + String.fromCharCode(0x00); // Sola dön

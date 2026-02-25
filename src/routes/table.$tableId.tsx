@@ -130,6 +130,14 @@ function TableDetailContent() {
   const effectiveBranchId = (branchId || userData?.assignedBranchId || userData?.id) ?? undefined;
   const [currentTable, setCurrentTable] = useState<Table>(table);
 
+  // Manager sadece kendi şubesinin masasına erişebilir (URL ile başka şube masası açılmaya çalışılırsa ana sayfaya dön)
+  useEffect(() => {
+    const managerBranchId = userData?.assignedBranchId || userData?.id;
+    if (managerBranchId && table?.branchId && table.branchId !== managerBranchId) {
+      navigate({ to: "/", search: {} });
+    }
+  }, [table?.branchId, userData?.assignedBranchId, userData?.id, navigate]);
+
   // Anasayfaya yönlendirirken search params'ı koru
   const search = Route.useSearch();
   const navigateToHome = useCallback(() => {
@@ -2193,75 +2201,18 @@ function TableDetailContent() {
           if (newItems.length > 0) {
             const allPrinters = getPrintersForAllMovement(printers);
             for (const printer of allPrinters) {
-              const allMode = printer.allPrintMode ?? "together";
-              if (
-                allMode === "by_group" &&
-                printer.printGroups &&
-                printer.printGroups.length > 0
-              ) {
-                // Ayrı yazdır: her grup için ayrı fiş
-                for (const group of printer.printGroups) {
-                  const itemsInGroup = newItems.filter((item) => {
-                    const menuItem = menus.find((m) => m.id === item.menuId);
-                    if (!menuItem?.category) return false;
-                    const cat = categories.find(
-                      (c) => c.name === menuItem.category
-                    );
-                    return cat && group.categoryIds.includes(cat.id || "");
-                  });
-                  if (itemsInGroup.length > 0) {
-                    const printContent = formatPrintContent(
-                      "order",
-                      itemsInGroup,
-                      currentTable.tableNumber,
-                      undefined,
-                      {
-                        companyName: companyData?.name || "",
-                        isPaid: false,
-                      }
-                    );
-                    await printToPrinter(printer.name, printContent, "order");
-                  }
+              const printContent = formatPrintContent(
+                "order",
+                newItems,
+                currentTable.tableNumber,
+                undefined,
+                {
+                  companyName: companyData?.name || "",
+                  isPaid: false,
+                  footerText: "Yeni Sipariş",
                 }
-                // Hiçbir gruba dahil olmayan ürünler tek fişte
-                const ungrouped = newItems.filter((item) => {
-                  const menuItem = menus.find((m) => m.id === item.menuId);
-                  if (!menuItem?.category) return true;
-                  const cat = categories.find(
-                    (c) => c.name === menuItem.category
-                  );
-                  const inAny = printer.printGroups?.some(
-                    (g) => cat && g.categoryIds.includes(cat.id || "")
-                  );
-                  return !inAny;
-                });
-                if (ungrouped.length > 0) {
-                  const printContent = formatPrintContent(
-                    "order",
-                    ungrouped,
-                    currentTable.tableNumber,
-                    undefined,
-                    {
-                      companyName: companyData?.name || "",
-                      isPaid: false,
-                    }
-                  );
-                  await printToPrinter(printer.name, printContent, "order");
-                }
-              } else {
-                // Birlikte yazdır: tüm ürünler tek fişte
-                const printContent = formatPrintContent(
-                  "order",
-                  newItems,
-                  currentTable.tableNumber,
-                  undefined,
-                  {
-                    companyName: companyData?.name || "",
-                    isPaid: false,
-                  }
-                );
-                await printToPrinter(printer.name, printContent, "order");
-              }
+              );
+              await printToPrinter(printer.name, printContent, "order");
             }
 
             // Kategorilere göre grupla; "Ürün Girişi" ve bu kategori atanmış yazıcılar
@@ -2295,6 +2246,7 @@ function TableDetailContent() {
                   {
                     companyName: companyData?.name || "",
                     isPaid: false,
+                    footerText: "Yeni Sipariş",
                   }
                 );
                 await printToPrinter(printer.name, printContent, "order");
@@ -11023,9 +10975,9 @@ function TableDetailContent() {
         </>
       )}
 
-      {/* Miktar / Fiyat girme modalı (ürüne basılı tutunca) */}
+      {/* Miktar / Fiyat girme modalı (ürüne basılı tutunca) - z-50: klavye modalın üstünde açılsın */}
       {showQuantityModal && selectedMenuForQuantity && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 pb-safe">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-5">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
               {selectedMenuForQuantity.name}
@@ -11085,9 +11037,9 @@ function TableDetailContent() {
         </div>
       )}
 
-      {/* Sipariş ürünü fiyat güncelleme modalı (sipariş listesinde basılı tutunca) */}
+      {/* Sipariş ürünü fiyat güncelleme modalı (sipariş listesinde basılı tutunca) - z-50: klavye üstte */}
       {showOrderItemPriceModal && orderItemForPriceEdit && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 pb-safe">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-5">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
               Fiyat güncelle

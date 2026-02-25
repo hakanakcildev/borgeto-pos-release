@@ -125,12 +125,12 @@ function TablesView() {
         // Standart masaları arka planda oluştur (ilk yüklemede bloklamaz)
         if (!defaultTablesCreated) {
           setDefaultTablesCreated(true);
-          createDefaultTables(effectiveCompanyId).catch(() => {}).then(() => {});
+          createDefaultTables(effectiveCompanyId, effectiveBranchId ?? undefined).catch(() => {}).then(() => {});
         }
 
         const [tablesData, ordersData] = await Promise.all([
-          getTablesByCompany(effectiveCompanyId).catch(() => []),
-          getOrdersByCompany(effectiveCompanyId).catch(() => []),
+          getTablesByCompany(effectiveCompanyId, effectiveBranchId ?? undefined).catch(() => []),
+          getOrdersByCompany(effectiveCompanyId, { branchId: effectiveBranchId ?? undefined }).catch(() => []),
         ]);
 
         const activeOrdersData = ordersData.filter(
@@ -161,7 +161,7 @@ function TablesView() {
         // Masa durumu güncellemelerini arka planda yap, bittiğinde listeyi yenile
         if (tablesToUpdate.length > 0) {
           void Promise.all(tablesToUpdate)
-            .then(() => getTablesByCompany(effectiveCompanyId).catch(() => []))
+            .then(() => getTablesByCompany(effectiveCompanyId, effectiveBranchId ?? undefined).catch(() => []))
             .then((updated) => setTables(removeDuplicateTables(updated)));
         }
 
@@ -217,8 +217,8 @@ function TablesView() {
         const reloadData = async () => {
           try {
             const [tablesData, ordersData] = await Promise.all([
-              getTablesByCompany(effectiveCompanyId).catch(() => []),
-              getOrdersByCompany(effectiveCompanyId).catch(() => []),
+              getTablesByCompany(effectiveCompanyId, effectiveBranchId ?? undefined).catch(() => []),
+              getOrdersByCompany(effectiveCompanyId, { branchId: effectiveBranchId ?? undefined }).catch(() => []),
             ]);
 
             const activeOrdersData = ordersData.filter(
@@ -245,7 +245,7 @@ function TablesView() {
 
             if (tablesToUpdate.length > 0) {
               await Promise.all(tablesToUpdate);
-              const updatedTables = await getTablesByCompany(effectiveCompanyId).catch(() => []);
+              const updatedTables = await getTablesByCompany(effectiveCompanyId, effectiveBranchId ?? undefined).catch(() => []);
               const uniqueTables = removeDuplicateTables(updatedTables);
               setTables(uniqueTables);
             } else {
@@ -500,8 +500,8 @@ function TablesView() {
 
       // Masaları ve siparişleri yeniden yükle
       const [updatedTables, updatedOrders] = await Promise.all([
-        getTablesByCompany(effectiveCompanyId!).catch(() => []),
-        getOrdersByCompany(effectiveCompanyId!).catch(() => []),
+        getTablesByCompany(effectiveCompanyId!, effectiveBranchId ?? undefined).catch(() => []),
+        getOrdersByCompany(effectiveCompanyId!, { branchId: effectiveBranchId ?? undefined }).catch(() => []),
       ]);
 
       const uniqueTables = removeDuplicateTables(updatedTables);
@@ -599,8 +599,8 @@ function TablesView() {
       await updateOrderStatus(sourceOrder.id!, "closed", { branchIdOverride: effectiveBranchId || undefined });
 
       const [updatedTables, updatedOrders] = await Promise.all([
-        getTablesByCompany(effectiveCompanyId!).catch(() => []),
-        getOrdersByCompany(effectiveCompanyId!).catch(() => []),
+        getTablesByCompany(effectiveCompanyId!, effectiveBranchId ?? undefined).catch(() => []),
+        getOrdersByCompany(effectiveCompanyId!, { branchId: effectiveBranchId ?? undefined }).catch(() => []),
       ]);
 
       // Yinelenen masaları filtrele (removeDuplicateTables fonksiyonunu kullan)
